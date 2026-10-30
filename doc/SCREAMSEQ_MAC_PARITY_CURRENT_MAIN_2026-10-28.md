@@ -112,6 +112,35 @@ identifies the binary actually exercised. Reports and API documentation are also
 updated separately from that binary. This remains bounded functional evidence,
 not sustained presentation or physical-device qualification.
 
+## Greptile review fixes and build 5 — 2026-10-30
+
+The five initial findings are fixed in `b56687e22`: song-automation reads and
+precise-note checks settle waiting Save/close/history actions; pattern and graph
+curve fields retain ownership of their original point; Core Audio schema methods
+are application-only; and song point edits preserve untouched native values and
+exact frames. Regressions cover delayed success/failure, newer and invalid input,
+mouse/keyboard selection, deletion, native range boundaries and precision.
+
+Full build 5 began at 06:21:16 UTC, more than one hour after build 4, and completed
+at 06:23:56 UTC from exactly `b56687e22`. All 3,521 tracked files were unchanged
+through the build and the copied QA bundle's signature verified. Computer use in
+`qa5` confirmed a time-only edit preserved the exact native value and second
+point; invalid pattern fields survived a canvas click without changing selected
+point ownership; correcting the value updated only point 0; and Command-S
+completed on the disposable `QA5-Review.screamseq` project.
+
+The next review reported a Tab-focus trap while curve fields were invalid. It was
+reproduced with computer use in build 5 and then corrected: Tab/Shift-Tab leave
+the canvas while point selection remains guarded. All 39 interface groups and a
+complete application type-check pass after this correction. The native tests use
+actual NSWindow key-view traversal in both curve editors. This last focus change
+is not in build 5; no second full build was run inside the hour.
+
+Build 5 source fingerprint: `2481d804877cebd20afac1d45a2f4c1a161ef7401557c75407b093266cb4d2b1`.
+Executable SHA-256 before QA identity signing: `e3ff43777fa3763a792b074c1d099fafb4bcd026b92dfe1b0e2bbb0060cb42eb`.
+The unpublished keyboard API work was set aside for this build and is not part
+of this review checkpoint. Broader parity limits below remain unchanged.
+
 ## Remaining parity work
 
 These items are deliberately outside this checkpoint and must be resolved before

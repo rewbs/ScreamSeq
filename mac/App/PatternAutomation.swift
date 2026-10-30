@@ -202,7 +202,14 @@ final class AutomationCanvas: NSView {
   override func mouseUp(with event: NSEvent) {let finished=dragging;dragging = false;dragBefore=nil;if finished{onEditFinished?()}}
   override func keyDown(with event: NSEvent) {
     if event.keyCode==53,dragging,let before=dragBefore {points=before.0;selected=before.1;dragging=false;dragBefore=nil;onCancelEdit?();onSelect?();return}
-    if [51,117,123,124,125,126,48].contains(event.keyCode),!(beforeInteraction?() ?? true){return}
+    if [51,117,123,124,125,126,48].contains(event.keyCode),!(beforeInteraction?() ?? true){
+      // A retained numeric draft owns its point, not keyboard focus. Let Tab
+      // leave the canvas so the musician can return to the invalid field.
+      if event.keyCode==48 {
+        if event.modifierFlags.contains(.shift){window?.selectPreviousKeyView(self)}else{window?.selectNextKeyView(self)}
+      }
+      return
+    }
     if event.keyCode == 51 || event.keyCode == 117 { removeSelected(); return }
     if event.keyCode == 48 {
       // Tab walks the points and then leaves the canvas, so keyboard focus is

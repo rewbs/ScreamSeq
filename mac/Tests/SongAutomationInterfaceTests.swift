@@ -95,12 +95,20 @@ extension InterfaceTests {
       (graph.canvas,graph.value,{graph.showPoint()},{graph.controlTextDidChange($0)},{graph.setPoint()},{graph.ramp()})
     ] as [(AutomationCanvas,NSTextField,()->Void,(Notification)->Void,()->Void,()->Void)] {
       canvas.frame=NSRect(x:0,y:0,width:600,height:240);canvas.points=original;canvas.selected=0;show()
-      let window=NSWindow(contentRect:canvas.frame,styleMask:[],backing:.buffered,defer:false);window.contentView=canvas
+      let root=NSView(frame:NSRect(x:0,y:0,width:600,height:300)),before=NSTextField(string:"Before"),after=NSTextField(string:"After")
+      before.frame=NSRect(x:0,y:250,width:200,height:24);after.frame=NSRect(x:210,y:250,width:200,height:24)
+      for view in [canvas,before,after] as [NSView]{root.addSubview(view)}
+      let window=NSWindow(contentRect:root.frame,styleMask:[],backing:.buffered,defer:false);window.contentView=root
+      before.nextKeyView=canvas;canvas.nextKeyView=after;after.nextKeyView=before
       field.stringValue="unfinished";change(Notification(name:NSControl.textDidChangeNotification,object:field));commit()
       let event=NSEvent.mouseEvent(with:.leftMouseDown,location:canvas.convert(canvas.location(original[1]),to:nil),modifierFlags:[],timestamp:0,windowNumber:window.windowNumber,context:nil,eventNumber:0,clickCount:1,pressure:1)!
       canvas.mouseDown(with:event);canvas.mouseUp(with:event)
-      func press(_ code:UInt16){canvas.keyDown(with:NSEvent.keyEvent(with:.keyDown,location:.zero,modifierFlags:[],timestamp:0,windowNumber:window.windowNumber,context:nil,characters:"",charactersIgnoringModifiers:"",isARepeat:false,keyCode:code)!)}
-      press(48);press(124);canvas.removeSelected();ramp()
+      func press(_ code:UInt16,_ flags:NSEvent.ModifierFlags=[]){canvas.keyDown(with:NSEvent.keyEvent(with:.keyDown,location:.zero,modifierFlags:flags,timestamp:0,windowNumber:window.windowNumber,context:nil,characters:"",charactersIgnoringModifiers:"",isARepeat:false,keyCode:code)!)}
+      window.makeFirstResponder(canvas);press(48)
+      try require(after.currentEditor() != nil && window.firstResponder === after.currentEditor(),"Tab leaves a curve canvas with invalid point fields")
+      window.makeFirstResponder(canvas);press(48,.shift)
+      try require(before.currentEditor() != nil && window.firstResponder === before.currentEditor(),"Shift-Tab also leaves a curve canvas with invalid point fields")
+      press(124);canvas.removeSelected();ramp()
       try require(canvas.selected==0 && canvas.points==original && field.stringValue=="unfinished","Invalid curve fields retain their original point through mouse, keyboard, delete and replacement actions")
       field.stringValue="40";change(Notification(name:NSControl.textDidChangeNotification,object:field));commit()
       try require(canvas.points[0].value==0.4 && canvas.points[1]==original[1],"Corrected curve fields apply only to the original point")
