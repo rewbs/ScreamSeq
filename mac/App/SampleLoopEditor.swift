@@ -106,7 +106,7 @@ extension SampleEditor {
   }
   func setLoops(dryRun: Bool, attempt: Int = 0) {
     guard !loopsBusy else { return }
-    guard !loopNeedsReload, !drawingBusy, !hasSampleComposition, onRequest != nil, let revision = loopDraftRevision else { finishLoopWaiters(false); return }
+    guard !loopNeedsReload, !drawingBusy, waveform.stroke.isEmpty, !hasSampleComposition, onRequest != nil, let revision = loopDraftRevision else { finishLoopWaiters(false); return }
     if settingsPending || settingsDraft.hasDraft || settingsNeedsReload {
       finishAutomaticEdit { [weak self] accepted in if !accepted { self?.finishLoopWaiters(false) } }; return
     }

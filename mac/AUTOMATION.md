@@ -610,6 +610,21 @@ applied = client.call("sample.process", {**request, "dryRun": False})
 
 The Samples editor can zoom to a selection, zoom around the selected position, pan and return to the whole waveform. Option-scroll zooms; horizontal scrolling or Shift-scroll pans; a trackpad pinch zooms. Selection and loop coordinates remain absolute sample frames. At one frame per displayed bin, individual PCM points are shown. Enable **Draw** and zoom to individual frames, then drag; release applies one document-history step and Escape cancels. The displayed waveform revision is captured at the beginning of a stroke, so an intervening edit rejects the stroke instead of silently overwriting newer work. Backtracking overwrites crossed points with the latest segment. Selecting **Both** draws the same shape into both channels.
 
+After release, a stroke remains tied to its captured sample identity, channels,
+viewport and revision until metadata and waveform readback both succeed at the
+accepted revision. Refusal, malformed readback or newer fields retain the overlay
+and settle waiting Save/departure actions without silently continuing. Escape,
+zoom, channel changes and Draw mode cannot discard a submitted stroke. **Retry
+stroke** is available only after an explicit busy/not-committed receipt and sends
+the original payload and revision. No unknown or accepted outcome is replayed.
+**Review stroke** reads current metadata and waveform without writing; **Accept
+reviewed state** checks that revision again before adopting it and clearing only
+the local stroke. Newer settings and loop fields remain at their captured revision
+for explicit reload. **Discard stroke** clears the local draft without undoing or
+repeating an earlier write. Before release, Escape or newer field input cancels
+the unsubmitted gesture. Waveform replies must match the requested sample, range,
+channels and bin count and contain complete finite peaks before becoming loaded.
+
 `context.get.data.sampleViewport` reports `sample`, absolute `start`, exclusive `end`, `channels`, `drawing`, `loaded` and `precise`. `loaded` is false when the displayed waveform has not caught up with the current document revision. `precise` also requires one loaded bin per visible frame. If a hidden editor has an obsolete sample length, the context uses the current whole-sample range and reports it as unloaded. This context is separate from `sampleSelection`; read `sample.waveform.get` or `sample.pcm.get` to inspect exact current data.
 
 `sample.draw` accepts `sample`, `expectedRevision`, `points:[{frame,value}]`, optional `channels` (`both`, `left`, `right`), `interpolation` (`linear`, default, or `step`) and `dryRun`. Supply 1…4096 strictly increasing, unique, in-range integer frame positions and finite amplitudes −1…1. The span from the first through the last point must be at most 1,048,576 frames. A single point edits one frame. The last point is included; the returned exclusive `end` is that point's frame plus one. Linear interpolation fills every intervening frame; step holds the preceding point until the next point's frame. Both writes the same curve to both channels; a single selected channel leaves the other unchanged.

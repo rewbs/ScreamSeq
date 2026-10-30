@@ -10,6 +10,7 @@ final class WaveformView: NSView {
   var peaks: [Float] = [] { didSet { needsDisplay = true } }
   var peaksRange: Range<Int>?
   var frames = 0 { didSet {
+    if retainsStroke, frames != oldValue { frames = oldValue; return }
     if frames != oldValue { cancelStroke(); clampViewport() }
     needsDisplay = true
   } }
@@ -21,6 +22,7 @@ final class WaveformView: NSView {
   var loopMarkers:[LoopMarker] {LoopMarker.allCases.filter{$0.rawValue<2 ? loopEnd>loopStart : sustainEnd>sustainStart}}
   func markerLocation(_ marker:LoopMarker)->NSPoint {NSPoint(x:max(5,min(bounds.width-5,x(Double(markerFrame(marker))))),y:marker.rawValue<2 ? bounds.height-7 : 7)}
   func moveLoopMarker(_ marker:LoopMarker,to frame:Int,finished:Bool) {
+    guard stroke.isEmpty else { return }
     let start=marker.rawValue<2 ? loopStart:sustainStart,end=marker.rawValue<2 ? loopEnd:sustainEnd
     let value=marker.rawValue%2==0 ? max(0,min(end-1,frame)):max(start+1,min(frames,frame))
     switch marker {case .start:loopStart=value;case .end:loopEnd=value;case .sustainStart:sustainStart=value;case .sustainEnd:sustainEnd=value}
@@ -28,8 +30,11 @@ final class WaveformView: NSView {
   }
   private(set) var viewport: Range<Int>?
   var visibleRange: Range<Int> { viewport ?? 0..<max(0, frames) }
-  var selection: ClosedRange<Int>? { didSet { needsDisplay = true; onSelection?(selection) } }
-  var drawing = false { didSet { if !drawing { cancelStroke() }; needsDisplay = true } }
+  var selection: ClosedRange<Int>? { didSet { if retainsStroke { selection = oldValue; return }; needsDisplay = true; onSelection?(selection) } }
+  var drawing = false { didSet { if retainsStroke { drawing = oldValue; return }; if !drawing { cancelStroke() }; needsDisplay = true } }
+  // A submitted stroke belongs to its completion owner until verified or
+  // explicitly discarded. Navigation and Escape cannot erase that evidence.
+  var retainsStroke = false
   var onSelection: ((ClosedRange<Int>?) -> Void)?
   var onClipboard: ((String) -> Void)?
   var onViewport: (() -> Void)?
@@ -53,6 +58,7 @@ final class WaveformView: NSView {
     viewport = first == 0 && size == frames ? nil : first..<(first+size)
   }
   func setViewport(_ range: Range<Int>?, notify: Bool = true) {
+    guard stroke.isEmpty else { return }
     cancelStroke(); viewport = range; clampViewport(); needsDisplay = true
     if notify { onViewport?() }
   }
@@ -92,7 +98,7 @@ final class WaveformView: NSView {
     return SampleStrokePoint(frame:frameAt(x:point.x,insertion:false),value:max(-1,min(1,Double((point.y-bounds.midY)/max(1,bounds.height*0.44)))))
   }
   func beginStroke(_ point: SampleStrokePoint) -> Bool {
-    guard drawing, precise, visibleRange.contains(point.frame), point.value.isFinite, onBeginStroke?() == true else { return false }
+    guard stroke.isEmpty, drawing, precise, visibleRange.contains(point.frame), point.value.isFinite, onBeginStroke?() == true else { return false }
     stroke.removeAll(keepingCapacity:true); previousPoint=nil; strokeActive=true; extendStroke(point); return true
   }
   func extendStroke(_ point: SampleStrokePoint) {
@@ -110,7 +116,8 @@ final class WaveformView: NSView {
     guard strokeActive else { return }; strokeActive=false; previousPoint=nil
     onStroke?(stroke.keys.sorted().map { SampleStrokePoint(frame:$0,value:stroke[$0]!) })
   }
-  func cancelStroke() {
+  func cancelStroke(force: Bool = false) {
+    guard force || !retainsStroke else { return }
     let hadStroke=strokeActive || !stroke.isEmpty
     strokeActive=false; previousPoint=nil; stroke.removeAll(keepingCapacity:true); needsDisplay=true
     if hadStroke { onCancelStroke?() }

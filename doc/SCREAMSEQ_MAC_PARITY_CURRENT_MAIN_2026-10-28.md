@@ -460,6 +460,44 @@ and the reproduced recorder failure in `interface-recorder-name-red.log`.
 This source follow-up is newer
 than build 8 and awaits the next hourly packaged build and computer-use pass.
 
+## Build 9 and retained drawing follow-up — 2026-10-30
+
+Build 9 passed on `d16357bc58121f93b69969d9499adfc54eb3e276`, including
+signature verification and the complete packaged-application socket suite. It
+started at 10:42:00 UTC, over an hour after build 8. All 3,535 tracked source files
+stayed unchanged. Its source fingerprint is
+`3b99837cbbc1ea75d6bb447d2395b9910b2d64f45c170ab33955ae06e42465fd`.
+Greptile reviewed that exact commit with zero findings and all twelve threads
+resolved. Computer use could not inspect the running separate QA9 bundle because
+the Mac was locked; the unlock request remains pending. Build 9 desktop
+qualification is incomplete. Evidence: `build-9-identity.json`,
+`socket-build9-app.log`, and `greptile-d16357bc5-receipt.json`.
+
+The next source follow-up ports retained released-stroke behavior from Windows
+commit `6b4bef32dc5a1a6a52cfa5be6b0072af754069d9` and the staged completion
+checks in `SampleMutation.inc`. A submitted stroke keeps its exact points,
+original sample identity, channels, viewport and revision until same-revision
+metadata and waveform readback succeed. Failures keep the overlay and settle
+waiting actions. Navigation and Escape cannot silently drop submitted work.
+Only an explicit busy/not-committed receipt enables a manual exact-payload retry.
+Review reads current state without replaying a write; Accept checks the reviewed
+revision again and preserves newer raw fields. Discard clears only the local
+stroke. Late callbacks cannot release a newer sample's busy state. Ordinary
+waveform replies now require matching coordinates, channels and complete finite
+peaks before being reported loaded.
+
+Native interface regressions cover refused and ambiguous writes, successful
+writes with failed readback, pending Save, viewport/channel/mode preservation,
+malformed metadata and waveforms, changed review revisions, original-target
+retries, newer field retention and retired callbacks. All 43 native interface
+groups and complete application Swift type checking pass. Evidence:
+`interface-drawing-metadata-all.log`, `interface-drawing-metadata-final.log`,
+`typecheck-drawing-metadata-final.log`, and the live API response-shape check
+`qa9-drawing-read-shape.json`. This source is newer than build 9. No DSP or PCM storage implementation changed; the existing shared
+`sample.draw` boundary still owns exact PCM, Undo and persistence. Packaged
+desktop qualification of this follow-up, numeric staged-point drawing controls
+and general staged viewport/selection navigation remain open.
+
 ## Remaining parity work
 
 These items are deliberately outside this checkpoint and must be resolved before
@@ -470,8 +508,8 @@ claiming complete Windows parity:
 - Additional composing departure, panel-close and newer-input guards in other
   editors.
 - Packaged qualification of the Mixer, sample completion, recorder focus and
-  startup-frame fixes newer than build 8; retained refused waveform strokes and
-  broader sample-operation outcome/readback handling.
+  startup-frame fixes in build 9; packaged qualification of retained drawing,
+  numeric staged-point controls and broader sample-operation/readback handling.
 - Remaining recorder/review focus, root keyboard traversal, paging and endpoint
   presentation, including the source-tested input identity changes above.
 - Further source-by-source review of plugin/routing controls, instrument-envelope

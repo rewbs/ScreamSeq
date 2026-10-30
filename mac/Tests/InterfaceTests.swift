@@ -55,7 +55,9 @@ struct InterfaceFailure: Error { let message: String }
     var requests = [(String, [String: Any])](), replies = [([String: Any]) -> Void]()
     editor.onRequest = { method, params, reply in requests.append((method, params)); replies.append(reply) }
     func answer(_ revision: String, _ count: Int = 32) {
-      replies.removeFirst()(["result": ["revision": revision, "data": ["peaks": Array(repeating: 0.25, count: count * 2)]]])
+      var data = requests[requests.count - replies.count].1
+      data["peaks"] = Array(repeating: 0.25, count: count * 2)
+      replies.removeFirst()(["result": ["revision": revision, "documentId": "wave-doc", "data": data]])
     }
     editor.waveform.setViewport(240..<272); editor.waveform.setViewport(248..<280); editor.waveform.setViewport(256..<288)
     try require(requests.count == 1, "Rapid viewport changes retain only one in-flight waveform read")
@@ -86,12 +88,16 @@ struct InterfaceFailure: Error { let message: String }
       (requests.last?.1["points"] as? [[String: Any]])?.count == 7, "One stroke is one API command with the original displayed revision")
     try require(!editor.waveform.beginStroke(SampleStrokePoint(frame: 264, value: 0)), "A pending drawing edit cannot be submitted twice")
     replies.removeFirst()(["error": ["code": -32001, "message": "Song changed"]])
-    try require(editor.drawingStatus.stringValue == "Song changed" && editor.waveform.stroke.isEmpty && requests.last?.0 == "sample.waveform.get",
-      "Stale drawings show the failure, discard the overlay and reload the waveform")
+    try require(editor.drawingStatus.stringValue.contains("Song changed") && !editor.waveform.stroke.isEmpty && requests.last?.0 == "sample.draw",
+      "Stale drawings retain their overlay and never automatically repeat the write")
+    editor.discardDrawing()
     answer("next")
     try require(editor.waveform.beginStroke(SampleStrokePoint(frame: 269, value: -1)), "A refreshed waveform accepts the next gesture")
     editor.waveform.finishStroke()
     replies.removeFirst()(["result": ["revision": "drawn", "data": ["changedFrames": 1]]])
+    replies.removeFirst()(["result": ["revision": "drawn", "documentId": "wave-doc", "data": ["index": 1, "frames": 1000, "channels": 2, "name": "Drawing fixture", "rate": 44100, "volume": 64, "pan": 128,
+      "loop": false, "loopStart": 0, "loopEnd": 0, "pingpong": false, "reverseLoop": false,
+      "sustainLoop": false, "sustainStart": 0, "sustainEnd": 0, "sustainPingpong": false, "sustainReverse": false]]])
     answer("drawn")
     try require(editor.drawingStatus.stringValue.contains("Drew 1 frame"), "A completed drawing reports its result")
     let beforeCancel = requests.count
@@ -123,6 +129,7 @@ struct InterfaceFailure: Error { let message: String }
     editor.waveformRevision = "snapshot"; editor.waveform.selection = 1004...1040
     _ = editor.waveform.beginStroke(SampleStrokePoint(frame: 1020, value: 0.2))
     editor.waveform.extendStroke(SampleStrokePoint(frame: 1032, value: -0.5))
+    try drawingRetentionChecks()
     return editor
   }
   static func parameterBoundaryChecks() throws {
@@ -264,7 +271,13 @@ struct InterfaceFailure: Error { let message: String }
     try require(sampleRequests.last?.1["channels"] as? String == "right", "The latest channel query uses the shared read API after the first completes")
     try require(sample.waveform.peaks == displayPeaks, "Out-of-order channel waveform replies cannot replace the active channel")
     sampleReplies.removeFirst()(["result": ["data": ["peaks": [-0.25, 0.25]]]])
-    try require(sample.waveform.peaks == [-0.25, 0.25], "Active channel waveform response is displayed")
+    try require(sample.waveform.peaks == displayPeaks && sample.waveformRevision == nil, "Incomplete waveform replies cannot become a loaded view")
+    sample.refreshWaveform()
+    var currentWave = sampleRequests.last!.1
+    let currentPeaks = Array(repeating: [-0.25, 0.25], count: currentWave["bins"] as! Int).flatMap { $0 }
+    currentWave["peaks"] = currentPeaks
+    sampleReplies.removeFirst()(["result": ["revision": "current", "data": currentWave]])
+    try require(sample.waveform.peaks == currentPeaks.map(Float.init), "Complete active-channel waveform response is displayed")
     try require(sample.automationContext(frames: 5_000_000)["start"] as? Int == 251000 && sample.automationContext(frames: 256)["end"] as? Int == 256, "Agent sample context uses current inventory length and retires invalid stale ranges")
     sample.onRequest = nil; sample.channelPicker.selectItem(at: 0); sample.waveform.peaks = displayPeaks
     sample.processingStatus.stringValue = "Preview: 3,018,000 frames change · peak −0.26 dBFS"

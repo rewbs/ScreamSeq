@@ -7,7 +7,8 @@ extension SampleEditor {
     }
     drawToggle.target=self; drawToggle.action=#selector(toggleDrawing)
     drawToggle.setAccessibilityHelp("Zoom to individual frames. Drawing with Both selected replaces both channels with the same shape.")
-    drawingStatus.lineBreakMode = .byWordWrapping; drawingStatus.maximumNumberOfLines=2
+    drawingStatus.lineBreakMode = .byWordWrapping; drawingStatus.maximumNumberOfLines=4
+    drawingStatus.preferredMaxLayoutWidth = 600; drawingStatus.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
     return stack(.horizontal,[
       ActionButton("Whole") { [weak self] in self?.waveform.setViewport(nil) },
       ActionButton("Selection") { [weak self] in self?.waveform.zoomSelection() },
@@ -30,15 +31,17 @@ extension SampleEditor {
   }
   func viewportChanged() { updateViewportStatus();refreshWaveform() }
   @objc func toggleDrawing() {
+    if drawingDraft?.submitted == true { drawToggle.state = waveform.drawing ? .on : .off; drawingStatus.stringValue = "Review or discard the retained stroke before changing drawing mode."; return }
     waveform.drawing=drawToggle.state == .on
     drawingStatus.stringValue=waveform.drawing ? "Zoom to individual frames, then drag to draw. Both channels receive the same shape." : "Drag to select audio. Zoom with + / − or Option-scroll."
     if waveform.drawing { refreshWaveform() }
   }
   func retireWaveform() {
     waveformRequest+=1;waveformPending=false;waveformRetry?.cancel();waveformRetry=nil;waveformAttempts=0
-    waveformRevision=nil;sampleRevision=nil;snapPending=false;waveform.cancelStroke()
+    waveformRevision=nil;waveformDocumentID=nil;sampleRevision=nil;snapPending=false;waveform.cancelStroke()
   }
   func refreshWaveform() {
+    guard drawingDraft?.submitted != true else { return }
     waveformRequest+=1;waveformPending=true;waveformRevision=nil;waveformAttempts=0
     waveformRetry?.cancel();waveformRetry=nil
     pumpWaveform()
@@ -55,8 +58,10 @@ extension SampleEditor {
       guard request==self.waveformRequest,sample==self.index,generation==self.sampleGeneration,range==self.waveform.visibleRange,channels==self.selectedChannels else {
         self.pumpWaveform();return
       }
-      if let result=response["result"] as? [String:Any],let data=result["data"] as? [String:Any],let peaks=data["peaks"] as? [NSNumber] {
-        self.waveform.peaksRange=range;self.waveform.peaks=peaks.map(\.floatValue);self.waveformRevision=result["revision"] as? String
+      if let result=response["result"] as? [String:Any],let revision=result["revision"] as? String,
+        let peaks=self.validWaveformPeaks(result,sample:sample,range:range,channels:channels,bins:bins) {
+        self.waveform.peaksRange=range;self.waveform.peaks=peaks;self.waveformRevision=revision
+        self.waveformDocumentID=result["documentId"] as? String
         self.waveformAttempts=0
       } else {
         let error=response["error"] as? [String:Any]
@@ -69,28 +74,20 @@ extension SampleEditor {
     }
   }
   func beginDrawing() -> Bool {
-    guard !drawingBusy,!snapBusy,!crossfadeBusy,!loopsBusy,canBeginDrawing?() ?? true,waveform.precise,let revision=waveformRevision else {
+    guard drawingDraft == nil, !hasDraft, !snapBusy, !crossfadeBusy, !processing, !clipboardBusy,
+      canBeginDrawing?() ?? true,waveform.precise,let revision=waveformRevision else {
       drawingStatus.stringValue="Zoom in to individual frames and wait for the waveform to load before drawing.";return false
     }
     strokeRevision=revision
+    drawingDraft = SampleDrawingDraft(self, revision: revision)
     drawingStatus.stringValue="Drawing \(selectedChannels == "both" ? "both channels" : selectedChannels) · Escape cancels · release to apply"
     return true
   }
   func commitDrawing(_ points:[SampleStrokePoint]) {
-    guard !drawingBusy,!points.isEmpty,let revision=strokeRevision,let onRequest else { waveform.cancelStroke();return }
-    let sample=index,generation=sampleGeneration
-    let params:[String:Any]=["sample":sample,"channels":selectedChannels,"expectedRevision":revision,
-      "points":points.map { ["frame":$0.frame,"value":$0.value] as [String:Any] }]
-    drawingBusy=true;drawingStatus.stringValue="Applying stroke…"
-    onRequest("sample.draw",params) { [weak self] response in
-      guard let self else { return };self.drawingBusy=false
-      guard sample==self.index,generation==self.sampleGeneration else { return }
-      self.waveform.cancelStroke()
-      if let result=response["result"] as? [String:Any],let data=result["data"] as? [String:Any] {
-        let count=(data["changedFrames"] as? NSNumber)?.intValue ?? 0
-        self.drawingStatus.stringValue=count==0 ? "The stroke made no changes." : "Drew \(count) \(count==1 ? "frame" : "frames") · one Undo step"
-      } else { self.drawingStatus.stringValue=(response["error"] as? [String:Any])?["message"] as? String ?? "Drawing failed." }
-      self.refreshWaveform()
+    guard !drawingBusy, let draft = drawingDraft, !draft.submitted, ownsDrawing(draft), !points.isEmpty else { return }
+    guard drawingFieldsUnchanged(draft) else {
+      waveform.cancelStroke(); drawingStatus.stringValue = "Fields changed while drawing. Gesture cancelled; newer fields kept."; return
     }
+    draft.points = points; submitDrawing(draft)
   }
 }

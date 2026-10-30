@@ -101,7 +101,7 @@ final class SampleEditor: NSView, NSTextFieldDelegate {
   let settingsStatus = Theme.label("Changes save automatically · ⌘Z to undo", size: 11, color: Theme.muted)
   var hasLoopDraft: Bool { loopDraftBaseline != nil && loopDraftBaseline?.isEqual(rawLoopDraft) != true }
   var hasDraft: Bool { settingsDraft.hasDraft || hasLoopDraft || settingsPending || settingsNeedsReload || loopNeedsReload || loopsBusy || drawingBusy || !waveform.stroke.isEmpty || hasSampleComposition }
-  func resetDocumentContext() { resetSettingsContext(); sampleGeneration += 1; loopSaveWork?.cancel();loopSaveWork=nil;waveform.selectedLoopMarker=nil;waveform.draggingLoop=false; loopDraftBaseline=nil; loopDraftRevision=nil; loopPreviewSignature=nil; loopPreviewRevision=nil; savedLoopInfo=[:]; retireWaveform(); waveform.selection=nil; waveform.setViewport(nil,notify:false) }
+  func resetDocumentContext() { resetSettingsContext(); resetDrawingContext(); sampleGeneration += 1; loopSaveWork?.cancel();loopSaveWork=nil;waveform.selectedLoopMarker=nil;waveform.draggingLoop=false; loopDraftBaseline=nil; loopDraftRevision=nil; loopPreviewSignature=nil; loopPreviewRevision=nil; savedLoopInfo=[:]; retireWaveform(); waveform.selection=nil; waveform.setViewport(nil,notify:false) }
   let waveform = WaveformView(frame: .zero),
     heading = Theme.label("Sample", size: 16, weight: .semibold),
     details = Theme.label("", size: 11, color: Theme.muted),
@@ -161,6 +161,13 @@ final class SampleEditor: NSView, NSTextFieldDelegate {
   lazy var snapStepGroup = labeled("STEP (frames)", snapStep)
   lazy var snapOriginGroup = labeled("ORIGIN (frame)", snapOrigin)
   var drawingBusy = false
+  var drawingDraft: SampleDrawingDraft?
+  var drawingWaiters = [(Bool) -> Void]()
+  var waveformDocumentID: String?
+  lazy var reviewDrawingButton = ActionButton("Review stroke") { [weak self] in self?.reviewDrawing() }
+  lazy var acceptDrawingButton = ActionButton("Accept reviewed state") { [weak self] in self?.acceptDrawingReview() }
+  lazy var retryDrawingButton = ActionButton("Retry stroke") { [weak self] in self?.retryDrawing() }
+  lazy var discardDrawingButton = ActionButton("Discard stroke") { [weak self] in self?.discardDrawing() }
   var canBeginDrawing: (() -> Bool)?
   let viewportStatus = Theme.label("Whole sample", size: 11, color: Theme.muted, mono: true)
   let drawToggle = NSButton(checkboxWithTitle: "Draw", target: nil, action: nil)
@@ -183,7 +190,7 @@ final class SampleEditor: NSView, NSTextFieldDelegate {
   var pastePreviewSignature: NSDictionary?, pastePreviewRevision: String?, pastePreviewID: String?
   private var previewSignature: NSDictionary?, previewRevision: String?
   var index = 1 {
-    didSet { if index != oldValue { resetSettingsContext(); sampleGeneration += 1; loopSaveWork?.cancel();loopSaveWork=nil;waveform.selectedLoopMarker=nil;waveform.draggingLoop=false; loopDraftBaseline=nil;loopDraftRevision=nil;loopPreviewSignature=nil;loopPreviewRevision=nil;savedLoopInfo=[:]; retireWaveform(); waveform.setViewport(nil, notify: false); waveform.selection = nil; previewSignature = nil; previewRevision = nil; resetPastePreview();crossfadePreviewSignature=nil;crossfadePreviewRevision=nil } }
+    didSet { if index != oldValue { resetSettingsContext(); resetDrawingContext(); sampleGeneration += 1; loopSaveWork?.cancel();loopSaveWork=nil;waveform.selectedLoopMarker=nil;waveform.draggingLoop=false; loopDraftBaseline=nil;loopDraftRevision=nil;loopPreviewSignature=nil;loopPreviewRevision=nil;savedLoopInfo=[:]; retireWaveform(); waveform.setViewport(nil, notify: false); waveform.selection = nil; previewSignature = nil; previewRevision = nil; resetPastePreview();crossfadePreviewSignature=nil;crossfadePreviewRevision=nil } }
   }
   var onMessage: ((String) -> Void)?
   var onRecord: (() -> Void)?
@@ -252,9 +259,9 @@ final class SampleEditor: NSView, NSTextFieldDelegate {
     let content = stack(
       .vertical,
       [
-        top, details, waveform, makeWaveformControls(), viewportStatus, selectionRow, rangeLabel,
+        top, details, waveform, makeWaveformControls(), makeDrawingActions(), drawingStatus, viewportStatus, selectionRow, rangeLabel,
         ToolSection("Loops", id: "sample.loops", views: [makeLoopRow(sustain: false), makeLoopRow(sustain: true), makeLoopActions(), loopsStatus], expanded: true),
-        ToolSection("Edit audio", id: "sample.processing", views: [editButtons, options, processingStatus, drawingStatus]),
+        ToolSection("Edit audio", id: "sample.processing", views: [editButtons, options, processingStatus]),
         ToolSection("Selection snapping", id: "sample.snap", views: [makeSnapControls(), makeSnapActions(), snapStatus]),
         ToolSection("Clipboard & mixing", id: "sample.clipboard", views: [makeClipboardActions(), makePasteControls(), clipboardStatus]),
         ToolSection("Loop crossfade", id: "sample.crossfade", views: [makeCrossfadeControls(), crossfadeInfo, makeCrossfadeActions(), crossfadeStatus]),
@@ -275,6 +282,8 @@ final class SampleEditor: NSView, NSTextFieldDelegate {
       guard let self else { return }
       if self.strokeRevision != nil { self.drawingStatus.stringValue = "Stroke cancelled." }
       self.strokeRevision = nil
+      if self.drawingDraft?.submitted != true { self.drawingDraft = nil }
+      self.updateDrawingActions()
     }
     waveform.onStroke = { [weak self] points in self?.commitDrawing(points) }
     selectionChanged(nil)
@@ -318,6 +327,10 @@ final class SampleEditor: NSView, NSTextFieldDelegate {
     smoothGroup.isHidden = op != "smooth"
   }
   @objc func channelChanged() {
+    if let draft = drawingDraft, draft.submitted {
+      channelPicker.selectItem(at: ["both", "left", "right"].firstIndex(of: draft.channels) ?? 0)
+      drawingStatus.stringValue = "Review or discard the retained stroke before changing channels."; return
+    }
     waveform.cancelStroke()
     refreshWaveform()
   }
@@ -393,6 +406,11 @@ final class SampleEditor: NSView, NSTextFieldDelegate {
   }
   func update(_ info: [AnyHashable: Any], samples: [[String: Any]], revision: String? = nil) {
     let identity = samples.first { $0["index"] as? Int == index }?["id"] as? String ?? ""
+    if let draft = drawingDraft, draft.submitted {
+      updateCatalogue(samples)
+      if identity != draft.identity { drawingStatus.stringValue = "The captured sample is unavailable. Stroke kept for review or discard." }
+      return
+    }
     let retainSettings = settingsDraft.hasDraft || settingsPending || settingsNeedsReload || (!settingsIdentity.isEmpty && settingsFields.contains { $0.currentEditor() != nil })
     if retainSettings {
       if identity != settingsIdentity { updateCatalogue(samples); settingsNeedsReload = true; settingsStatus.stringValue = "The captured sample is unavailable. Fields kept."; return }
@@ -403,17 +421,10 @@ final class SampleEditor: NSView, NSTextFieldDelegate {
     if !retainSettings { name.stringValue = info["name"] as? String ?? "" }
     let frames = info["frames"] as? Int ?? 0
     let hz = info["rate"] as? Int ?? 44100
-    details.stringValue =
-      "\(frames) frames   ·   \(info["bits"] ?? 16)-bit   ·   \(info["channels"] ?? 1) channel(s)   ·   \(String(format:"%.2f",Double(frames)/Double(max(1,hz)))) seconds"
     retireWaveform()
     sampleRevision = revision
     waveform.frames = frames
-    let stereo = (info["channels"] as? Int ?? 1) == 2
-    channelPicker.item(at: 2)?.isEnabled = stereo
-    if !stereo && channelPicker.indexOfSelectedItem == 2 { channelPicker.selectItem(at: 0) }
-    for i in 10..<operations.count { operationPicker.item(at: i)?.isEnabled = stereo }
-    if !stereo && operationPicker.indexOfSelectedItem >= 10 { operationPicker.selectItem(at: 0) }
-    updateProcessingOptions()
+    updateSampleDescription(info)
     waveform.loopStart = (info["loop"] as? Bool ?? false) ? info["loopStart"] as? Int ?? 0 : 0
     waveform.loopEnd = (info["loop"] as? Bool ?? false) ? info["loopEnd"] as? Int ?? 0 : 0
     if waveform.viewport == nil, selectedChannels == "both", let data = info["waveform"] as? Data {
@@ -438,6 +449,16 @@ final class SampleEditor: NSView, NSTextFieldDelegate {
     if waveform.viewport != nil || selectedChannels != "both" || waveform.drawing { refreshWaveform() }
     updateViewportStatus()
     waveform.needsDisplay = true
+  }
+  func updateSampleDescription(_ info: [AnyHashable: Any]) {
+    let frames = info["frames"] as? Int ?? 0, hz = info["rate"] as? Int ?? 44100
+    details.stringValue = "\(frames) frames   ·   \(info["bits"] ?? 16)-bit   ·   \(info["channels"] ?? 1) channel(s)   ·   \(String(format:"%.2f",Double(frames)/Double(max(1,hz)))) seconds"
+    let stereo = (info["channels"] as? Int ?? 1) == 2
+    channelPicker.item(at: 2)?.isEnabled = stereo
+    if !stereo && channelPicker.indexOfSelectedItem == 2 { channelPicker.selectItem(at: 0) }
+    for i in 10..<operations.count { operationPicker.item(at: i)?.isEnabled = stereo }
+    if !stereo && operationPicker.indexOfSelectedItem >= 10 { operationPicker.selectItem(at: 0) }
+    updateProcessingOptions()
   }
   // Only the fields the musician changed: sending an untouched pan would switch
   // on the sample's panning override, and an untouched rate would retune MOD/XM.

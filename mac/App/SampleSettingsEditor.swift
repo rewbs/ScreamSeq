@@ -37,6 +37,9 @@ extension SampleEditor {
   }
   func finishAutomaticEdit(_ done: @escaping (Bool) -> Void) {
     guard !hasSampleComposition else { settingsStatus.stringValue = "Finish composing the sample value before continuing."; done(false); return }
+    if drawingBusy {
+      drawingWaiters.append { [weak self] accepted in if accepted { self?.finishAutomaticEdit(done) } else { done(false) } }; return
+    }
     guard !drawingBusy, waveform.stroke.isEmpty else { drawingStatus.stringValue = "Finish or discard the retained stroke before continuing."; done(false); return }
     if loopsBusy {
       loopCompletionWaiters.append { [weak self] accepted in if accepted { self?.finishAutomaticEdit(done) } else { done(false) } }; return
