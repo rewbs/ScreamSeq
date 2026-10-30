@@ -148,7 +148,7 @@ extension AppController {
     case "patternTools":showPatternTools()
     case "arrange":showArrangementMatrix()
     case "timing":showSongTiming()
-    case "render":recordSelectionToSample()
+    case "render":showSelectionRenderOptions()
     case "browseSamples":showSampleBrowser()
     case "importSample":importSample()
     case "recordSample":showSampleRecorder()

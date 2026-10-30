@@ -753,6 +753,7 @@ struct InterfaceFailure: Error { let message: String }
       ("graph-actions", graphActionCatalogChecks), ("graph-ports", graphPortActionChecks),
       ("graph-preview", graphConnectionPreviewChecks), ("sample-browser", sampleBrowserChecks),
       ("sample-recording", sampleRecordingChecks), ("plugin-recording", pluginRecordingChecks),
+      ("selection-render", patternSampleRenderChecks),
       ("plugin-control-delivery", pluginControlDeliveryChecks),
       ("parameter-boundary", parameterBoundaryChecks),
       ("pattern-performance", patternPerformanceChecks), ("plugin-instruments", pluginInstrumentsChecks),

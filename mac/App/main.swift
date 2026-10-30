@@ -38,6 +38,8 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
   var pluginBrowserWindow: NSWindow?
   var sampleBrowserWindow: NSWindow?
   var sampleRecordingWindow: NSWindow?
+  var patternSampleRenderWindow: NSWindow?, directSampleRenderWindow: NSWindow?
+  var patternSampleRender: PatternSampleRenderView?, directSampleRender: PatternSampleRenderView?
   var pluginRecordingWindow: NSWindow?
   lazy var pluginRecordingInput: PluginRecordingInput = {
     let input = PluginRecordingInput()
@@ -505,6 +507,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
       workspaceContextTokens.removeAll();workspaceReturnPoints.removeAll()
     }
     patternView.model = model
+    patternSampleRender?.documentChanged(); directSampleRender?.documentChanged()
     // Catalogues may change through the agent API while their panels are hidden
     // or pinned. This updates choices only; it never changes targets or drafts.
     sampleEditor.updateCatalogue(model.samples)
@@ -1936,6 +1939,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     item(pattern, "Scratch phrases…", #selector(showScratchGestures))
     item(pattern, "Record Selection to Sample", #selector(recordSelectionToSample))
     item(pattern, "Record Selection to Instrument", #selector(recordSelectionToInstrument))
+    item(pattern, "Render Selection Options…", #selector(showSelectionRenderOptions))
     item(pattern, "Pattern Tools…", #selector(showPatternTools), "t", [.command, .shift])
     item(pattern, "Command Picker…", #selector(showPatternCommands), "k", [.command, .shift])
     item(pattern, "New Note Track…", #selector(newNoteTrack))

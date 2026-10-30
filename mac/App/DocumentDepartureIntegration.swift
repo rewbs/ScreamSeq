@@ -28,6 +28,8 @@ extension AppController: TrackerDocumentDepartureDelegate {
     if let recorder = sampleRecordingWindow?.contentView as? SampleRecordingView {
       retain("Sample recording", recorder.needsDocumentCompletion)
     }
+    retain("Selection render options", patternSampleRender?.needsDocumentCompletion == true)
+    retain("Selection render result", directSampleRender?.needsDocumentCompletion == true)
     if let scratch = scratchGestureWindow?.contentView as? ScratchGestureEditor {
       retain("Scratch phrase", scratch.hasPendingEdits || scratch.pending)
     }
