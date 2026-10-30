@@ -3,6 +3,7 @@ import AppKit
 struct InstrumentCreationTarget: Equatable {
   let context: SampleRecordingContext
   let sample: Int, sampleIdentity: String, relatedState: String
+  var instruments: [Int: String] = [:]
 }
 
 // Includes raw field-editor text, not just the controls' committed values.
@@ -90,7 +91,8 @@ final class InstrumentCreationWorkflow {
       }
       guard response["error"] == nil, let result = response["result"] as? [String: Any],
         result["documentId"] as? String == owner.target.context.document,
-        let revision = result["revision"] as? String, !revision.isEmpty,
+        SampleRecordingRead.boolean(result["changed"]) == true,
+        let revision = result["revision"] as? String, !revision.isEmpty, revision != owner.target.context.revision,
         let data = result["data"] as? [String: Any],
         let slot = SampleRecordingRead.integer(data[owner.method == "instrument.import" ? "index" : "instrument"], maximum: 65535, minimum: 1) else {
         self.retain(owner, "Instrument creation could not be verified. Review before another creation; no write will be repeated."); return
@@ -106,7 +108,8 @@ final class InstrumentCreationWorkflow {
         guard self.onTarget?()?.context == context,
           let data = SampleRecordingRead.result(response, context: context), SampleRecordingRead.validAssets(data),
           let item = (data["instruments"] as? [[String: Any]])?.first(where: { SampleRecordingRead.integer($0["index"]) == slot }),
-          let identity = item["id"] as? String, !identity.isEmpty else {
+          let identity = item["id"] as? String, !identity.isEmpty,
+          owner.target.instruments[slot] == nil, !owner.target.instruments.values.contains(identity) else {
           self.retain(owner, "Created instrument readback failed or changed. Review the retained result; no write will be repeated."); return
         }
         let reveal = self.onDraft?() == owner.draft && self.canBegin?() == true && self.canReveal?() != false && self.composing?() != true &&

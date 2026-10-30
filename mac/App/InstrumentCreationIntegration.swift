@@ -20,10 +20,12 @@ extension AppController {
   func configureInstrumentCreation() {
     let creation = instrumentEditor.creation
     creation.onTarget = { [weak self] in
-      guard let self, !self.shuttingDown, !self.model.revisionToken.isEmpty else { return nil }
+      guard let self, !self.shuttingDown, !self.model.revisionToken.isEmpty,
+        SampleRecordingRead.validAssets(["samples": self.model.samples, "instruments": self.model.instruments]) else { return nil }
       let sample = self.model.samples.first { $0["index"] as? Int == self.sampleEditor.index }
+      let instruments = Dictionary(uniqueKeysWithValues: self.model.instruments.map { (SampleRecordingRead.integer($0["index"])!, $0["id"] as! String) })
       return InstrumentCreationTarget(context: .init(document: String(self.model.revisionToken.split(separator: ":").first ?? ""), revision: self.model.revisionToken),
-        sample: sample?["index"] as? Int ?? 0, sampleIdentity: sample?["id"] as? String ?? "", relatedState: self.instrumentCreationRelatedState)
+        sample: sample?["index"] as? Int ?? 0, sampleIdentity: sample?["id"] as? String ?? "", relatedState: self.instrumentCreationRelatedState, instruments: instruments)
     }
     creation.canBegin = { [weak self] in self?.instrumentCreationCanBegin == true }
     creation.canReveal = { [weak self] in

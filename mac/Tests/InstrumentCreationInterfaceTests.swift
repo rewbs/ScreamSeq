@@ -2,7 +2,7 @@ import AppKit
 
 private final class InstrumentCreationFixture {
   let owner = InstrumentCreationWorkflow()
-  var target = InstrumentCreationTarget(context: .init(document: "song", revision: "song:1"), sample: 1, sampleIdentity: "s1", relatedState: "bank:0")
+  var target = InstrumentCreationTarget(context: .init(document: "song", revision: "song:1"), sample: 1, sampleIdentity: "s1", relatedState: "bank:0", instruments: [1: "i1"])
   var draft = InstrumentCreationDraft(index: 1, identity: "i1", generation: 1, fields: ["name": "Original"], points: [[0, 64]], mapping: [1])
   var allowed = true, composing = false, reveal = true
   var calls = [(String, [String: Any])](), replies = [([String: Any]) -> Void](), created = [(Int, String)]()
@@ -16,14 +16,14 @@ private final class InstrumentCreationFixture {
     owner.onCreated = { [weak self] in self?.created.append(($0, $1)) }
   }
   func revision(_ value: String, document: String = "song", sampleIdentity: String = "s1", related: String = "bank:0") {
-    target = .init(context: .init(document: document, revision: value), sample: 1, sampleIdentity: sampleIdentity, relatedState: related)
+    target = .init(context: .init(document: document, revision: value), sample: 1, sampleIdentity: sampleIdentity, relatedState: related, instruments: target.instruments)
   }
   func edit(_ text: String, generation: UInt64 = 2) {
     draft = .init(index: draft.index, identity: draft.identity, generation: generation, fields: ["name": text], points: draft.points, mapping: draft.mapping)
   }
   func answer(_ response: [String: Any]) { replies.removeFirst()(response) }
-  func receipt(_ slot: Any = 3, importing: Bool = false, document: String = "song", revision: String = "song:2") -> [String: Any] {
-    ["result": ["documentId": document, "revision": revision, "data": [importing ? "index" : "instrument": slot]]]
+  func receipt(_ slot: Any = 3, importing: Bool = false, document: String = "song", revision: String = "song:2", changed: Any = true) -> [String: Any] {
+    ["result": ["documentId": document, "revision": revision, "changed": changed, "data": [importing ? "index" : "instrument": slot]]]
   }
   func catalogue(revision: String = "song:2", instruments: [[String: Any]]? = nil) -> [String: Any] {
     ["result": ["documentId": "song", "revision": revision, "data": ["samples": [["id": "s1", "index": 1]],
@@ -86,7 +86,8 @@ extension InterfaceTests {
     try require(refusal.calls.count == 2 && refusal.calls[1].1["expectedRevision"] as? String == "song:3", "A later explicit creation captures fresh intent after definite rejection")
 
     let invalid: [[String: Any]] = [[:], ["error": ["code": -32002, "message": "Busy without outcome"]],
-      happy.receipt(true), happy.receipt(0), happy.receipt(3.5), happy.receipt(document: "other"), happy.receipt(revision: "")]
+      happy.receipt(true), happy.receipt(0), happy.receipt(3.5), happy.receipt(document: "other"), happy.receipt(revision: ""),
+      happy.receipt(revision: "song:1"), happy.receipt(changed: false), happy.receipt(changed: 1)]
     for response in invalid {
       let f = InstrumentCreationFixture(); f.owner.create(); f.answer(response)
       try require(f.owner.canReview && f.created.isEmpty && f.calls.count == 1, "Unverified creation stays retained")
@@ -122,6 +123,11 @@ extension InterfaceTests {
     failedRead.answer([:]); failedRead.owner.review(); failedRead.answer(failedRead.catalogue()); failedRead.owner.accept()
     try require(failedRead.calls.map(\.0) == ["instrument.create", "document.get", "document.get"] && failedRead.created.isEmpty && !failedRead.owner.needsCompletion,
       "Accepted creation with failed readback can be reconciled without repeating the append or stealing selection")
+    for slot in [1, 3] {
+      let f = InstrumentCreationFixture(); f.owner.create(); f.revision("song:2"); f.answer(f.receipt(slot))
+      f.answer(f.catalogue(instruments: [["id": "i1", "index": slot]]))
+      try require(f.owner.canReview && f.created.isEmpty, "A receipt naming a prior slot or reused identity cannot claim an existing asset as newly created")
+    }
     let stale = InstrumentCreationFixture(); stale.owner.create(); stale.revision("other:2", document: "other"); stale.answer(stale.receipt())
     stale.owner.review(); try require(stale.calls.count == 1 && stale.owner.needsCompletion, "Old-song receipt neither reveals nor inspects the wrong song")
 
@@ -187,6 +193,25 @@ extension InterfaceTests {
     editor.finishInstrumentReload(acceptedReload, response: read(loaded), model: model)
     try require(!editor.hasDraft && text.string == "Reloaded instrument" && editor.name.currentEditor() === text && text.selectedRange() == NSRange(location: 2, length: 3),
       "Verified explicit Reload adopts the current baseline while keeping focus and caret")
+    editor.layoutSubtreeIfNeeded()
+    let point = editor.envelope.convert(editor.envelope.location([0, 64]), to: nil)
+    let down = NSEvent.mouseEvent(with: .leftMouseDown, location: point, modifierFlags: [], timestamp: 0,
+      windowNumber: window.windowNumber, context: nil, eventNumber: 1, clickCount: 1, pressure: 1)!
+    editor.envelope.mouseDown(with: down)
+    try require(editor.envelope.isDragging && editor.hasDraft, "Holding an unchanged native envelope node retains the drag")
+    var saveAttempts = 0, completions = [Bool]()
+    func saveBoundary() {
+      saveAttempts += 1
+      guard saveAttempts <= 3, editor.hasDraft else { return }
+      editor.finishAutomaticEdit { ok in completions.append(ok); if ok { saveBoundary() } }
+    }
+    saveBoundary()
+    try require(saveAttempts == 1 && completions == [false] && editor.envelope.isDragging,
+      "Save during an unmoved envelope drag refuses once instead of recursively re-entering Save")
+    let up = NSEvent.mouseEvent(with: .leftMouseUp, location: point, modifierFlags: [], timestamp: 1,
+      windowNumber: window.windowNumber, context: nil, eventNumber: 2, clickCount: 1, pressure: 0)!
+    editor.envelope.mouseUp(with: up); editor.finishAutomaticEdit { accepted = $0 }
+    try require(!editor.envelope.isDragging && accepted == true && !editor.hasDraft, "Releasing an unchanged drag restores ordinary Save completion")
     editor.creation.create(); f.answer([:])
     let commands = ContextActions.controls(in: editor, title: "Instrument")
     try require(commands.items.contains { $0.title == "Review creation" && $0.isEnabled },

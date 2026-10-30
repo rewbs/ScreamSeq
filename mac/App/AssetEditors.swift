@@ -1080,7 +1080,7 @@ final class InstrumentEditor: NSView, NSTextFieldDelegate {
   }
   private func finishWaiters(_ accepted:Bool){let callbacks=completionWaiters;completionWaiters=[];for callback in callbacks{callback(accepted)}}
   func finishAutomaticEdit(_ done:@escaping(Bool)->Void){
-    guard !creation.needsCompletion, reloadOwner == nil, !hasInstrumentComposition else { onMessage?("Finish composing, wait for Reload or review the retained instrument creation before continuing."); done(false); return }
+    guard !creation.needsCompletion, reloadOwner == nil, !hasInstrumentComposition, !envelope.isDragging else { onMessage?("Finish the envelope drag or composition, wait for Reload or review the retained instrument creation before continuing."); done(false); return }
     guard !commitFailed else{done(false);return};if pending{completionWaiters.append(done);return}
     if !hasDraft{done(true);return}
     do {
