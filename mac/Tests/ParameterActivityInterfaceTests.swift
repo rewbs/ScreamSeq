@@ -54,6 +54,12 @@ extension InterfaceTests {
     editor.detailMode.selectedSegment=2;editor.changeDetail();answer(["points":[["frame":48000,"value":-40]],"total":1])
     editor.table.selectRowIndexes(IndexSet(integer:0),byExtendingSelection:false)
     try require(editor.status.stringValue.contains("during playback") && !editor.status.stringValue.contains("Stop playback"),"Recorded editor explains its supported live-edit behavior")
+    link=nil;editor.openSelected()
+    try require(link?["kind"] as? String=="recorded" && link?["plugin"] as? String=="b" && link?["parameter"] as? Int==71 && link?["frame"] as? Int==48000,
+      "A recorded point row opens its stable song-automation source")
+    editor.table.deselectAll(nil);link=nil;editor.openSelected()
+    try require(link==nil,"A deselected recorded row cannot keep an earlier source active")
+    editor.table.selectRowIndexes(IndexSet(integer:0),byExtendingSelection:false)
     editor.editRecordedCell(row:0,column:1)
     try require(editor.table.editedRow==0 && editor.table.editedColumn==1,"Recorded values must open a real inline field editor")
     (host.firstResponder as? NSTextView)?.string="-30"

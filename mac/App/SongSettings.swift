@@ -10,10 +10,12 @@ final class SongSettingsEditor: NSView, NSTextFieldDelegate {
   var onReturn:(()->Void)?, onClose:(()->Void)?
   private(set) var capturedDocument = "", revision = "", pending = false, uncertain = false
   private var baseline = [String:String](), generation:UInt64 = 0
+  private var fieldGenerations = [String:UInt64]()
   private var waiters = [(Bool)->Void]()
   private var observed:(document:String,revision:String,fields:[String:String])?
   private var buttons = [NSButton]()
   var raw:[String:String] {["title":title.stringValue,"tempo":tempo.stringValue,"speed":speed.stringValue,"channels":channels.stringValue]}
+  private var fields:[(NSTextField,String)] {[(title,"title"),(tempo,"tempo"),(speed,"speed"),(channels,"channels")]}
   var hasDraft:Bool {baseline.isEmpty ? raw.values.contains{!$0.isEmpty}:raw != baseline}
   var needsCompletion:Bool {pending || uncertain || hasDraft}
   var stale:Bool {guard let now=onContext?() else{return true};return now.document != capturedDocument || now.revision != revision}
@@ -40,7 +42,11 @@ final class SongSettingsEditor: NSView, NSTextFieldDelegate {
     content.stretchAcrossAxis();content.fill(self,inset:24);controls()
   }
   required init?(coder:NSCoder){fatalError()}
-  func controlTextDidChange(_ obj:Notification) {generation &+= 1;observed=nil;controls()}
+  func controlTextDidChange(_ obj:Notification) {
+    generation &+= 1
+    if let field=obj.object as? NSTextField,let key=fields.first(where:{$0.0===field})?.1 {fieldGenerations[key,default:0] &+= 1}
+    observed=nil;controls()
+  }
   func canLeave()->Bool {
     if composing {status.stringValue="Finish composing the current field before continuing.";return false}
     return true
@@ -50,12 +56,9 @@ final class SongSettingsEditor: NSView, NSTextFieldDelegate {
       let ticks=data["speed"] as? NSNumber,let count=data["channels"] as? NSNumber else{return nil}
     return ["title":name,"tempo":bpm.stringValue,"speed":ticks.stringValue,"channels":count.stringValue]
   }
-  private func show(_ fields:[String:String]) {
-    for (field,key) in [(title,"title"),(tempo,"tempo"),(speed,"speed"),(channels,"channels")] {field.stringValue=fields[key] ?? ""}
-  }
   func load(reload:Bool) {
     guard !pending,canLeave(),let onRequest,let context=onContext?() else{return}
-    let before=raw,version=generation;pending=true;controls();status.stringValue="Reading song settings…"
+    let before=raw,versions=fieldGenerations;pending=true;controls();status.stringValue="Reading song settings…"
     onRequest("document.get",[:]) {[weak self] reply in
       guard let self else{return};self.pending=false
       guard self.onContext?().document==context.document,let result=reply["result"] as? [String:Any],
@@ -68,7 +71,11 @@ final class SongSettingsEditor: NSView, NSTextFieldDelegate {
         self.controls();self.complete(false);return
       }
       self.capturedDocument=context.document;self.revision=revision;self.baseline=fields
-      if reload && self.generation==version && self.raw==before && !self.composing {self.show(fields)}
+      if reload {
+        for (field,key) in self.fields where field.stringValue==before[key] && self.fieldGenerations[key,default:0]==versions[key,default:0] {
+          if (field.currentEditor() as? NSTextView)?.hasMarkedText() != true {field.stringValue=fields[key] ?? ""}
+        }
+      }
       self.status.stringValue=self.hasDraft ? "Current revision captured; field text retained.":"Current song values loaded."
       self.controls();self.resumeBoundaries()
     }

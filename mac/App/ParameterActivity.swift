@@ -240,8 +240,10 @@ final class ParameterActivityEditor:NSView,NSTableViewDataSource,NSTableViewDele
   func tableView(_ tableView:NSTableView,setObjectValue object:Any?,for column:NSTableColumn?,row:Int){guard detailMode.selectedSegment==2,recorded.indices.contains(row),let n=Double("\(object ?? "")"),n.isFinite,n>=0 || column?.identifier.rawValue=="value" else{return};var params:[String:Any]=["frame":recorded[row]["frame"] ?? 0,"value":recorded[row]["value"] ?? 0];if column?.identifier.rawValue=="value"{params["value"]=n}else{params["newFrame"]=(n*48000).rounded()};editRecorded(params)}
   func tableViewSelectionDidChange(_ notification:Notification){guard !refreshingRecorded else{return};let row=table.selectedRow;selectedSource=nil;if detailMode.selectedSegment==0,sources.indices.contains(row){selectedSource=sources[row];selectedSource?["parameter"]=parameterID;selectedSource?["plugin"]=target?["plugin"]}else if detailMode.selectedSegment==1,audit.indices.contains(row){selectedSource=link(audit[audit.count-1-row])}else if detailMode.selectedSegment==2{showRecordedSelection()}}
   private func showRecordedSelection(){
-    guard !pointDraft,detailMode.selectedSegment==2,recorded.indices.contains(table.selectedRow) else{return}
+    guard !pointDraft,detailMode.selectedSegment==2 else{return}
+    guard recorded.indices.contains(table.selectedRow),let plugin=target?["plugin"] as? String,!plugin.isEmpty,let parameterID else{selectedSource=nil;return}
     let point=recorded[table.selectedRow]
+    selectedSource=["kind":"recorded","plugin":plugin,"parameter":parameterID,"frame":point["frame"] ?? 0]
     pointTime.stringValue=String(format:"%.7f",((point["frame"] as? NSNumber)?.doubleValue ?? 0)/48000)
     pointValue.stringValue="\(point["value"] ?? 0)"
   }

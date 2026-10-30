@@ -64,5 +64,23 @@ extension InterfaceTests {
     boundaries=[];failed.finishAutomaticEdit{boundaries.append($0)}
     read?(["error":["code":-32003,"message":"Initial read failed"]])
     try require(boundaries==[false] && failed.hasDraft && !failed.pending,"An initial read failure retains new input and fails its waiting boundary")
+
+    let early=SongSettingsEditor(frame:.zero);early.onContext={(document,revision)}
+    var earlyWrites=[[String:Any]]()
+    early.onRequest={method,params,reply in
+      if method=="document.get" {read=reply}
+      else {earlyWrites.append(params);revision="early-title-saved";reply(["result":["revision":revision,"data":[:]]])}
+    }
+    early.load(reload:true);early.title.stringValue="Early title"
+    early.controlTextDidChange(Notification(name:NSControl.textDidChangeNotification,object:early.title))
+    boundaries=[];early.finishAutomaticEdit{boundaries.append($0)}
+    read?(["result":["revision":revision,"data":values]])
+    try require(boundaries==[true] && earlyWrites.count==1 && Set(earlyWrites[0].keys)==["expectedRevision","title"] &&
+      early.title.stringValue=="Early title" && early.tempo.doubleValue==125.123456789 && early.speed.intValue==6 && early.channels.intValue==8,
+      "Initial read fills untouched fields so a waiting Save can commit only the early title draft")
+    early.load(reload:true);early.tempo.stringValue="";early.controlTextDidChange(Notification(name:NSControl.textDidChangeNotification,object:early.tempo))
+    values["title"]="Fresh title";read?(["result":["revision":revision,"data":values]])
+    try require(early.tempo.stringValue.isEmpty && early.title.stringValue=="Fresh title" && early.hasDraft,
+      "Reload fills untouched fields while preserving a deliberately cleared numeric field")
   }
 }

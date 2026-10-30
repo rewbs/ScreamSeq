@@ -190,6 +190,21 @@ These additions are newer than full build 5. Application socket and computer-use
 qualification of the integrated binary remain pending; the next full build cannot
 start before 07:21:16 UTC under the one-build-per-hour limit.
 
+### Follow-up read completion and recorded source navigation
+
+The next Greptile review found that typing during the initial Song Settings read
+left all other fields empty. Read completion now fills each untouched field while
+preserving that field's newer generation or active composition. The regression
+queues Save after an early title edit, then verifies that only the title is written
+and the untouched fractional tempo, ticks and channel count are loaded unchanged.
+A deliberately cleared numeric field stays invalid instead of being filled in.
+
+Selecting a recorded point in Parameter Activity now establishes its stable
+plugin/parameter source link, and clearing selection retires that link. This fixes
+the previously nonfunctional Open source action for recorded table rows. A native
+interface regression exercises selection, opening and deselection. Desktop
+confirmation remains part of the next full-build qualification.
+
 ## Remaining parity work
 
 These items are deliberately outside this checkpoint and must be resolved before
