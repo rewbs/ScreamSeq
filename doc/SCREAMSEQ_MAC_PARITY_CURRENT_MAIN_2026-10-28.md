@@ -522,8 +522,42 @@ rapid zoom/channel changes, empty samples and retired callbacks. All 43 native
 interface groups and complete application Swift type checking pass. Evidence:
 `interface-sample-navigation-all.log`, `interface-sample-navigation-final.log`
 and `typecheck-sample-navigation-final.log`. This source is newer than build 9 and still needs
-packaged computer-use validation. Staged sample-target selection/reload and
-numeric staged-point drawing remain separate open tasks.
+packaged computer-use validation. The next source checkpoint covers target
+selection/reload below; numeric staged-point drawing remains open.
+
+## Staged sample selection and reload — 2026-10-30
+
+The sample picker, dynamic context pane and cursor-follow now share a staged
+selection path. The existing sample, picker choice, viewport, peaks and raw
+fields remain visible until complete metadata and waveform reads match the
+captured stable identity, document and revision. A separate Reload sample action
+discards local drafts only after those reads succeed. It refuses a submitted
+stroke awaiting outcome review. Automatic refresh preserves raw settings, loop
+and selection fields; a superseded unsubmitted gesture survives failed reads
+and retires only when its replacement presentation is ready.
+
+Newer text, processing options, composition, native focus/caret, view changes,
+target removal and document replacement invalidate pending adoption. One read
+sequence runs at a time; newer choices replace queued intent. Returning to a
+stable sample restores its last accepted viewport and selection, clamped to its
+current length. Only successful native-picker selection changes the pattern's
+input sample; context-pane selection and cursor-follow remain inspection.
+Settings-only completion also refreshes the sample duration description without
+rebasing waveform evidence.
+
+`SampleSelectionInterfaceTests.swift` covers both read stages for failed and
+malformed replies, wrong identities/revisions/documents, newer raw fields and
+options, removed targets, explicit retry, retained strokes, coalesced choices,
+cached regions, shorter samples and retired callbacks. Native field-editor
+cases exercise new focus, movement between controls sharing AppKit's field
+editor, and composition. All 43 native interface groups and complete application
+Swift type checking pass, recorded in `interface-sample-selection-final-all.log`
+and `typecheck-sample-selection-final.log`.
+
+This source is newer than build 9. Build 9 remains running in its separate QA
+bundle; computer use again reported the Mac locked at approximately 11:42 UTC.
+No additional full build was started while its desktop validation was pending.
+The pending unlock request and the one-full-build-per-hour limit remain in force.
 
 ## Remaining parity work
 

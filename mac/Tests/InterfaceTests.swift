@@ -132,6 +132,7 @@ struct InterfaceFailure: Error { let message: String }
     editor.waveform.extendStroke(SampleStrokePoint(frame: 1032, value: -0.5))
     try drawingRetentionChecks()
     try sampleNavigationChecks()
+    try sampleSelectionChecks()
     return editor
   }
   static func parameterBoundaryChecks() throws {

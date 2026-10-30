@@ -121,9 +121,9 @@ extension AppController {
     case "sample":
       guard !sampleEditor.hasDraft,let index=model.samples.first(where:{$0["id"] as? String==id})?["index"] as? Int else {statusLabel.stringValue="Finish the sample edit before selecting another sample.";return}
       guard sampleEditor.index != index else{return}
-      sampleEditor.index=index;editorMode=1
+      editorMode=1
       workspaceContextTokens["samples"]=WorkspaceAssetContext.token(panel:"samples",model:model,row:patternView.cursorRow,channel:patternView.cursorChannel,input:patternView.instrument)
-      refreshWorkspaceAsset("samples")
+      sampleEditor.updateCatalogue(model.samples);sampleEditor.requestSampleSelection(index)
     case "pattern", "order":
       let pattern:Int?
       if kind=="order",let order=Int(id),model.orders.indices.contains(order),model.patterns.contains(where:{$0["index"] as? Int==model.orders[order]}) {pattern=model.orders[order];selectedOrder=order}

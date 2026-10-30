@@ -1108,6 +1108,18 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     handleAutomation(method, params: params, reply: reply)
   }
   func connectEditors() {
+    sampleEditor.onSampleRevision = { [weak self] in self?.model.revisionToken }
+    sampleEditor.onSamplePresentation = { [weak self] in
+      guard let self else { return }
+      WorkspaceAssetContext.updateCaption(self.workspace?.panels["samples"], index: self.sampleEditor.index, hasDraft: self.sampleEditor.hasDraft)
+      self.refreshContextPanel()
+    }
+    sampleEditor.onSampleSelected = { [weak self] index in
+      guard let self else { return }
+      self.patternView.instrument = index
+      self.workspaceContextTokens["samples"] = WorkspaceAssetContext.token(panel: "samples", model: self.model, row: self.patternView.cursorRow, channel: self.patternView.cursorChannel, input: index)
+      self.updateInputContext()
+    }
     sampleEditor.onSelect = { [weak self] index in
       self?.patternView.instrument = index
       self?.refreshAssets()
@@ -1313,17 +1325,17 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
   }
   func refreshWorkspaceAsset(_ id:String) {
     guard !busy else{return}
+    if id == "samples" { sampleEditor.refreshSample(samples: model.samples); return }
     let token=(workspaceAssetTokens[id] ?? 0)+1;workspaceAssetTokens[id]=token
-    let sample=id=="samples",index=sample ? sampleEditor.index : instrumentEditor.index
+    let index=instrumentEditor.index
     sessionReads += 1
     worker.async {
-      let data=sample ? self.session.sampleInfo(index) : self.session.instrumentInfo(index)
-      let revision=self.session.automationRevision
+      let data=self.session.instrumentInfo(index)
       DispatchQueue.main.async {
         defer { self.finishSessionRead() }
-        guard self.workspaceAssetTokens[id]==token,(sample ? self.sampleEditor.index : self.instrumentEditor.index)==index else{return}
-        if sample {self.sampleEditor.update(data,samples:self.model.samples,revision:revision)} else {self.instrumentEditor.update(data,model:self.model)}
-        WorkspaceAssetContext.updateCaption(self.workspace?.panels[id],index:index,hasDraft:sample ? self.sampleEditor.hasDraft : self.instrumentEditor.hasDraft)
+        guard self.workspaceAssetTokens[id]==token,self.instrumentEditor.index==index else{return}
+        self.instrumentEditor.update(data,model:self.model)
+        WorkspaceAssetContext.updateCaption(self.workspace?.panels[id],index:index,hasDraft:self.instrumentEditor.hasDraft)
       }
     }
   }

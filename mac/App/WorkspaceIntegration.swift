@@ -217,7 +217,7 @@ extension AppController {
       guard !workspaceNotes.pending,force || workspaceContextTokens[id] != token else{return}
       workspaceContextTokens[id]=token;panel.target.stringValue=cursor;workspaceNotes.capture()
     case "samples","instruments":
-      if id=="samples" ? sampleEditor.hasDraft : instrumentEditor.hasDraft {panel.target.stringValue="Draft held · "+panel.target.stringValue.replacingOccurrences(of:"Draft held · ",with:"");return}
+      if id=="samples" ? sampleEditor.hasDraft || sampleEditor.hasSelectionInput : instrumentEditor.hasDraft {panel.target.stringValue="Draft held · "+panel.target.stringValue.replacingOccurrences(of:"Draft held · ",with:"");return}
       let cell=model.cell(position.row,position.channel),instrument=cell[1]>0 ? Int(cell[1]) : patternView.instrument
       let sample=instrument
       let token=WorkspaceAssetContext.token(panel:id,model:model,row:position.row,channel:position.channel,input:patternView.instrument)
@@ -230,12 +230,12 @@ extension AppController {
       if id=="samples" {
         if !model.instruments.isEmpty {
           handleAutomation("instrument.get",params:["instrument":instrument]){[weak self] reply in
-            guard let self,self.workspaceContextTokens[id]==token,!self.sampleEditor.hasDraft,let data=(reply["result"] as? [String:Any])?["data"] as? [String:Any],let mapping=data["mapping"] as? [Int] else{return}
+            guard let self,self.workspaceContextTokens[id]==token,!self.sampleEditor.hasDraft,!self.sampleEditor.hasSelectionInput,let data=(reply["result"] as? [String:Any])?["data"] as? [String:Any],let mapping=data["mapping"] as? [Int] else{return}
             let key=max(0,min(127,Int(cell[0])-1));let mapped=mapping.indices.contains(key) ? mapping[key] : 0
-            if mapped>0 {self.sampleEditor.index=mapped;self.workspace?.panels[id]?.target.stringValue="Sample \(mapped)";self.refreshWorkspaceAsset(id)}
+            if mapped>0 {self.sampleEditor.updateCatalogue(self.model.samples);self.sampleEditor.requestSampleSelection(mapped)}
           };return
         }
-        sampleEditor.index=sample
+        sampleEditor.updateCatalogue(model.samples);sampleEditor.requestSampleSelection(sample);return
       } else {instrumentEditor.index=instrument}
       panel.target.stringValue="\(id=="samples" ? "Sample" : "Instrument") \(id=="samples" ? sample : instrument)";refreshWorkspaceAsset(id)
     case "automation":

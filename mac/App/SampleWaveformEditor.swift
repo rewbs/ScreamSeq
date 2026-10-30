@@ -59,6 +59,7 @@ extension SampleEditor {
   func requestWaveform(range: Range<Int>?, channels: String? = nil) {
     guard drawingDraft?.submitted != true, waveform.stroke.isEmpty else { return }
     guard !hasSampleComposition else { drawingStatus.stringValue = "Finish composing before changing the sample view."; return }
+    cancelSampleSelection()
     let range = range ?? 0..<max(0, waveform.frames), channels = channels ?? waveformQuery?.channels ?? waveformChannels
     cancelWaveformQuery()
     if onRequest == nil && onSettingsRequest == nil {
@@ -122,7 +123,7 @@ extension SampleEditor {
     else { waveformInFlight = false; finishWaveformQuery("Sample requests are unavailable") }
   }
   func beginDrawing() -> Bool {
-    guard drawingDraft == nil, waveformQuery == nil, !waveformInFlight, !hasDraft, !snapBusy, !crossfadeBusy, !processing, !clipboardBusy,
+    guard drawingDraft == nil, sampleSelectionQuery == nil, waveformQuery == nil, !waveformInFlight, !hasDraft, !snapBusy, !crossfadeBusy, !processing, !clipboardBusy,
       canBeginDrawing?() ?? true,waveform.precise,let revision=waveformRevision else {
       drawingStatus.stringValue="Zoom in to individual frames and wait for the waveform to load before drawing.";return false
     }

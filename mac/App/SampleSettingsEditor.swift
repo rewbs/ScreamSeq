@@ -91,6 +91,7 @@ extension SampleEditor {
         // Only this verified, same-sample settings edit may carry the unchanged
         // loop draft forward. Settings do not resize or rewrite the sample PCM.
         self.loopDraftRevision = acceptedRevision; self.sampleRevision = acceptedRevision
+        self.updateSampleDescription(data)
         self.settingsStatus.stringValue = "Sample settings saved · ⌘Z to undo"
         self.finishSettingsWaiters(true)
       }

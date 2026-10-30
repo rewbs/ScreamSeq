@@ -87,7 +87,12 @@ func labeled(_ label: String, _ control: NSView) -> NSStackView {
 }
 
 final class SampleEditor: NSView, NSTextFieldDelegate {
-  private var catalogue: [AssetCatalogueEntry] = []
+  var catalogue: [AssetCatalogueEntry] = []
+  var sampleSelectionQuery: SampleSelectionQuery?, sampleSelectionInFlight = false
+  var sampleViewStates = [String: SampleViewRegion]()
+  var preserveSelectionFields = false
+  var onSampleRevision: (() -> String?)?, onSamplePresentation: (() -> Void)?
+  var onSampleSelected: ((Int) -> Void)?
   override var acceptsFirstResponder: Bool { true }
   override func mouseDown(with event: NSEvent) { window?.makeFirstResponder(self); super.mouseDown(with:event) }
 
@@ -101,7 +106,7 @@ final class SampleEditor: NSView, NSTextFieldDelegate {
   let settingsStatus = Theme.label("Changes save automatically · ⌘Z to undo", size: 11, color: Theme.muted)
   var hasLoopDraft: Bool { loopDraftBaseline != nil && loopDraftBaseline?.isEqual(rawLoopDraft) != true }
   var hasDraft: Bool { settingsDraft.hasDraft || hasLoopDraft || settingsPending || settingsNeedsReload || loopNeedsReload || loopsBusy || drawingBusy || !waveform.stroke.isEmpty || hasSampleComposition }
-  func resetDocumentContext() { resetSettingsContext(); resetDrawingContext(); sampleGeneration += 1; loopSaveWork?.cancel();loopSaveWork=nil;waveform.selectedLoopMarker=nil;waveform.draggingLoop=false; loopDraftBaseline=nil; loopDraftRevision=nil; loopPreviewSignature=nil; loopPreviewRevision=nil; savedLoopInfo=[:]; retireWaveform(); waveform.selection=nil; waveform.setViewport(nil,notify:false) }
+  func resetDocumentContext() { cancelSampleSelection(); sampleViewStates = [:]; resetSettingsContext(); resetDrawingContext(); sampleGeneration += 1; loopSaveWork?.cancel();loopSaveWork=nil;waveform.selectedLoopMarker=nil;waveform.draggingLoop=false; loopDraftBaseline=nil; loopDraftRevision=nil; loopPreviewSignature=nil; loopPreviewRevision=nil; savedLoopInfo=[:]; retireWaveform(); waveform.selection=nil; waveform.setViewport(nil,notify:false) }
   let waveform = WaveformView(frame: .zero),
     heading = Theme.label("Sample", size: 16, weight: .semibold),
     details = Theme.label("", size: 11, color: Theme.muted),
@@ -192,7 +197,7 @@ final class SampleEditor: NSView, NSTextFieldDelegate {
   var pastePreviewSignature: NSDictionary?, pastePreviewRevision: String?, pastePreviewID: String?
   private var previewSignature: NSDictionary?, previewRevision: String?
   var index = 1 {
-    didSet { if index != oldValue { resetSettingsContext(); resetDrawingContext(); sampleGeneration += 1; loopSaveWork?.cancel();loopSaveWork=nil;waveform.selectedLoopMarker=nil;waveform.draggingLoop=false; loopDraftBaseline=nil;loopDraftRevision=nil;loopPreviewSignature=nil;loopPreviewRevision=nil;savedLoopInfo=[:]; retireWaveform(); waveform.setViewport(nil, notify: false); waveform.selection = nil; previewSignature = nil; previewRevision = nil; resetPastePreview();crossfadePreviewSignature=nil;crossfadePreviewRevision=nil } }
+    didSet { if index != oldValue { cancelSampleSelection(); resetSettingsContext(); resetDrawingContext(); sampleGeneration += 1; loopSaveWork?.cancel();loopSaveWork=nil;waveform.selectedLoopMarker=nil;waveform.draggingLoop=false; loopDraftBaseline=nil;loopDraftRevision=nil;loopPreviewSignature=nil;loopPreviewRevision=nil;savedLoopInfo=[:]; retireWaveform(); waveform.setViewport(nil, notify: false); waveform.selection = nil; previewSignature = nil; previewRevision = nil; resetPastePreview();crossfadePreviewSignature=nil;crossfadePreviewRevision=nil } }
   }
   var onMessage: ((String) -> Void)?
   var onRecord: (() -> Void)?
@@ -216,6 +221,7 @@ final class SampleEditor: NSView, NSTextFieldDelegate {
         ActionButton("Browse…") { [weak self] in self?.onImport?() },
         ActionButton("Replace…") { [weak self] in self?.onReplace?() },
         ActionButton("Audition") { [weak self] in self?.onPreview?(61) },
+        ActionButton("Reload sample") { [weak self] in self?.reloadSample() },
       ], spacing: 8),
     ], spacing: 8)
     heading.lineBreakMode = .byTruncatingTail
@@ -294,10 +300,10 @@ final class SampleEditor: NSView, NSTextFieldDelegate {
   @objc func selectSample() {
     let selected = picker.selectedTag()
     guard selected != index else { return }
-    if hasDraft {
-      picker.select(picker.menu?.item(withTag: index))
-      finishAutomaticEdit { [weak self] accepted in guard let self, accepted else { return }; self.index = selected; self.onSelect?(selected) }
-    } else { index = selected; onSelect?(index) }
+    picker.select(picker.menu?.item(withTag: index))
+    let select = { [weak self] in self?.requestSampleSelection(selected, selectInput: true) }
+    if hasDraft { finishAutomaticEdit { accepted in if accepted { select() } } }
+    else { select() }
   }
   var selectedChannels: String { ["both", "left", "right"][max(0, channelPicker.indexOfSelectedItem)] }
   var selectedOperation: String { operations[max(0, operationPicker.indexOfSelectedItem)].1 }
@@ -309,7 +315,7 @@ final class SampleEditor: NSView, NSTextFieldDelegate {
   func selectionChanged(_ range: ClosedRange<Int>?) {
     selectionVersion += 1
     let a = range?.lowerBound ?? 0, b = range?.upperBound ?? waveform.frames
-    selectionStart.stringValue = String(a); selectionEnd.stringValue = String(b)
+    if !preserveSelectionFields { selectionStart.stringValue = String(a); selectionEnd.stringValue = String(b) }
     rangeLabel.stringValue = "\(a) → \(b)   ·   \(b-a) frames   ·   end is exclusive"
   }
   @objc func setRange() {
@@ -404,7 +410,7 @@ final class SampleEditor: NSView, NSTextFieldDelegate {
     }
     if picker.selectedItem !== picker.menu?.item(withTag:index) {picker.select(picker.menu?.item(withTag:index))}
   }
-  func update(_ info: [AnyHashable: Any], samples: [[String: Any]], revision: String? = nil) {
+  func update(_ info: [AnyHashable: Any], samples: [[String: Any]], revision: String? = nil, loaded: SampleSelectionRead? = nil) {
     let identity = samples.first { $0["index"] as? Int == index }?["id"] as? String ?? ""
     if let draft = drawingDraft, draft.submitted {
       updateCatalogue(samples)
@@ -427,7 +433,12 @@ final class SampleEditor: NSView, NSTextFieldDelegate {
     updateSampleDescription(info)
     waveform.loopStart = (info["loop"] as? Bool ?? false) ? info["loopStart"] as? Int ?? 0 : 0
     waveform.loopEnd = (info["loop"] as? Bool ?? false) ? info["loopEnd"] as? Int ?? 0 : 0
-    if waveform.viewport == nil, selectedChannels == "both", let data = info["waveform"] as? Data {
+    if let loaded {
+      waveform.setViewport(loaded.region.viewport, notify: false)
+      channelPicker.selectItem(at: ["both", "left", "right"].firstIndex(of: loaded.channels) ?? 0); waveformChannels = loaded.channels
+      waveform.peaksRange = loaded.range; waveform.peaks = loaded.peaks; waveformRevision = loaded.revision; waveformDocumentID = loaded.documentID
+      waveform.selection = loaded.region.selection
+    } else if waveform.viewport == nil, selectedChannels == "both", let data = info["waveform"] as? Data {
       waveform.peaksRange = nil
       waveform.peaks = data.withUnsafeBytes { Array($0.bindMemory(to: Float.self)) }
       waveformRevision = revision
@@ -446,7 +457,7 @@ final class SampleEditor: NSView, NSTextFieldDelegate {
       waveform.selection = nil
     }
     selectionChanged(waveform.selection)
-    if waveform.viewport != nil || selectedChannels != "both" || waveform.drawing { refreshWaveform() }
+    if loaded == nil, waveform.viewport != nil || selectedChannels != "both" || waveform.drawing { refreshWaveform() }
     updateViewportStatus()
     waveform.needsDisplay = true
   }
