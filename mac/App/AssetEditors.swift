@@ -109,7 +109,7 @@ final class SampleEditor: NSView, NSTextFieldDelegate {
   var onSettingsRequest: ((String, [String: Any], String, @escaping ([String: Any]) -> Void) -> Void)?
   let settingsStatus = Theme.label("Changes save automatically · ⌘Z to undo", size: 11, color: Theme.muted)
   var hasLoopDraft: Bool { loopDraftBaseline != nil && loopDraftBaseline?.isEqual(rawLoopDraft) != true }
-  var hasDraft: Bool { protectsSampleOperation || settingsDraft.hasDraft || hasLoopDraft || settingsPending || settingsNeedsReload || loopNeedsReload || loopsBusy || drawingBusy || !waveform.stroke.isEmpty || hasNumericDrawingInput || hasSampleComposition }
+  var hasDraft: Bool { protectsSampleOperation || settingsDraft.hasDraft || hasLoopDraft || settingsPending || settingsNeedsReload || loopNeedsReload || loopsBusy || snapBusy || drawingBusy || !waveform.stroke.isEmpty || hasNumericDrawingInput || hasSampleComposition }
   func resetDocumentContext() { resetOperationContext(); cancelSampleSelection(); sampleViewStates = [:]; resetSettingsContext(); resetDrawingContext(); sampleGeneration += 1; loopSaveWork?.cancel();loopSaveWork=nil;waveform.selectedLoopMarker=nil;waveform.draggingLoop=false; loopDraftBaseline=nil; loopDraftRevision=nil; loopPreviewSignature=nil; loopPreviewRevision=nil; savedLoopInfo=[:]; retireWaveform(); waveform.selection=nil; waveform.setViewport(nil,notify:false) }
   let waveform = WaveformView(frame: .zero),
     heading = Theme.label("Sample", size: 16, weight: .semibold),
@@ -170,8 +170,11 @@ final class SampleEditor: NSView, NSTextFieldDelegate {
   var waveformRetry: DispatchWorkItem?
   var waveformRevision: String?, strokeRevision: String?
   var sampleRevision: String?
-  var snapBusy = false, snapPending = false, selectionVersion = 0
-  let snapMode = NSPopUpButton()
+  var snapQuery: SampleSnapQuery?
+  var snapBusy: Bool { snapQuery != nil }
+  var snapPending = false, selectionVersion = 0
+  var snapWaiters = [(Bool) -> Void]()
+  let snapMode = NSPopUpButton(), snapDirection = NSPopUpButton()
   let snapRadius = numberField(2048, width: 90, label: "Zero-crossing search radius in frames")
   let snapStep = numberField(64, width: 90, label: "Sample grid step in frames")
   let snapOrigin = numberField(0, width: 90, label: "Sample grid origin frame")

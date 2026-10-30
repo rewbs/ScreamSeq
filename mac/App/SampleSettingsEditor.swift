@@ -21,6 +21,7 @@ extension SampleEditor {
     return true
   }
   func resetSettingsContext() {
+    cancelSnap()
     settingsWork?.cancel(); settingsWork = nil; settingsEditGeneration += 1
     settingsPending = false; settingsNeedsReload = false; settingsRevision = nil; settingsIdentity = ""
     loopReloadQuery = nil; loopWrite = nil; loopNeedsReload = false; loopEditGeneration += 1
@@ -29,6 +30,7 @@ extension SampleEditor {
   }
   func scheduleSettings() {
     settingsEditGeneration += 1; settingsWork?.cancel(); settingsWork = nil
+    if let snapQuery { snapQuery.resumeAutomaticEdit = true; return }
     guard onSettingsRequest != nil, !settingsNeedsReload else { return }
     let work = DispatchWorkItem { [weak self] in self?.settingsWork = nil; self?.finishAutomaticEdit { _ in } }
     settingsWork = work; DispatchQueue.main.asyncAfter(deadline: .now() + settingsDelay, execute: work)
@@ -45,6 +47,7 @@ extension SampleEditor {
     let callbacks = loopCompletionWaiters; loopCompletionWaiters = []; for callback in callbacks { callback(accepted) }
   }
   func finishAutomaticEdit(_ done: @escaping (Bool) -> Void) {
+    if snapBusy { snapWaiters.append { [weak self] accepted in if accepted { self?.finishAutomaticEdit(done) } else { done(false) } }; return }
     guard !hasSampleComposition else { settingsStatus.stringValue = "Finish composing the sample value before continuing."; done(false); return }
     if sampleOperation?.busy == true {
       operationWaiters.append { [weak self] accepted in if accepted { self?.finishAutomaticEdit(done) } else { done(false) } }; return

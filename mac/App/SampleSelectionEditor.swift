@@ -53,7 +53,7 @@ struct SampleSelectionRead {
 
 extension SampleEditor {
   var sampleSelectionOptions: [Int] {
-    [operationPicker, curvePicker, crossfadeLoop, crossfadeMode, crossfadeCurve, pasteMode, pasteRate, snapMode].map(\.indexOfSelectedItem) +
+    [operationPicker, curvePicker, crossfadeLoop, crossfadeMode, crossfadeCurve, pasteMode, pasteRate, snapMode, snapDirection].map(\.indexOfSelectedItem) +
       [snapAutomatically.state.rawValue, drawToggle.state.rawValue]
   }
   var focusedSampleField: Int? { sampleEditingFields.firstIndex { $0.currentEditor() != nil } }

@@ -48,6 +48,7 @@ extension SampleEditor {
     loopEditGeneration += 1; syncLoopMarkers();saveLoopsSoon()
   }
   func saveLoopsSoon(immediate:Bool=false) {
+    if let snapQuery { snapQuery.resumeAutomaticEdit = true; return }
     // An in-flight write owns any queued retry. New gestures/Return must not
     // cancel that work while leaving loopsBusy waiting for its completion.
     guard !loopNeedsReload, !loopsBusy else { return }
