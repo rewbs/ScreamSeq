@@ -490,6 +490,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     if previousDocument != model.revisionToken.split(separator:":").first {
       auditionOwnership.clear();pendingNotes.removeAll();midiNotes.removeAll()
       sampleEditor.resetDocumentContext();instrumentEditor.settingsDraft.reset()
+      mixerEditor.invalidateDocumentContext()
       (scratchGestureWindow?.contentView as? ScratchGestureEditor)?.invalidate()
       gateInspector.invalidate()
       workspaceContextTokens.removeAll();workspaceReturnPoints.removeAll()

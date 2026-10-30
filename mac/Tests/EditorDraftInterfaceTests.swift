@@ -270,6 +270,98 @@ extension InterfaceTests {
     mixer.showMeters([])
     try require(mixer.peak.stringValue == "—", "Missing observation is unavailable rather than measured silence")
     try mixerUncertainOutcomeChecks(data)
+    try mixerRawCompletionChecks(data)
+  }
+
+  static func mixerRawCompletionChecks(_ fixture: [String: Any]) throws {
+    var data = fixture, buses = fixture["buses"] as! [[String: Any]]
+    buses[0]["gainDB"] = -3.2718281828; buses[0]["color"] = 0x123456; data["buses"] = buses
+    let mixer = MixerEditor(frame: .zero); mixer.revision = "raw:0"; mixer.update(data)
+    mixer.automaticDelay = 0.01
+    var calls = [(String, [String: Any])](), replies = [([String: Any]) -> Void](), boundaries = [Bool]()
+    mixer.onRequest = { method, params, reply in calls.append((method, params)); replies.append(reply) }
+    func answer(_ revision: String, _ snapshot: [String: Any] = [:]) {
+      replies.removeFirst()(["result": ["revision": revision, "data": snapshot]])
+    }
+    func reload(_ revision: String = "raw:0") {
+      mixer.reload(); answer(revision, data)
+      if !replies.isEmpty { answer(revision) }
+    }
+    mixer.name.stringValue = "Texture return"; mixer.color.stringValue = "12zz90"
+    mixer.finishAutomaticEdit { boundaries.append($0) }
+    mixer.mute.performClick(nil)
+    mixer.mutate("mixer.bus.add", ["kind": "return"])
+    mixer.mutate("mixer.bus.remove", ["bus": "t1"])
+    mixer.mutate("mixer.inserts.move", ["plugins": ["fx2"], "target": "t1"])
+    mixer.synchronize("external:1"); mixer.update(["active": true, "buses": []])
+    try require(calls.isEmpty && boundaries == [false] && mixer.name.stringValue == "Texture return" && mixer.color.stringValue == "12zz90" && mixer.revision == "raw:0" && !mixer.selectBus("g1"),
+      "Invalid name/color batches block Save, structural commands and retargeting without accepting a refreshed revision")
+    mixer.viewMode.selectedSegment = 0; mixer.changeViewMode(); mixer.viewMode.selectedSegment = 1; mixer.changeViewMode()
+    try require(mixer.color.stringValue == "12zz90", "Switching Mixer views preserves raw text")
+    mixer.color.stringValue = "12AB90"; boundaries = []
+    mixer.finishAutomaticEdit { boundaries.append($0) }
+    try require(calls.count == 1 && calls[0].1["name"] as? String == "Texture return" && calls[0].1["color"] as? Int == 0x12ab90 && calls[0].1["mute"] as? Bool == true && calls[0].1["gainDB"] == nil && calls[0].1["preview"] as? Bool == false && boundaries.isEmpty,
+      "One durable name/color batch preserves untouched high-precision fader data and waits for acknowledgement")
+    answer("raw:1")
+    try require(boundaries == [true] && !mixer.needsCompletion && mixer.selected?["gainDB"] as? Double == -3.2718281828,
+      "Save resumes only after the owned batch succeeds")
+    for text in ["-", "NaN", "25", "-97"] {
+      mixer.controls[2].value.stringValue = text; boundaries = []
+      let before = calls.count; mixer.controls[2].entered(); mixer.finishAutomaticEdit { boundaries.append($0) }
+      mixer.synchronize("outside"); mixer.load()
+      try require(calls.count == before && boundaries == [false] && mixer.controls[2].value.stringValue == text && mixer.hasRawDraft,
+        "Invalid fader text survives Return, refresh and Save: \(text)")
+    }
+    reload()
+    mixer.timing.stringValue = "-"; boundaries = []; let beforeTiming = calls.count
+    mixer.finishAutomaticEdit { boundaries.append($0) }
+    try require(calls.count == beforeTiming && boundaries == [false] && mixer.timing.stringValue == "-", "Malformed timing is not interpreted as the baseline zero")
+    mixer.timing.stringValue = "501"; mixer.finishAutomaticEdit { _ in }
+    try require(calls.count == beforeTiming, "Timing uses the shared model's actual ±500 ms bounds")
+    reload()
+    mixer.controls[2].value.stringValue = "-4.25"
+    mixer.controls[2].controlTextDidChange(Notification(name: NSControl.textDidChangeNotification, object: mixer.controls[2].value))
+    wait(0.03)
+    try require(calls.last?.1["gainDB"] as? Double == -4.25 && mixer.loading, "Valid typed gain automatically submits after the idle delay")
+    mixer.name.stringValue = "Typed during write"; boundaries = []; mixer.finishAutomaticEdit { boundaries.append($0) }
+    let count = calls.count; answer("raw:2")
+    try require(boundaries == [false] && calls.count == count && mixer.needsReload && mixer.revision == "raw:0" && mixer.name.stringValue == "Typed during write",
+      "A delayed successful result retains newer raw input and its captured revision without automatic replay")
+    reload("raw:2")
+    mixer.load(); mixer.name.stringValue = "Typed during read"; boundaries = []; mixer.finishAutomaticEdit { boundaries.append($0) }
+    answer("raw:3", data)
+    try require(boundaries == [false] && mixer.needsReload && mixer.revision == "raw:2" && mixer.name.stringValue == "Typed during read", "A pending read cannot replace or rebase a new raw draft")
+    reload("raw:3")
+    mixer.control("pan", value: 0.25, final: false); boundaries = []; mixer.finishAutomaticEdit { boundaries.append($0) }
+    answer("raw:3")
+    try require(boundaries.isEmpty && calls.last?.1["preview"] as? Bool == false && calls.last?.1["pan"] as? Double == 0.25, "Save drains an outstanding preview into one durable gesture")
+    answer("raw:4"); try require(boundaries == [true] && !mixer.needsCompletion, "A committed gesture releases waiting Save exactly once")
+    mixer.name.stringValue = "Refused name"; boundaries = []; mixer.finishAutomaticEdit { boundaries.append($0) }
+    replies.removeFirst()(["error": ["code": -32000, "message": "Captured refusal"]])
+    try require(boundaries == [false] && mixer.name.stringValue == "Refused name" && mixer.needsReload, "Refused raw writes retain the text and settle completion")
+    let beforeReload = calls.count; reload("raw:4")
+    try require(calls.count == beforeReload + 1 && !mixer.needsCompletion, "Raw name failure reconciles without issuing an unsupported name preview")
+    mixer.name.stringValue = "Old document name"; boundaries = []; mixer.finishAutomaticEdit { boundaries.append($0) }
+    mixer.invalidateDocumentContext(); answer("old-document:9")
+    try require(boundaries == [false] && mixer.needsReload && mixer.revision == "raw:4" && mixer.name.stringValue == "Old document name", "Old-document completion cannot release a waiting action or retarget retained text")
+    reload("new-document:0")
+    mixer.sendGain.stringValue = "unfinished send"; boundaries = []; mixer.finishAutomaticEdit { boundaries.append($0) }
+    mixer.update(data); mixer.synchronize("unrelated")
+    try require(boundaries == [false] && mixer.sendGain.stringValue == "unfinished send" && mixer.hasPendingControls, "An explicit send draft blocks departure and survives refresh")
+    reload("new-document:0")
+    mixer.load(); boundaries = []; mixer.finishAutomaticEdit { boundaries.append($0) }
+    replies.removeFirst()(["error": ["code": -32000, "message": "Read failed"]])
+    try require(boundaries == [false] && !mixer.loading, "Read failures settle waiting actions rather than stranding Save")
+    let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1040, height: 650), styleMask: [.titled], backing: .buffered, defer: false)
+    window.contentView = mixer; mixer.viewMode.selectedSegment = 1; mixer.changeViewMode()
+    window.makeFirstResponder(mixer.name)
+    guard let text = mixer.name.currentEditor() as? NSTextView else { throw InterfaceFailure(message: "Mixer field editor did not attach") }
+    text.setMarkedText("x", selectedRange: NSRange(location: 1, length: 0), replacementRange: NSRange(location: 0, length: 1))
+    boundaries = []; let beforeComposition = calls.count
+    mixer.finishAutomaticEdit { boundaries.append($0) }; mixer.reload(); mixer.load()
+    try require(boundaries == [false] && text.hasMarkedText() && calls.count == beforeComposition, "Composition blocks Save and Reload without cancelling the input method")
+    text.unmarkText(); window.makeFirstResponder(nil)
+
   }
 
   static func mixerUncertainOutcomeChecks(_ data: [String:Any]) throws {
@@ -304,8 +396,8 @@ extension InterfaceTests {
       mixer.reload();replies.removeFirst()(["result":["revision":"accepted","data":accepted]])
       mixer.name.stringValue="Newer text during release"
       replies.removeFirst()(["result":["revision":"accepted","data":[:]]])
-      try require(mixer.needsReload && mixer.name.stringValue=="Newer text during release" && mixer.hasPendingControls,
-        "A late Reload completion cannot erase fields typed while it was in flight")
+      try require(mixer.needsReload && mixer.name.stringValue=="Newer text during release" && mixer.hasPendingControls && mixer.revision=="original",
+        "A late Reload completion cannot erase or rebase fields typed during its preview release")
       mixer.reload();replies.removeFirst()(["result":["revision":"accepted","data":accepted]])
       replies.removeFirst()(["result":["revision":"accepted","data":[:]]])
       try require(!mixer.needsReload && !mixer.hasPendingControls && mixer.selected?["gainDB"] as? Double == -6.5,

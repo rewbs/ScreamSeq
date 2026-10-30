@@ -323,6 +323,47 @@ Receipts: `build-7-identity.json`, `qa7-desktop-validation.json`,
 `interface-plugin-location-width.log`, and `typecheck-plugin-path-width.log` in
 `bin/mac-parity-current/evidence/`.
 
+## Retained Mixer fields and location revisions — 2026-10-30
+
+The Windows `NativeCommandApplicationTests`, `AutomaticEditsApplicationTests`
+and `DraftImportRetentionTests` exposed additional Mac ownership gaps. Mixer
+Details now retains invalid name/color/timing and numeric text, output choices,
+and mute/solo intent; valid changed fields submit as one guarded transaction after
+an idle delay or Return. Unchanged rounded fields are omitted so they cannot alter
+native precision. Invalid fields block bus changes and structural commands.
+
+Strip gain text belongs to its stable bus even when scrolled out of view. It is
+not recycled or restored to an old number on validation failure. Explicit Reload
+reads accepted state before releasing retained work and cancels audition only for
+supported numeric/boolean controls. Newer text, input-method composition and
+old-document completions cannot be erased or authorized by delayed responses.
+
+Mixer completion now participates in Save, Save As, export, document history,
+document departure and Quit. Pending previews finish as one durable gesture;
+failed reads/writes settle waiting actions without proceeding. Send forms retain
+their explicit Set-send behavior and block departure while unfinished. Adding a
+bus opens its stable identity in Details and focuses its name.
+
+Plugin location read, scan and reconnect completions also retain the older
+revision when newer text or candidate choices arrive. Interrupted scans require
+readback; a reviewed result cannot authorize fields changed after that read.
+These checks apply to both rack and graph location windows.
+
+Validation: all 42 native interface groups passed, followed by the focused Mixer
+checks after the two-stage Reload revision fix. Whole-application Swift type
+checking passed. The complete windowless socket suite passed, including a new
+name/color batch check with exact untouched gain, one-step Undo/Redo and saved
+native metadata. Native tests cover failed reads/writes, newer inputs during
+write/read/preview release, retained strip recycling, composition and completion
+of waiting Save actions. Logs: `interface-mixer-location-all.log`,
+`interface-mixer-raw.log`, `typecheck-mixer-location.log` and
+`socket-mixer-raw-windowless.log` under the evidence directory.
+
+This source follow-up is newer than build 7. It does not claim packaged desktop
+qualification until the next hourly build and computer-use pass. The shared
+compact graph level control retains its existing transaction behavior; its
+broader refusal/retention audit remains open.
+
 ## Remaining parity work
 
 These items are deliberately outside this checkpoint and must be resolved before
@@ -334,8 +375,8 @@ claiming complete Windows parity:
   keyboard settings, rack editor APIs and retained Song Settings.
 - Additional composing departure, panel-close and newer-input guards in other
   editors.
-- Mixer raw-field retention and completion, sample-setting completion and retained
-  refused waveform strokes.
+- Packaged qualification of the retained Mixer fields and location-revision
+  changes above; sample-setting completion and retained refused waveform strokes.
 - Remaining recorder/review focus, root keyboard traversal, paging and endpoint
   duplicate-name/disconnection details.
 - Further source-by-source review of plugin/routing controls, instrument-envelope

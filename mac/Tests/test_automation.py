@@ -1519,6 +1519,23 @@ def mixer_tools(client):
     expect_error(-32001, lambda: client.call("mixer.bus.set", {"expectedRevision": initial["revision"], "bus": first, "gainDB": -3}))
     group = write("mixer.bus.add", {"kind": "group", "name": "Rhythm"})["data"]["bus"]
     space = write("mixer.bus.add", {"kind": "return", "name": "Space"})["data"]["bus"]
+    # Mixer Details submits only changed fields as one chronological edit.
+    # Return identity, untouched fader precision and unrelated routes survive it.
+    write("mixer.bus.set", {"bus": space, "gainDB": -3.2718281828})
+    before_named = client.call("mixer.get")["data"]["buses"]
+    write("mixer.bus.set", {"bus": space, "name": "Texture return", "color": 0x12AB90})
+    named = client.call("mixer.get")["data"]["buses"]
+    expected_named = [dict(bus, name="Texture return", color=0x12AB90) if bus["id"] == space else bus for bus in before_named]
+    assert named == expected_named
+    write("history.undo", {"domain": "all"})
+    assert client.call("mixer.get")["data"]["buses"] == before_named
+    write("history.redo", {"domain": "all"})
+    assert client.call("mixer.get")["data"]["buses"] == named
+    with tempfile.TemporaryDirectory(prefix="screamseq-mixer-fields-") as directory:
+        project = str(Path(directory) / "Mixer-fields.screamseq")
+        write("document.save", {"path": project})
+        assert plistlib.loads(Path(project).read_bytes())["native"]["mixer"]["buses"] == named
+        assert client.call("mixer.get")["data"]["buses"] == named
     write("mixer.bus.set", {"bus": first, "output": group})
     write("mixer.sends.set", {"bus": group, "sends": [{"target": space, "gainDB": -9, "preFader": True}]})
     expect_error(-32602, lambda: write("mixer.bus.set", {"bus": space, "output": group}))

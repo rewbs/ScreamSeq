@@ -16,9 +16,14 @@ final class MixerControl: NSView, NSTextFieldDelegate {
   let key: String, scale: Double
   var onChange: ((String, Double, Bool) -> Void)?
   var onFinish: (() -> Void)?
+  var onRawChange: (() -> Void)?, onEnter: (() -> Void)?
+  var canAdjust: (() -> Bool)?
+  var hasDraft: Bool { !shown.isEmpty && value.stringValue != shown }
+  func accept(_ text: String) { shown = text; editingValue = false }
+  func discardDraft() { shown = ""; editingValue = false }
   // The text this control last displayed. A field's action also fires when
   // editing ends without typing; only text that differs is an edit.
-  private var shown = ""
+  private var shown = "", shownNumber = 0.0
   private(set) var editingValue=false
   init(_ title: String, key: String, min: Double, max: Double, scale: Double = 1) {
     self.key = key; self.scale = scale
@@ -35,25 +40,30 @@ final class MixerControl: NSView, NSTextFieldDelegate {
   }
   required init?(coder: NSCoder) { fatalError() }
   func set(_ number: Double) {
-    slider.doubleValue = number * scale; shown = String(format: "%.2f", number * scale)
+    guard !hasDraft || onEnter == nil else { return }
+    shownNumber = number * scale; slider.doubleValue = shownNumber; shown = String(format: "%.2f", number * scale)
     if value.stringValue != shown { value.stringValue = shown }
   }
   @objc private func changed() {
+    guard canAdjust?() != false else { slider.doubleValue = shownNumber; return }
+    shownNumber = slider.doubleValue
     shown = String(format: "%.2f", slider.doubleValue); value.stringValue = shown
     onChange?(key, slider.doubleValue / scale, !slider.trackingGesture)
   }
   @objc func entered() {
-    editingValue=false
-    // Committing the rounded display would turn −3.27 dB into −3.30 and add an Undo step.
-    guard value.stringValue != shown else { return }
+    editingValue = false
+    guard hasDraft else { return }
+    if let onEnter { onEnter(); return }
+    // Compact graph controls still own their original immediate transaction.
+    // Retained Mixer forms acknowledge raw text only through their completion.
     guard let number = Double(value.stringValue), number.isFinite,
-      number >= slider.minValue, number <= slider.maxValue else {
-      shown = String(format: "%.2f", slider.doubleValue); value.stringValue = shown; return
-    }
-    slider.doubleValue = number; shown = value.stringValue; onChange?(key, number / scale, true)
+      (slider.minValue...slider.maxValue).contains(number) else { value.stringValue = shown; return }
+    slider.doubleValue = number; shownNumber = number; shown = value.stringValue
+    onChange?(key, number / scale, true)
   }
   func controlTextDidEndEditing(_ notification: Notification) { entered() }
-  func controlTextDidChange(_ notification: Notification) {editingValue=true}
+  func controlTextDidChange(_ notification: Notification) { editingValue = true; onRawChange?() }
+
 }
 
 final class MixerMeterView: NSView {
@@ -93,6 +103,7 @@ final class MixerEditor: NSView, NSTableViewDataSource, NSTableViewDelegate, NST
   var buses = [[String: Any]](), plugins = [[String: Any]](), sources = [[String: Any]]()
   var selectedID: String?, revision = "", active = false, loading = false, implicit = false
   private var pendingNavigation: String?
+  private var focusCreatedBus: String?
   var onRequest: ((String, [String: Any], @escaping ([String: Any]) -> Void) -> Void)?
   var onSidechains: (() -> Void)?
   var onConfigurePlugin: ((Int) -> Void)?
@@ -108,10 +119,18 @@ final class MixerEditor: NSView, NSTableViewDataSource, NSTableViewDelegate, NST
   private var reloadButton: ActionButton?
   private(set) var needsReload = false { didSet { reloadButton?.isHidden = !needsReload } }
   private var cleanupKeys = Set<String>()
-  var hasPendingControls: Bool { needsReload || !draft.isEmpty || !committingControls.isEmpty }
+  var hasPendingControls: Bool { needsReload || !draft.isEmpty || !committingControls.isEmpty || hasRawDraft || hasSendDraft }
+  var needsCompletion: Bool { loading || hasPendingControls || hasMarkedText }
+  private var automaticWork: DispatchWorkItem?
+  var automaticDelay = 0.6
+  private var completionWaiters = [(Bool) -> Void]()
+  private var contextGeneration = 0
+  private var rawSubmission = [String: String]()
+  private var shownSendFields = [String: String]()
   // Text and popup choices last written for the selected bus. Anything that
   // differs is an uncommitted edit and survives refreshes of that same bus.
   private var shownBus: String?, shownText = [ObjectIdentifier: String]()
+  private var shownFlags = [String: Bool]()
   private var shownChoice = [ObjectIdentifier: String](), shownSend: (key: String, value: NSDictionary)?
   private var routingView: NSView!
   let inspector = NSView(), routingScroll = verticalScrollView()
@@ -121,6 +140,13 @@ final class MixerEditor: NSView, NSTableViewDataSource, NSTableViewDelegate, NST
     super.init(frame: frame)
     viewMode.selectedSegment = 0; viewMode.target = self; viewMode.action = #selector(changeViewMode)
     strips.onControl = { [weak self] id, key, value, final in self?.stripControl(id, key: key, value: value, final: final) }
+    strips.onRawChange = { [weak self] id in
+      guard let self, self.claimRawBus(id) else { return }; self.scheduleAutomaticEdit()
+    }
+    strips.onRawEnter = { [weak self] id in
+      guard let self, self.claimRawBus(id) else { return }; self.finishAutomaticEdit { _ in }
+    }
+    strips.canAdjust = { [weak self] in self?.hasRawDraft == false && self?.hasSendDraft == false }
     strips.onFinish = { [weak self] id in guard self?.selectedID == id else { return }; self?.finishGesture() }
     strips.onInspect = { [weak self] id in
       guard let self, self.selectBus(id) else { return }
@@ -150,11 +176,15 @@ final class MixerEditor: NSView, NSTableViewDataSource, NSTableViewDelegate, NST
       (send, "Existing send"), (sendTarget, "Send destination"), (source, "Plugin instrument source")] {
       picker.setAccessibilityLabel(label)
     }
+    sendGain.delegate = self
     sendGain.fixed(width: 65); sendGain.setAccessibilityLabel("Send gain in decibels")
     send.target = self; send.action = #selector(selectSend)
     mute.target = self; mute.action = #selector(changeMute); solo.target = self; solo.action = #selector(changeSolo)
     for control in controls {
       control.onChange = { [weak self] key, value, final in self?.control(key, value: value, final: final) }
+      control.onRawChange = { [weak self] in self?.scheduleAutomaticEdit() }
+      control.onEnter = { [weak self] in self?.finishAutomaticEdit { _ in } }
+      control.canAdjust = { [weak self] in self?.hasRawDraft == false && self?.hasSendDraft == false }
       control.onFinish = { [weak self] in self?.finishGesture() }
     }
     meter.fixed(height: 20); peak.fixed(width: 90)
@@ -166,7 +196,7 @@ final class MixerEditor: NSView, NSTableViewDataSource, NSTableViewDelegate, NST
       stack(.horizontal, [Theme.label("Output", size: 12), output, Theme.label("Timing · ms", size: 11), timing]),
       stack(.horizontal, [Theme.label("INSERT EFFECTS", size: 10, color: Theme.muted, weight: .semibold), NSView(), ActionButton("Sidechains…") { [weak self] in self?.onSidechains?() }]),
       rack,
-      stack(.horizontal, [ActionButton("Add effect…", symbol: "plus", prominent: true) { [weak self] in guard let self, let id = self.selectedID else { return }; self.onAddPlugin?(id) },
+      stack(.horizontal, [ActionButton("Add effect…", symbol: "plus", prominent: true) { [weak self] in guard let self, !self.needsCompletion, let id = self.selectedID else { return }; self.onAddPlugin?(id) },
         ActionMenuButton("Insert actions…") { [weak self] in self?.insertMenu(self?.rack.selectedID) ?? NSMenu() }, NSView()]),
       Theme.label("SENDS", size: 10, color: Theme.muted, weight: .semibold),
       stack(.horizontal, [send, ActionButton("Remove send") { [weak self] in self?.removeSend() }]),
@@ -219,7 +249,7 @@ final class MixerEditor: NSView, NSTableViewDataSource, NSTableViewDelegate, NST
   @discardableResult func selectBus(_ id: String) -> Bool {
     guard buses.contains(where: { $0["id"] as? String == id }) else { return false }
     if id != selectedID {
-      guard !loading, !hasPendingControls else { status.stringValue = "Finish the current mixer edit before changing buses."; return false }
+      guard !loading, !hasPendingControls, !hasMarkedText else { status.stringValue = "Finish the current mixer edit before changing buses."; return false }
       selectedID = id
       if let index = buses.firstIndex(where: { $0["id"] as? String == id }) { table.selectRowIndexes(IndexSet(integer: index), byExtendingSelection: false) }
       showSelected(); refreshStrips()
@@ -245,9 +275,123 @@ final class MixerEditor: NSView, NSTableViewDataSource, NSTableViewDelegate, NST
     }
     strips.update(current, selected: selectedID)
   }
+  private var textFields: [(String, NSTextField)] { [("name", name), ("color", color), ("timingMS", timing)] }
+  private var rawChanges: [String: String] {
+    var values = [String: String]()
+    for (key, field) in textFields {
+      if let baseline = shownText[ObjectIdentifier(field)], field.stringValue != baseline { values[key] = field.stringValue }
+    }
+    for control in controls where control.hasDraft { values[control.key] = control.value.stringValue }
+    for (key, button) in [("mute", mute), ("solo", solo)] {
+      if let baseline = shownFlags[key], baseline != (button.state == .on) { values[key] = button.state == .on ? "true" : "false" }
+    }
+    if let baseline = shownChoice[ObjectIdentifier(output)], let value = chosen(output), value != baseline { values["output"] = value }
+    for strip in strips.visible.values {
+      for (key, value) in strip.rawChanges { values["strip:\(strip.busID):\(key)"] = value }
+    }
+    return values
+  }
+  var hasRawDraft: Bool { !rawChanges.isEmpty }
+  private var sendFields: [String: String] {
+    ["gain": sendGain.stringValue, "target": chosen(sendTarget) ?? "",
+     "pre": String(preSend.state.rawValue), "enabled": String(sendEnabled.state.rawValue)]
+  }
+  private var hasSendDraft: Bool { !shownSendFields.isEmpty && sendFields != shownSendFields }
+  private var hasMarkedText: Bool {
+    let fields = textFields.map { $0.1 } + [sendGain] + controls.map(\.value) + strips.visible.values.flatMap { [$0.gain, $0.preGain] }
+    return fields.contains { ($0.currentEditor() as? NSTextView)?.hasMarkedText() == true }
+  }
+  private func rawSnapshot() -> [String: String] {
+    var snapshot = rawChanges
+    if hasSendDraft { for (key, value) in sendFields { snapshot["send:" + key] = value } }
+    return snapshot
+  }
+  private func claimRawBus(_ id: String) -> Bool {
+    if selectedID == id { return true }
+    let onlyThisStrip = rawChanges.keys.allSatisfy { $0.hasPrefix("strip:\(id):") }
+    guard !loading, !needsReload, draft.isEmpty, committingControls.isEmpty, !hasSendDraft,
+      onlyThisStrip, buses.contains(where: { $0["id"] as? String == id }) else {
+      status.stringValue = "Finish the retained mixer fields before changing buses."; return false
+    }
+    selectedID = id; showSelected(); refreshStrips(); return true
+  }
+  func controlTextDidChange(_ notification: Notification) { scheduleAutomaticEdit() }
+  private func scheduleAutomaticEdit() {
+    automaticWork?.cancel()
+    guard !needsReload else { return }
+    let work = DispatchWorkItem { [weak self] in self?.automaticWork = nil; self?.finishAutomaticEdit { _ in } }
+    automaticWork = work; DispatchQueue.main.asyncAfter(deadline: .now() + automaticDelay, execute: work)
+  }
+  private func finishWaiters(_ accepted: Bool) {
+    let callbacks = completionWaiters; completionWaiters = []
+    for callback in callbacks { callback(accepted) }
+  }
+  func finishAutomaticEdit(_ done: @escaping (Bool) -> Void) {
+    automaticWork?.cancel(); automaticWork = nil
+    guard !hasMarkedText else { status.stringValue = "Finish composing the mixer value before continuing."; done(false); return }
+    guard !needsReload else { status.stringValue = "Mixer fields kept. Reload saved state before continuing."; done(false); return }
+    guard !hasSendDraft else { status.stringValue = "Set or reload the retained send before continuing."; done(false); return }
+    guard onRequest != nil else { done(!needsCompletion); return }
+    guard selected != nil || !hasPendingControls else { status.stringValue = "The captured bus is unavailable. Reload saved state before continuing."; done(false); return }
+    if loading { completionWaiters.append(done); if controlRequestInFlight { commitWanted = true }; return }
+    do {
+      let values = try parsedRawChanges()
+      if values.isEmpty && draft.isEmpty { done(true); return }
+      completionWaiters.append(done)
+      rawSubmission = rawChanges
+      draft.merge(values) { _, new in new }; commitWanted = true; sendControls()
+    } catch { status.stringValue = error.localizedDescription; done(false) }
+  }
+  private func parsedRawChanges() throws -> [String: Any] {
+    var values = [String: Any]()
+    func invalid(_ message: String) -> NSError { NSError(domain: "ScreamSeq", code: 1, userInfo: [NSLocalizedDescriptionKey: message + " · Fields kept."]) }
+    for (rawKey, text) in rawChanges {
+      var key = rawKey
+      if key.hasPrefix("strip:") {
+        guard let selectedID, key.hasPrefix("strip:\(selectedID):") else { throw invalid("Finish the other bus's gain fields first") }
+        key = String(key.dropFirst("strip:\(selectedID):".count))
+      }
+      if key == "name" { values[key] = text; continue }
+      if key == "mute" || key == "solo" { values[key] = text == "true"; continue }
+      if key == "output" {
+        guard text.isEmpty || destinations.contains(where: { $0["id"] as? String == text }) else { throw invalid("That output is no longer available") }
+        values[key] = text.isEmpty ? NSNull() : text; continue
+      }
+      if key == "color" {
+        guard text.count == 6, text.allSatisfy({ "0123456789abcdefABCDEF".contains($0) }), let value = Int(text, radix: 16), (0...0xffffff).contains(value) else { throw invalid("Use a six-digit hexadecimal color") }
+        values[key] = value; continue
+      }
+      guard let number = Double(text), number.isFinite else { throw invalid("Enter a finite mixer value") }
+      let control = controls.first { $0.key == key }
+      // Inspector pan/width fields display percent; strips use native gain dB.
+      let value = number / (rawKey.hasPrefix("strip:") ? 1 : control?.scale ?? 1)
+      if let control, !(control.slider.minValue / control.scale...control.slider.maxValue / control.scale).contains(value) {
+        throw invalid("Mixer value is outside its allowed range")
+      }
+      if key == "timingMS", !(-500...500).contains(value) { throw invalid("Timing offset must be between −500 and 500 ms") }
+      if let previous = values[key] as? Double, previous != value { throw invalid("Inspector and strip values differ; finish one value first") }
+      values[key] = value
+    }
+    return values
+  }
+  private func acceptRaw(_ submitted: [String: String]) {
+    for (key, field) in textFields { if let text = submitted[key] { shownText[ObjectIdentifier(field)] = text } }
+    for control in controls { if let text = submitted[control.key] { control.accept(text) } }
+    for key in ["mute", "solo"] { if let value = submitted[key] { shownFlags[key] = value == "true" } }
+    if let value = submitted["output"] { shownChoice[ObjectIdentifier(output)] = value }
+    for strip in strips.visible.values { strip.acceptRaw(submitted) }
+  }
+  func invalidateDocumentContext() {
+    contextGeneration += 1; automaticWork?.cancel(); automaticWork = nil
+    draft = committingControls.merging(draft) { _, newer in newer }; committingControls = [:]
+    loading = false; controlRequestInFlight = false; commitWanted = false; pendingNavigation = nil
+    if hasPendingControls { needsReload = true; status.stringValue = "Document changed. Mixer fields kept; Reload saved state to continue." }
+    else { revision = ""; selectedID = nil; shownBus = nil }
+    finishWaiters(false)
+  }
   func load() {
-    guard !loading, !hasPendingControls else { return }
-    request("mixer.get", ["includeImplicit": true]) { self.update($0) }
+    guard !loading, !hasPendingControls, !hasMarkedText else { return }
+    request("mixer.get", ["includeImplicit": true]) { data, _ in self.update(data) }
   }
   private func reloadDraftSnapshot() -> NSDictionary {
     let snapshot: [String: Any] = ["bus": selectedID ?? "", "draft": draft,
@@ -259,34 +403,40 @@ final class MixerEditor: NSView, NSTableViewDataSource, NSTableViewDelegate, NST
   /// Explicitly read the accepted state before releasing retained edits or
   /// cancelling an audition. An uncertain commit may already have succeeded.
   func reload() {
-    guard !loading else { return }
+    guard !loading, !hasMarkedText else { return }
+    automaticWork?.cancel(); automaticWork = nil
     let target = selectedID
     let captured = reloadDraftSnapshot()
-    cleanupKeys.formUnion(draft.keys); cleanupKeys.formUnion(committingControls.keys)
+    let previewKeys = Set(controls.map(\.key) + ["mute", "solo"])
+    cleanupKeys.formUnion(Set(draft.keys).intersection(previewKeys)); cleanupKeys.formUnion(Set(committingControls.keys).intersection(previewKeys))
     needsReload = true
-    request("mixer.get", ["includeImplicit": true]) { [weak self] data in
+    request("mixer.get", ["includeImplicit": true], adoptRevision: false) { [weak self] data, acceptedRevision in
       guard let self else { return }
       let finish = { [weak self] in
         guard let self else { return }
         guard captured.isEqual(self.reloadDraftSnapshot()) else {
           self.status.stringValue = "Newer mixer fields kept. Reload saved state again to resolve them."; return
         }
+        self.revision = acceptedRevision
         self.draft = [:]; self.committingControls = [:]; self.commitWanted = false
         self.cleanupKeys = []; self.needsReload = false; self.shownBus = nil
+        self.rawSubmission = [:]; self.shownSendFields = [:]; self.shownSend = nil; self.shownText = [:]; self.shownChoice = [:]; self.shownFlags = [:]
+        for control in self.controls { control.discardDraft() }
+        for strip in self.strips.visible.values { strip.discardRaw() }
         self.update(data)
       }
       guard let buses = data["buses"] as? [[String: Any]] else {
         self.status.stringValue = "Mixer readback is incomplete. Fields kept; Reload saved state to try again."; return
       }
       let current = buses.first { $0["id"] as? String == target }
-      guard !self.cleanupKeys.isEmpty, let target, let current else { finish(); return }
-      var params: [String: Any] = ["bus": target, "expectedRevision": self.revision, "preview": true]
+      guard data["active"] as? Bool == true, data["implicit"] as? Bool != true, !self.cleanupKeys.isEmpty, let target, let current else { finish(); return }
+      var params: [String: Any] = ["bus": target, "expectedRevision": acceptedRevision, "preview": true]
       for key in self.cleanupKeys {
         params[key] = current[key] ?? (key == "width" ? 1.0 : key == "mute" || key == "solo" ? false : 0.0)
       }
       // Use only the newly read baseline. A failed cancellation retains the
       // keys and raw fields for another explicit read, never a blind resend.
-      self.request("mixer.bus.set", params) { _ in finish() }
+      self.request("mixer.bus.set", params, adoptRevision: false) { _, _ in finish() }
     }
   }
   func synchronize(_ token: String) {
@@ -294,6 +444,7 @@ final class MixerEditor: NSView, NSTableViewDataSource, NSTableViewDelegate, NST
     if token != revision && !loading && draft.isEmpty { load() }
   }
   func update(_ data: [String: Any]) {
+    guard !hasMarkedText, !hasRawDraft, !hasSendDraft || shownBus == nil else { return }
     implicit = data["implicit"] as? Bool ?? false
     active = (data["active"] as? Bool ?? false) || implicit; buses = data["buses"] as? [[String: Any]] ?? []
     plugins = data["plugins"] as? [[String: Any]] ?? []; sources = data["instruments"] as? [[String: Any]] ?? []
@@ -311,12 +462,15 @@ final class MixerEditor: NSView, NSTableViewDataSource, NSTableViewDelegate, NST
     }
     showSelected()
     refreshStrips()
+    if focusCreatedBus == selectedID, focusCreatedBus != nil { focusCreatedBus = nil; window?.makeFirstResponder(name) }
     status.stringValue = active ? "\(buses.count) buses · choose a track, group or return" : "Enable the mixer to add groups, sends and track effects."
   }
-  private func request(_ method: String, _ params: [String: Any], attempt: Int = 0, done: @escaping ([String: Any]) -> Void) {
-    guard !loading, let onRequest else { return }; loading = true
+  private func request(_ method: String, _ params: [String: Any], attempt: Int = 0, capturedRaw: [String: String]? = nil, context: Int? = nil, adoptRevision: Bool = true, done: @escaping ([String: Any], String) -> Void) {
+    guard !loading, let onRequest else { finishWaiters(false); return }
+    let capturedRaw = capturedRaw ?? rawSnapshot(), context = context ?? contextGeneration
+    guard context == contextGeneration else { return }; loading = true
     onRequest(method, params) { [weak self] reply in
-      guard let self else { return }
+      guard let self, self.contextGeneration == context else { return }
       let failure = reply["error"] as? [String: Any]
       let readOnly = method == "mixer.get"
       let mayRetry = readOnly ? (failure?["code"] as? Int == -32002) : NativeRequestOutcome.canRetryWrite(reply)
@@ -325,8 +479,8 @@ final class MixerEditor: NSView, NSTableViewDataSource, NSTableViewDelegate, NST
           // Still loading: the bus stays pinned and later control changes queue in the draft.
           self.status.stringValue = "The document is busy · retrying…"
           DispatchQueue.main.asyncAfter(deadline: .now() + self.busyRetryDelay) { [weak self] in
-            guard let self else { return }; self.loading = false
-            self.request(method, params, attempt: attempt + 1, done: done)
+            guard let self, self.contextGeneration == context else { return }; self.loading = false
+            self.request(method, params, attempt: attempt + 1, capturedRaw: capturedRaw, context: context, adoptRevision: adoptRevision, done: done)
           }
           return
         }
@@ -340,22 +494,38 @@ final class MixerEditor: NSView, NSTableViewDataSource, NSTableViewDelegate, NST
         }
         let message = failure?["message"] as? String ?? "Mixer result is uncertain."
         self.status.stringValue = message + (self.needsReload ? " · Edit kept. Reload saved state to continue." : " · Reload to try reading again.")
-        self.refreshStrips(); return
+        self.refreshStrips(); self.finishWaiters(false); return
       }
-      self.revision = result["revision"] as? String ?? self.revision
-      done(result["data"] as? [String: Any] ?? [:])
+      guard capturedRaw == self.rawSnapshot(), !self.hasMarkedText else {
+        self.draft = committing.merging(self.draft) { _, newer in newer }
+        self.needsReload = true; self.commitWanted = false
+        self.status.stringValue = "Newer mixer fields kept at their captured revision. Reload saved state to review the result."
+        self.finishWaiters(false); return
+      }
+      let acceptedRevision = result["revision"] as? String ?? self.revision
+      if adoptRevision { self.revision = acceptedRevision }
+      done(result["data"] as? [String: Any] ?? [:], acceptedRevision)
+      if !self.loading { self.finishWaiters(!self.hasPendingControls && !self.hasMarkedText) }
     }
   }
   func mutate(_ method: String, _ values: [String: Any]) {
-    guard !loading, !hasPendingControls else { return }
+    guard !loading, !hasPendingControls else { status.stringValue = "Finish or reload the retained mixer fields before this action."; return }
     var p = values; p["expectedRevision"] = revision
-    request(method, p) { data in
-      if method == "mixer.bus.add" { self.selectedID = data["bus"] as? String }
+    request(method, p) { data, _ in
+      if method == "mixer.bus.add", let id = data["bus"] as? String { self.pendingNavigation = id; self.focusCreatedBus = id }
       self.load()
     }
   }
   func control(_ key: String, value: Any, final: Bool) {
     guard selected != nil else { return }
+    if hasRawDraft || hasSendDraft {
+      guard !loading, !needsReload, !hasSendDraft, !hasMarkedText else { status.stringValue = "Finish or reload the retained mixer fields before adjusting controls."; return }
+      do {
+        let values = try parsedRawChanges(); rawSubmission = rawChanges
+        draft.merge(values) { _, new in new }; draft[key] = value; commitWanted = true; sendControls()
+      } catch { status.stringValue = error.localizedDescription }
+      return
+    }
     if needsReload {
       draft[key] = value; refreshStrips()
       status.stringValue = "Edit kept. Reload saved state to resolve the earlier result before continuing."; return
@@ -368,12 +538,13 @@ final class MixerEditor: NSView, NSTableViewDataSource, NSTableViewDelegate, NST
   func finishGesture() { guard !draft.isEmpty, !needsReload else { return }; commitWanted = true; sendControls() }
   private func sendControls() {
     guard !loading, !needsReload, !draft.isEmpty, let selectedID else { return }
-    let values = draft, final = commitWanted
+    let values = draft, final = commitWanted, submitted = rawSubmission
     var p = values; p["bus"] = selectedID; p["expectedRevision"] = revision; p["preview"] = !final
     if final { committingControls = values; draft = [:]; commitWanted = false }
     controlRequestInFlight = true
-    request("mixer.bus.set", p) { _ in
+    request("mixer.bus.set", p) { _, _ in
       if final {
+        self.acceptRaw(submitted); self.rawSubmission = [:]
         if let index = self.buses.firstIndex(where: { $0["id"] as? String == selectedID }) {
           for (key, value) in values { self.buses[index][key] = value }
         }
@@ -426,6 +597,8 @@ final class MixerEditor: NSView, NSTableViewDataSource, NSTableViewDelegate, NST
     show(timing, String(format: "%.12g", (bus["timingMS"] as? NSNumber)?.doubleValue ?? 0), sameBus: sameBus)
     timing.isEnabled = bus["kind"] as? String == "track"
     mute.state = bus["mute"] as? Bool == true ? .on : .off; solo.state = bus["solo"] as? Bool == true ? .on : .off
+    shownFlags = ["mute": mute.state == .on, "solo": solo.state == .on]
+    if !sameBus { for control in controls { control.discardDraft() } }
     for control in controls { control.set((bus[control.key] as? NSNumber)?.doubleValue ?? (control.key == "width" ? 1 : 0)) }
     destinations = buses.filter { $0["kind"] as? String != "track" && $0["id"] as? String != selectedID }
     let targets = destinations.map { (title: $0["name"] as? String ?? "Bus", id: $0["id"] as? String ?? "") }
@@ -524,32 +697,11 @@ final class MixerEditor: NSView, NSTableViewDataSource, NSTableViewDelegate, NST
     menu.addItem(ContextAction("Reload saved state") { [weak self] in self?.reload() })
     return menu
   }
-  @objc private func fieldChanged(_ sender: NSTextField) {
-    guard let selectedID, let selected else { return }
-    if sender === name {
-      if name.stringValue != selected["name"] as? String { mutate("mixer.bus.set", ["bus": selectedID, "name": name.stringValue]) }
-    } else if sender === color {
-      guard let value = Int(color.stringValue, radix: 16), (0...0xffffff).contains(value) else { status.stringValue = "Use a six-digit hexadecimal color."; return }
-      if value != selected["color"] as? Int { mutate("mixer.bus.set", ["bus": selectedID, "color": value]) }
-    } else if sender === timing, timing.doubleValue != ((selected["timingMS"] as? NSNumber)?.doubleValue ?? 0) { setTiming() }
+  @objc private func fieldChanged(_ sender: NSTextField) { finishAutomaticEdit { _ in } }
+  func controlTextDidEndEditing(_ notification: Notification) {
+    if notification.object as? NSTextField !== sendGain { finishAutomaticEdit { _ in } }
   }
-  func controlTextDidEndEditing(_ notification: Notification) { if let field = notification.object as? NSTextField { fieldChanged(field) } }
-  private func rename() {
-    guard let selectedID, let color = Int(color.stringValue, radix: 16), (0...0xffffff).contains(color) else { status.stringValue = "Use a six-digit hexadecimal color."; return }
-    mutate("mixer.bus.set", ["bus": selectedID, "name": name.stringValue, "color": color])
-  }
-  @objc private func route() {
-    guard let selectedID, selected?["kind"] as? String != "master" else { return }
-    guard let target = chosen(output) else { return }
-    guard target.isEmpty || destinations.contains(where: { $0["id"] as? String == target }) else {
-      status.stringValue = "That destination is no longer available. Choose another output."; return
-    }
-    mutate("mixer.bus.set", ["bus": selectedID, "output": target.isEmpty ? NSNull() : target])
-  }
-  private func setTiming() {
-    guard let selectedID, let value = Double(timing.stringValue), value.isFinite else { return }
-    mutate("mixer.bus.set", ["bus": selectedID, "timingMS": value])
-  }
+  @objc private func route() { finishAutomaticEdit { _ in } }
   private func removeBus() {
     guard let selectedID else { return }; mutate("mixer.bus.remove", ["bus": selectedID])
   }
@@ -584,13 +736,20 @@ final class MixerEditor: NSView, NSTableViewDataSource, NSTableViewDelegate, NST
       id == "\(index):\(values[index]["target"] as? String ?? "")" else { return nil }
     return (index, values[index])
   }
-  @objc private func selectSend() { showSend(refreshing: false) }
+  @objc private func selectSend() {
+    guard !hasSendDraft else {
+      if let shownSend { _ = choose(send, String(shownSend.key.dropFirst((selectedID ?? "").count + 1))) }
+      status.stringValue = "Set or reload the retained send before choosing another."; return
+    }
+    showSend(refreshing: false)
+  }
   // A refresh leaves the send fields alone unless the chosen send or its saved
   // settings changed; choosing a send in the popup always shows its settings.
   private func showSend(refreshing: Bool) {
     let current = chosenSend, key = "\(selectedID ?? ""):\(chosen(send) ?? "")", value = NSDictionary(dictionary: current?.value ?? [:])
     if refreshing, let shownSend, shownSend.key == key, shownSend.value.isEqual(value) { return }
     shownSend = (key, value)
+    defer { shownSendFields = sendFields }
     guard let current else { sendGain.stringValue = "-12"; preSend.state = .off; sendEnabled.state = .on; return }
     choose(sendTarget, current.value["target"] as? String)
     sendGain.stringValue = String(format: "%.12g", (current.value["gainDB"] as? NSNumber)?.doubleValue ?? -12)
@@ -605,7 +764,12 @@ final class MixerEditor: NSView, NSTableViewDataSource, NSTableViewDelegate, NST
       guard let current = chosenSend else { status.stringValue = "That send changed. Choose it again."; return }
       values[current.index] = value
     } else { values.append(value) }
-    mutate("mixer.sends.set", ["bus": selectedID, "sends": values])
+    guard !loading, !needsReload, draft.isEmpty, committingControls.isEmpty, !hasRawDraft, !hasMarkedText else {
+      status.stringValue = "Finish or reload the other mixer fields before setting this send."; return
+    }
+    request("mixer.sends.set", ["bus": selectedID, "sends": values, "expectedRevision": revision]) { _, _ in
+      self.shownSendFields = self.sendFields; self.load()
+    }
   }
   private func removeSend() {
     guard let selectedID, let current = chosenSend else { return }; var values = selected?["sends"] as? [[String: Any]] ?? []

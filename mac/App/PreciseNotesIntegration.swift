@@ -7,6 +7,12 @@ extension AppController {
       }
       return true
     }
+    if mixerEditor.needsCompletion {
+      mixerEditor.finishAutomaticEdit { [weak self] accepted in
+        if accepted { action() } else { self?.statusLabel.stringValue = "Finish or reload the retained mixer edit before continuing." }
+      }
+      return true
+    }
     if instrumentEditor.hasDraft {
       instrumentEditor.finishAutomaticEdit {[weak self] accepted in
         if accepted {action()} else {self?.statusLabel.stringValue="Finish or reload the retained instrument edit before continuing."}

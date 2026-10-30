@@ -14,11 +14,14 @@ final class PluginLocationEditor: NSView, NSTextFieldDelegate {
   private(set) var capturedDocument="",revision="",pending=false,uncertain=false
   private var generation=0,verified=[[String:Any]](),observedRevision:String?
   private var buttons=[NSButton]()
+  private var observedGeneration: Int?, observedPath: String?
+  private var hasMarkedText: Bool { (path.currentEditor() as? NSTextView)?.hasMarkedText() == true }
   init(target:[String:String]) {
     self.target=target;method=target["plugin"] == nil ? "graph.plugin.path":"plugin.path"
     super.init(frame:.zero)
     path.placeholderString="Choose a VST3 bundle to scan";path.delegate=self
     path.setAccessibilityLabel("VST3 bundle path");candidates.setAccessibilityLabel("Verified matching VST3 bundles")
+    candidates.addItem(withTitle:"Choose a verified matching bundle…")
     candidates.target=self;candidates.action=#selector(selectCandidate)
     for control in [path,candidates] as [NSControl] {control.setContentCompressionResistancePriority(.defaultLow,for:.horizontal)}
     candidates.cell?.lineBreakMode = .byTruncatingMiddle
@@ -62,6 +65,7 @@ final class PluginLocationEditor: NSView, NSTextFieldDelegate {
   private func contextMatches()->Bool {onContext?().document==capturedDocument && !capturedDocument.isEmpty}
   private func admit(write:Bool)->Bool {
     guard !pending,onRequest != nil else{return false}
+    guard !hasMarkedText else {status.stringValue="Finish composing the path before continuing.";return false}
     if capturedDocument.isEmpty {capturedDocument=onContext?().document ?? ""}
     guard contextMatches()else{status.stringValue="This location belongs to a different document. Its fields have been retained.";return false}
     if write {
@@ -95,6 +99,11 @@ final class PluginLocationEditor: NSView, NSTextFieldDelegate {
         if operation.hasSuffix(".scan") {self.uncertain=true}
         self.status.stringValue=self.error(reply,"Could not read the plugin location.");return
       }
+      guard self.generation==oldGeneration,self.path.stringValue==oldPath,
+        self.selection?["path"] as? String==oldSelection,!self.hasMarkedText else {
+        if operation.hasSuffix(".scan") {self.uncertain=true}
+        self.status.stringValue="Newer path fields kept at their captured revision. Read the current location again to review them.";return
+      }
       self.revision=revision;self.observedRevision=revision;self.saved.stringValue="Saved location: "+savedPath
       // Preserve a candidate selected while the request was in flight. A scan
       // lists all verified matches; it must never silently pick the first one.
@@ -103,11 +112,13 @@ final class PluginLocationEditor: NSView, NSTextFieldDelegate {
       for entry in entries {self.candidates.addItem(withTitle:entry["path"] as! String)}
       if let chosen,let index=entries.firstIndex(where:{$0["path"] as? String==chosen}) {self.candidates.selectItem(at:index+1)}
       if oldPath.isEmpty,self.path.stringValue==oldPath,self.generation==oldGeneration {self.path.stringValue=savedPath}
+      self.observedGeneration=self.generation;self.observedPath=self.path.stringValue
       self.status.stringValue=self.uncertain ? "Current state read. Review the saved path, then accept this state before retrying.":"Choose a verified match to reconnect. Scanning does not change the song."
     }
   }
   func acceptObservedState() {
-    guard !pending,uncertain,contextMatches(),let observedRevision,onContext?().revision==observedRevision else {
+    guard !pending,!hasMarkedText,uncertain,contextMatches(),let observedRevision,onContext?().revision==observedRevision,
+      observedGeneration==generation,observedPath==path.stringValue else {
       status.stringValue="Read the current location again before accepting the reviewed state.";return
     }
     uncertain=false;status.stringValue="Current state accepted. Your path is retained.";controls()
@@ -117,7 +128,7 @@ final class PluginLocationEditor: NSView, NSTextFieldDelegate {
     guard let selected=selection,let hash=selected["moduleSHA256"] as? String else{status.stringValue="Scan and select a verified matching bundle for this exact path.";return}
     var params:[String:Any]=target;params["path"]=path.stringValue;params["expectedModuleSHA256"]=hash
     params["expectedRevision"]=revision;params["dryRun"]=dryRun
-    let submittedPath=path.stringValue
+    let submittedPath=path.stringValue,submittedGeneration=generation,submittedSelection=selection?["path"] as? String
     pending=true;observedRevision=nil;controls()
     onRequest?(method+".set",params){[weak self] reply in
       guard let self else{return};self.pending=false;defer{self.controls()}
@@ -129,8 +140,12 @@ final class PluginLocationEditor: NSView, NSTextFieldDelegate {
         self.uncertain = !dryRun && detail?["writeOutcome"] as? String != "notCommitted"
         self.status.stringValue=self.error(reply,"The result is unavailable. Read the current location before retrying.");return
       }
-      self.revision=revision
       if !dryRun {self.saved.stringValue="Saved location: "+submittedPath}
+      guard self.generation==submittedGeneration,self.path.stringValue==submittedPath,
+        self.selection?["path"] as? String==submittedSelection,!self.hasMarkedText else {
+        self.status.stringValue="Operation completed for the submitted path. Newer input keeps its captured revision; read the current location before continuing.";return
+      }
+      self.revision=revision
       self.status.stringValue=dryRun ? "Verified match; the song was not changed.":"Location accepted. Your current path field is retained. Undo restores the previous location."
     }
   }
