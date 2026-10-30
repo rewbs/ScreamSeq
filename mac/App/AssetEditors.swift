@@ -14,9 +14,9 @@ struct AssetCatalogueEntry: Equatable {
 enum WorkspaceAssetContext {
   // A pinned panel still permits an explicit picker selection. Its caption
   // describes the loaded editor, independently of cursor-following policy.
-  static func updateCaption(_ panel: WorkspacePanel?, index: Int, hasDraft: Bool) {
+  static func updateCaption(_ panel: WorkspacePanel?, index: Int, hasDraft: Bool, available: Bool = true) {
     guard let panel, panel.id == "samples" || panel.id == "instruments" else { return }
-    let caption = (hasDraft ? "Draft held · " : "") + "\(panel.id == "samples" ? "Sample" : "Instrument") \(index)"
+    let caption = available ? (hasDraft ? "Draft held · " : "") + "\(panel.id == "samples" ? "Sample" : "Instrument") \(index)" : "No sample selected"
     if panel.target.stringValue != caption { panel.target.stringValue = caption }
   }
   static func token(panel: String, model: PatternModel, row: Int, channel: Int, input: Int) -> String {
@@ -87,6 +87,19 @@ func labeled(_ label: String, _ control: NSView) -> NSStackView {
 }
 
 final class SampleEditor: NSView, NSTextFieldDelegate {
+  private(set) var hasSamplePresentation = false
+  var sampleBody: NSView?
+  let emptySample = Theme.label("No sample selected · Browse or record audio to begin.", size: 12, color: Theme.muted)
+  lazy var sampleTargetActions = stack(.horizontal, [
+    ActionButton("Replace…") { [weak self] in self?.onReplace?() },
+    ActionButton("Audition") { [weak self] in self?.onPreview?(61) },
+    ActionButton("Reload sample") { [weak self] in self?.reloadSample() },
+  ], spacing: 8)
+  func showSamplePresentation(_ available: Bool) {
+    hasSamplePresentation = available
+    sampleBody?.isHidden = !available; sampleTargetActions.isHidden = !available
+    emptySample.isHidden = available
+  }
   var catalogue: [AssetCatalogueEntry] = []
   var sampleSelectionQuery: SampleSelectionQuery?, sampleSelectionInFlight = false
   var sampleViewStates = [String: SampleViewRegion]()
@@ -244,9 +257,7 @@ final class SampleEditor: NSView, NSTextFieldDelegate {
       stack(.horizontal, [
         ActionButton("Record…", symbol: "mic") { [weak self] in self?.onRecord?() },
         ActionButton("Browse…") { [weak self] in self?.onImport?() },
-        ActionButton("Replace…") { [weak self] in self?.onReplace?() },
-        ActionButton("Audition") { [weak self] in self?.onPreview?(61) },
-        ActionButton("Reload sample") { [weak self] in self?.reloadSample() },
+        sampleTargetActions,
       ], spacing: 8),
     ], spacing: 8)
     heading.lineBreakMode = .byTruncatingTail
@@ -306,10 +317,10 @@ final class SampleEditor: NSView, NSTextFieldDelegate {
         ActionButton("Reload settings") { [weak self] in self?.reloadSettings() },
         ActionButton("Discard drafts") { [weak self] in self?.discardSampleDrafts() }, NSView(),
       ], spacing: 10)], spacing: 10)
-    let content = stack(
+    let body = stack(
       .vertical,
       [
-        top, details, makeOperationActions(), operationStatus, waveform, makeWaveformControls(), makeDrawingActions(), drawingStatus, viewportStatus, selectionRow, rangeLabel,
+        details, makeOperationActions(), operationStatus, waveform, makeWaveformControls(), makeDrawingActions(), drawingStatus, viewportStatus, selectionRow, rangeLabel,
         ToolSection("Numeric drawing", id: "sample.numericDrawing", views: [makeNumericDrawingControls()]),
         loopSection,
         ToolSection("Edit audio", id: "sample.processing", views: [editButtons, options, processingStatus]),
@@ -319,10 +330,12 @@ final class SampleEditor: NSView, NSTextFieldDelegate {
         ToolSection("Sample settings", id: "sample.settings", views: [labeled("SAMPLE NAME", name), properties, settingsStatus]), NSView(),
       ],
       spacing: 8)
-    content.alignment = .leading
+    sampleBody = body
+    let content = stack(.vertical, [top, emptySample, body], spacing: 8)
+    body.alignment = .leading; content.alignment = .leading
     content.fill(self, inset: 12)
-    for row in content.arrangedSubviews {
-      row.widthAnchor.constraint(equalTo: content.widthAnchor).isActive = true
+    for group in [body, content] {
+      for row in group.arrangedSubviews { row.widthAnchor.constraint(equalTo: group.widthAnchor).isActive = true }
     }
     waveform.onSelection = { [weak self] range in self?.selectionChanged(range) }
     waveform.onClipboard = { [weak self] action in self?.clipboardAction(action) }
@@ -337,7 +350,7 @@ final class SampleEditor: NSView, NSTextFieldDelegate {
       self.updateDrawingActions()
     }
     waveform.onStroke = { [weak self] points in self?.commitDrawing(points) }
-    selectionChanged(nil); updateOperationActions()
+    selectionChanged(nil); updateOperationActions(); showSamplePresentation(false)
   }
   required init?(coder: NSCoder) { fatalError() }
   @objc func selectSample() {
@@ -482,6 +495,7 @@ final class SampleEditor: NSView, NSTextFieldDelegate {
     if loaded == nil, waveform.viewport != nil || selectedChannels != "both" || waveform.drawing { refreshWaveform() }
     updateViewportStatus()
     waveform.needsDisplay = true
+    showSamplePresentation(true)
   }
   func updateSampleDescription(_ info: [AnyHashable: Any]) {
     let frames = info["frames"] as? Int ?? 0, hz = info["rate"] as? Int ?? 44100

@@ -52,6 +52,34 @@ struct SampleSelectionRead {
 }
 
 extension SampleEditor {
+  // Only successful document adoption authorizes retiring the old presentation.
+  // A failed read within the same document still keeps its fields and waveform.
+  func adoptDocument(samples: [[String: Any]]) {
+    settingsPending = true // Suppress a focus-end settings submission.
+    if sampleEditingFields.contains(where: { $0.currentEditor() != nil }) ||
+      (window?.firstResponder as? NSView)?.isDescendant(of: self) == true {
+      window?.makeFirstResponder(self)
+    }
+    resetDocumentContext()
+    index = samples.first?["index"] as? Int ?? 1
+    updateCatalogue(samples)
+    name.stringValue = ""; rate.stringValue = "44100"; volume.stringValue = "64"; pan.stringValue = "128"
+    for field in [loopStart, loopEnd, sustainStart, sustainEnd] { field.stringValue = "0" }
+    for control in [looping, pingpong, loopReverse, sustaining, sustainPingpong, sustainReverse] { control.state = .off }
+    waveform.frames = 0; waveform.peaks = []; waveform.peaksRange = nil
+    waveform.loopStart = 0; waveform.loopEnd = 0; waveform.sustainStart = 0; waveform.sustainEnd = 0
+    waveformChannels = "both"; channelPicker.selectItem(at: 0)
+    waveform.selection = nil; selectionChanged(nil); loopFieldSelections = [:]
+    previewSignature = nil; previewRevision = nil; resetPastePreview()
+    crossfadePreviewSignature = nil; crossfadePreviewRevision = nil
+    details.stringValue = ""; processingStatus.stringValue = "Preview shows the exact effect of an edit before applying it."
+    settingsStatus.stringValue = "Changes save automatically · ⌘Z to undo"
+    loopsStatus.stringValue = "Sustain loops repeat while a note is held; normal loops follow release."
+    snapStatus.stringValue = "Snap adjusts boundaries; it does not change audio."
+    drawingStatus.stringValue = ""; updateViewportStatus(); waveform.needsDisplay = true
+    emptySample.stringValue = samples.isEmpty ? "No sample selected · Browse or record audio to begin." : "Select a sample to edit."
+    showSamplePresentation(false); onSamplePresentation?()
+  }
   var sampleSelectionOptions: [Int] {
     [operationPicker, curvePicker, crossfadeLoop, crossfadeMode, crossfadeCurve, pasteMode, pasteRate, snapMode, snapDirection].map(\.indexOfSelectedItem) +
       [snapAutomatically.state.rawValue, drawToggle.state.rawValue]
@@ -79,6 +107,7 @@ extension SampleEditor {
   }
   func refreshSample(samples: [[String: Any]]) {
     updateCatalogue(samples)
+    if catalogue.isEmpty, !hasSamplePresentation { return }
     guard !protectsSampleOperation, sampleSelectionQuery == nil, !sampleOperationPending, drawingDraft?.submitted != true, drawingDraft?.numeric != true, !hasSampleComposition else { return }
     let revision = onSampleRevision?() ?? sampleRevision
     if !waveform.stroke.isEmpty {

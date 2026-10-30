@@ -104,6 +104,37 @@ extension InterfaceTests {
     try require(editor.waveform.visibleRange == 79..<80 && editor.waveform.selection == 80...80 && editor.selectionStart.stringValue == "80", "Explicit reload clamps saved view/selection to shorter audio")
     editor.reloadSample(); editor.resetDocumentContext(); drain()
     try require(editor.settingsIdentity.isEmpty && editor.sampleSelectionQuery == nil && !editor.sampleSelectionInFlight && editor.sampleViewStates.isEmpty, "Document retirement rejects late selection readback and clears only its own cache")
+    // New/Open retire the old song's presentation, including while a read is
+    // outstanding. Same-document read failures above must still preserve it.
+    let replaced = makeEditor()
+    let replacementWindow = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 800, height: 900), styleMask: [.titled], backing: .buffered, defer: false)
+    replacementWindow.isReleasedWhenClosed = false; replacementWindow.contentView = replaced
+    defer { replacementWindow.orderOut(nil); replacementWindow.contentView = nil }
+    var replacementRevision = "current", replacementRequests = [(String, [String: Any])](), replacementReplies = [([String: Any]) -> Void]()
+    replaced.onSampleRevision = { replacementRevision }
+    replaced.onSettingsRequest = { method, params, _, done in replacementRequests.append((method, params)); replacementReplies.append(done) }
+    replacementWindow.makeFirstResponder(replaced.name)
+    replaced.refreshSample(samples: catalogue)
+    try require(replacementReplies.count == 1, "Replacement fixture has an old-document metadata read in flight")
+    replacementRevision = "new-song:0"
+    replaced.adoptDocument(samples: [])
+    replaced.refreshSample(samples: [])
+    replacementReplies.removeFirst()(response(replacementRequests[0].0, replacementRequests[0].1))
+    try require(!replaced.hasSamplePresentation && replaced.sampleBody?.isHidden == true && replaced.sampleTargetActions.isHidden && !replaced.emptySample.isHidden,
+      "Empty adopted documents show creation actions without old sample editing controls")
+    try require(replaced.name.stringValue.isEmpty && replaced.selectionStart.stringValue == "0" && replaced.selectionEnd.stringValue == "0" && replaced.loopEnd.stringValue == "0" && replaced.waveform.frames == 0 && replaced.waveform.peaks.isEmpty && replaced.waveform.loopMarkers.isEmpty,
+      "Successful document replacement clears old sample fields, region, loops and waveform")
+    try require(replaced.settingsIdentity.isEmpty && replaced.sampleRevision == nil && replaced.waveformDocumentID == nil && !replaced.hasDraft && replacementRequests.count == 1 && replaced.name.currentEditor() == nil,
+      "Replacement retires focused ownership and rejects old replies without issuing reads or writes for an empty song")
+    replaced.adoptDocument(samples: catalogue)
+    replaced.refreshSample(samples: catalogue)
+    while !replacementReplies.isEmpty {
+      var reply = response(replacementRequests.last!.0, replacementRequests.last!.1, revision: replacementRevision)
+      var result = reply["result"] as! [String: Any]; result["documentId"] = "new-song"; reply["result"] = result
+      replacementReplies.removeFirst()(reply)
+    }
+    try require(replaced.hasSamplePresentation && replaced.sampleBody?.isHidden == false && !replaced.sampleTargetActions.isHidden && replaced.emptySample.isHidden && replaced.settingsIdentity == "first" && replaced.waveformDocumentID == "new-song" && replaced.sampleRevision == replacementRevision && !replaced.hasDraft,
+      "A new document may reuse slot and stable asset identifiers; only its complete new readback exposes editing again")
     let gesture = makeEditor()
     gesture.waveform.drawing = true
     try require(gesture.waveform.beginStroke(SampleStrokePoint(frame: 132, value: 0.75)), "Automatic refresh fixture starts a local gesture")

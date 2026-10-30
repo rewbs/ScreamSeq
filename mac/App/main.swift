@@ -498,7 +498,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
       // Admission protected dirty/pending commands. Retire an unchanged
       // inline editor as well: its captured target belongs to the old song.
       patternView.nudgeEditor?.onFinish?(false)
-      sampleEditor.resetDocumentContext();instrumentEditor.settingsDraft.reset()
+      sampleEditor.adoptDocument(samples: model.samples);instrumentEditor.settingsDraft.reset()
       mixerEditor.invalidateDocumentContext()
       (scratchGestureWindow?.contentView as? ScratchGestureEditor)?.invalidate()
       gateInspector.invalidate()
@@ -1117,7 +1117,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     sampleEditor.onSampleRevision = { [weak self] in self?.model.revisionToken }
     sampleEditor.onSamplePresentation = { [weak self] in
       guard let self else { return }
-      WorkspaceAssetContext.updateCaption(self.workspace?.panels["samples"], index: self.sampleEditor.index, hasDraft: self.sampleEditor.hasDraft)
+      WorkspaceAssetContext.updateCaption(self.workspace?.panels["samples"], index: self.sampleEditor.index, hasDraft: self.sampleEditor.hasDraft, available: self.sampleEditor.hasSamplePresentation)
       self.refreshContextPanel()
     }
     sampleEditor.onSampleSelected = { [weak self] index in
