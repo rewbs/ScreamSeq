@@ -33,12 +33,16 @@ extension InterfaceTests {
   static func sampleSettingsChecks() throws {
     let editor = SampleEditor(frame: NSRect(x: 0, y: 0, width: 1000, height: 1800))
     let inventory: [[String: Any]] = [["index": 1, "id": "s1", "name": "Kick"], ["index": 2, "id": "s2", "name": "Snare"]]
-    var info: [String: Any] = ["index": 1, "name": "Kick", "frames": 1000, "rate": 44100, "volume": 64, "pan": 128]
+    var info: [String: Any] = ["index": 1, "name": "Kick", "frames": 1000, "channels": 2, "rate": 44100, "volume": 64, "pan": 128,
+      "loop": false, "loopStart": 0, "loopEnd": 0, "pingpong": false, "reverseLoop": false,
+      "sustainLoop": false, "sustainStart": 0, "sustainEnd": 0, "sustainPingpong": false, "sustainReverse": false]
     editor.update(info, samples: inventory, revision: "sample:0"); editor.settingsDelay = 0.01
     var calls = [(String, [String: Any], String)](), replies = [([String: Any]) -> Void](), boundaries = [Bool]()
     editor.onSettingsRequest = { method, params, identity, reply in calls.append((method, params, identity)); replies.append(reply) }
     editor.onRequest = { method, params, reply in calls.append((method, params, "s1")); replies.append(reply) }
-    func answer(_ revision: String, _ data: [String: Any] = [:]) { replies.removeFirst()(["result": ["revision": revision, "data": data]]) }
+    var currentRevision = "sample:0"
+    editor.onSampleRevision = { currentRevision }; editor.waveformDocumentID = "song"
+    func answer(_ revision: String, _ data: [String: Any] = [:]) { currentRevision = revision; replies.removeFirst()(["result": ["revision": revision, "documentId": "song", "data": data]]) }
     editor.name.stringValue = "New kick"; editor.rate.stringValue = "44.1k"
     editor.finishAutomaticEdit { boundaries.append($0) }; editor.picker.selectItem(withTag: 2); editor.selectSample()
     try require(calls.isEmpty && boundaries == [false] && editor.index == 1 && editor.name.stringValue == "New kick", "Invalid sample batches block Save and selection without discarding valid fields")
@@ -75,10 +79,15 @@ extension InterfaceTests {
     editor.name.stringValue = "Before write"; editor.finishAutomaticEdit { _ in }; editor.name.stringValue = "Newer name"; answer("sample:4")
     try require(editor.settingsNeedsReload && editor.settingsRevision == "sample:3" && editor.name.stringValue == "Newer name" && replies.isEmpty, "Newer text during a successful write retains its older revision without automatic replay")
     info["name"] = "Before write"; editor.reloadSettings(); answer("sample:4", info)
+    editor.waveformDocumentID = "song"
     editor.name.stringValue = "Settings and loops"; editor.looping.state = .on; editor.loopStart.stringValue = "10"; editor.loopEnd.stringValue = "100"
     boundaries = []; editor.finishAutomaticEdit { boundaries.append($0) }; answer("sample:5"); info["name"] = "Settings and loops"; answer("sample:5", info)
     try require(boundaries.isEmpty && calls.last?.0 == "sample.loops.set" && calls.last?.1["expectedRevision"] as? String == "sample:5", "Only verified settings carry the unchanged loop draft forward to the owned revision")
-    answer("sample:6", ["loopsChanged": true])
+    let loopParams = calls.last!.1
+    answer("sample:6", ["sample": 1, "dryRun": false, "loopsChanged": true, "after": ["normal": loopParams["normal"]!, "sustain": loopParams["sustain"]!]])
+    try require(boundaries.isEmpty && calls.last?.0 == "sample.get", "Settings followed by loops still waits for loop metadata")
+    info["loop"] = true; info["loopStart"] = 10; info["loopEnd"] = 100; answer("sample:6", info)
+    var wave = calls.last!.1; wave["peaks"] = Array(repeating: 0.5, count: (wave["bins"] as! Int) * 2); answer("sample:6", wave)
     try require(boundaries == [true] && !editor.hasDraft && editor.settingsRevision == "sample:6", "Save drains sample settings and loops in order")
     editor.loopNeedsReload = true; editor.name.stringValue = "Blocked by retained loop result"; let beforeReview = calls.count
     boundaries = []; editor.finishAutomaticEdit { boundaries.append($0) }

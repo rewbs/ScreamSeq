@@ -131,6 +131,9 @@ final class SampleEditor: NSView, NSTextFieldDelegate {
   let loopsStatus = Theme.label("Sustain loops repeat while a note is held; normal loops follow release.", size: 11, color: Theme.muted)
   var loopsBusy = false
   var loopReloadQuery: SampleSelectionQuery?
+  var loopWrite: SampleLoopWrite?
+  lazy var loopPreviewButton = ActionButton("Preview both loops") { [weak self] in self?.setLoops(dryRun: true) }
+  lazy var loopApplyButton = ActionButton("Save loops") { [weak self] in self?.setLoops(dryRun: false) }
   var loopNeedsReload = false
   var loopEditGeneration = 0
   var loopCompletionWaiters = [(Bool) -> Void]()
@@ -254,7 +257,9 @@ final class SampleEditor: NSView, NSTextFieldDelegate {
     }
     waveform.onLoopMarker = { [weak self] marker,frame,finished in
       guard let self, !self.protectsDrawingInput, !self.protectsSampleOperation else{return}
+      let continuesGesture = self.loopWrite?.gestureSignature.isEqual(self.rawLoopDraft) == true
       [self.loopStart,self.loopEnd,self.sustainStart,self.sustainEnd][marker.rawValue].stringValue=String(frame)
+      if continuesGesture, self.loopWrite?.dryRun == false { self.loopWrite?.gestureSignature = self.rawLoopDraft }
       self.saveLoopsSoon(immediate:finished)
     }
     for field in [selectionStart, selectionEnd] { field.target = self; field.action = #selector(setRange) }
@@ -410,7 +415,7 @@ final class SampleEditor: NSView, NSTextFieldDelegate {
   }
   func update(_ info: [AnyHashable: Any], samples: [[String: Any]], revision: String? = nil, loaded: SampleSelectionRead? = nil) {
     let identity = samples.first { $0["index"] as? Int == index }?["id"] as? String ?? ""
-    if protectsSampleOperation || loopReloadQuery != nil { updateCatalogue(samples); return }
+    if protectsSampleOperation || loopReloadQuery != nil || loopWrite != nil { updateCatalogue(samples); return }
     if let draft = drawingDraft, draft.submitted || draft.numeric {
       updateCatalogue(samples)
       if identity != draft.identity { drawingStatus.stringValue = "The captured sample is unavailable. Stroke kept for review or discard." }

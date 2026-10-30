@@ -57,7 +57,7 @@ extension SampleEditor {
   }
   func refreshWaveform() { requestWaveform(range: waveformQuery?.range ?? waveform.viewport, channels: waveformQuery?.channels ?? waveformChannels) }
   func requestWaveform(range: Range<Int>?, channels: String? = nil) {
-    guard loopReloadQuery == nil, !protectsSampleOperation, drawingDraft?.submitted != true, waveform.stroke.isEmpty else { return }
+    guard loopReloadQuery == nil, loopWrite == nil, !protectsSampleOperation, drawingDraft?.submitted != true, waveform.stroke.isEmpty else { return }
     guard !hasSampleComposition else { drawingStatus.stringValue = "Finish composing before changing the sample view."; return }
     cancelSampleSelection()
     let range = range ?? 0..<max(0, waveform.frames), channels = channels ?? waveformQuery?.channels ?? waveformChannels

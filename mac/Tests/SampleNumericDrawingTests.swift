@@ -101,7 +101,7 @@ extension InterfaceTests {
   static func numericDrawingLoopOwnershipChecks(info: [String: Any], samples: [[String: Any]]) throws {
     let editor = SampleEditor(frame: NSRect(x: 0, y: 0, width: 729, height: 1400))
     var metadata = info; metadata["loop"] = true; metadata["loopStart"] = 10; metadata["loopEnd"] = 1000
-    editor.update(metadata, samples: samples, revision: "original"); editor.waveformRevision = "original"
+    editor.update(metadata, samples: samples, revision: "original"); editor.waveformRevision = "original"; editor.waveformDocumentID = "song"
     var requests = [String]()
     editor.onRequest = { method, _, _ in requests.append(method) }; editor.onSelect = { _ in }
     let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 729, height: 1400), styleMask: [.titled], backing: .buffered, defer: false)
@@ -126,7 +126,11 @@ extension InterfaceTests {
     editor.setLoops(dryRun: false)
     try require(requests.isEmpty && editor.rawLoopDraft.isEqual(loops) && editor.waveform.loopStart == 10 && editor.waveform.loopEnd == 1000 && editor.numericDrawingRevision == "original" && editor.drawingValue.stringValue == "0.25",
       "Mouse drags, keyboard nudges and direct loop actions cannot mutate loop fields or advance an unstaged drawing's revision")
-    editor.discardDrawing(); editor.waveform.keyDown(with: right)
+    editor.discardDrawing()
+    // The app reloads the selected sample after discarding drawing input.
+    editor.update(metadata, samples: samples, revision: "original")
+    editor.waveformRevision = "original"; editor.waveformDocumentID = "song"
+    editor.waveform.keyDown(with: right)
     try require(requests == ["sample.loops.set"] && editor.waveform.loopStart == 11, "Discard releases loop-handle editing without rebasing or losing a pending numeric point")
   }
   static func numericDrawingNewerInputChecks(info: [String: Any], samples: [[String: Any]]) throws {
