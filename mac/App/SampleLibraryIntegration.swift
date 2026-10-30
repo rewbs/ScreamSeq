@@ -2,7 +2,7 @@ import AppKit
 
 extension AppController {
   var sampleLibraryDirectory: URL {
-    if automationTest, let root = ProcessInfo.processInfo.environment["RESONANCE_AUTOMATION_TEST_DIRECTORY"] {
+    if automationTest || inspectionTest, let root = ProcessInfo.processInfo.environment["RESONANCE_AUTOMATION_TEST_DIRECTORY"] {
       return URL(fileURLWithPath: root, isDirectory: true).appendingPathComponent("SampleLibrary", isDirectory: true)
     }
     return FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("Resonance/SampleLibrary", isDirectory: true)
@@ -13,7 +13,7 @@ extension AppController {
       guard let self else { return }; (self.sampleBrowserWindow?.contentView as? SampleBrowser)?.updateLibrary(self.sampleLibrary.status)
     }
     let standard = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("samples", isDirectory: true).path
-    sampleLibrary.load(defaultRoots: !automationTest && FileManager.default.fileExists(atPath: standard) ? [standard] : [])
+    sampleLibrary.load(defaultRoots: !automationTest && !inspectionTest && FileManager.default.fileExists(atPath: standard) ? [standard] : [])
   }
   @objc func showSampleBrowser() {
     guard !busy else { return }; prepareSampleLibrary()
