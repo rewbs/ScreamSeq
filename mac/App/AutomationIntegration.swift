@@ -175,10 +175,9 @@ extension AppController {
             described["data"] = data; reply(["result": described])
           } else { reply(["result": result]) }
         } else {
-          reply(
-            AutomationServer.error(
-              error?.code ?? -32003, error?.localizedDescription ?? "Operation failed",
-              data: ["revision": revision]))
+          // Forward the same receipt observed by the retained-input controller.
+          // Rebuilding an error here drops the path operation's outcome proof.
+          reply(response)
         }
         self.drainNotes()
       }
