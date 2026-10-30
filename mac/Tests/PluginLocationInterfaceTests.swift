@@ -48,6 +48,12 @@ extension InterfaceTests {
     graph.editor.load();try require(requests.last?.0=="graph.plugin.path.get" && requests.last?.1["node"] as? String=="n15","Graph locations capture stable recipe identity")
     replies.removeFirst()(read())
     try require(graph.editor.revision.isEmpty,"A read for another target cannot authorize an edit")
+    graph.editor.load()
+    let longPath="/"+String(repeating:"long-folder/",count:100)+"Module.vst3"
+    replies.removeFirst()(["result":["revision":revision,"data":["graph":"n12","node":"n15","descriptor":["path":longPath],
+      "candidates":[["descriptor":["path":longPath],"moduleSHA256":hash]]]]])
+    graph.editor.layoutSubtreeIfNeeded()
+    try require(graph.editor.fittingSize.width<=700,"Long saved and candidate paths must not force the inspector wider than its initial window")
     graph.editor.path.stringValue="Retained while hidden";graph.close()
     try require(graph.editor.path.stringValue=="Retained while hidden","Closing the retained window keeps unfinished input")
   }

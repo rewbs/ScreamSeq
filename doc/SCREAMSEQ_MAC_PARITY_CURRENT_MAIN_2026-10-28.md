@@ -277,13 +277,59 @@ Evidence is under `bin/mac-parity-current/evidence/` (`*plugin-path*`,
 bundle, desktop and latest-commit Greptile qualification remain pending at this
 source checkpoint; the preceding build 6 is not evidence for these changes.
 
+## Build 7 desktop and review checkpoint — 2026-10-30
+
+Full build 7 started at 08:29:20 UTC and completed at 08:33:05 UTC on
+`6c981f6f3`, more than an hour after build 6. Its 3,534 tracked source files
+remained unchanged; bundle signature verification passed. Source fingerprint:
+`71534bcd3b24ae2faf622677af1af70a9f7854eaa77c23a6dd1091a51c330edf`.
+Executable SHA-256:
+`a317e61d0a6f2f61e19a508ca26158ee6948c2e99250bb5788eba0d76991f6e6`.
+
+Computer use in unique QA bundle `org.resonance.tracker.qa.parity.20261030b7`
+verified missing Windows rack and graph paths, refused scan draft retention,
+explicit scan/candidate choice, dry check, reconnect, retained text after
+close/reopen, and main-window Command-Z/Command-Shift-Z restoring the old/new
+rack paths. Both repairs survived saving a separate song and reopening with the
+native Open dialog. The app showed no missing-plugin error after reopening.
+
+The integrated Mac parity socket checks now pass unchanged, including the
+Return binding alongside the graph's local binding. Real keyboard Return started
+and stopped the QA song on explicitly selected BlackHole 2ch at 48 kHz / 128
+frames. QA keyboard, loop and output settings were restored, and the disposable
+app was closed. System audio defaults were unchanged. No sustained performance
+or commercial-plugin qualification is claimed. After workspace preset checks,
+the main window was compressed; native Zoom restored its visible graph layout,
+and Pattern focus presented the grid. Broader workspace geometry remains open.
+
+The application socket suite exposed a preflight receipt lost by the final
+reply path. Greptile independently reported the same issue. `c1d609f51` forwards
+the already-prepared response, preserving `writeOutcome: notCommitted`, and the
+review thread is resolved. Complete Swift type-checking passes. This fix is
+**newer than build 7**, so the failed receipt assertion remains recorded in
+`socket-build7-app.log`; it is not reported as a passing full app suite. The
+existing suite passed through request-replay checks before that assertion.
+Direct-session and windowless path tests cover the correct receipt and remaining
+path contracts. Another full build cannot start before 09:29:20 UTC.
+
+Long candidate paths also now compress/truncate within the location inspector.
+A native interface regression with a 1,200-character path passes without forcing
+the initial window wider, alongside the retained-draft tests. Complete Swift
+application type-checking passes; this presentation follow-up is also newer than
+the packaged binary.
+
+Receipts: `build-7-identity.json`, `qa7-desktop-validation.json`,
+`socket-build7-mac-parity.log`, `typecheck-path-receipt.log`,
+`interface-plugin-location-width.log`, and `typecheck-plugin-path-width.log` in
+`bin/mac-parity-current/evidence/`.
+
 ## Remaining parity work
 
 These items are deliberately outside this checkpoint and must be resolved before
 claiming complete Windows parity:
 
-- Integrated bundle and desktop qualification of the explicit plugin-location
-  workflow added above.
+- Packaged-app confirmation of the plugin-location refusal receipt and long-path
+  layout follow-ups newer than build 7.
 - Integrated application/socket/computer-use qualification of the newly added
   keyboard settings, rack editor APIs and retained Song Settings.
 - Additional composing departure, panel-close and newer-input guards in other

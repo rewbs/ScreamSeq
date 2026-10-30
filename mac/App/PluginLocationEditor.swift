@@ -20,6 +20,8 @@ final class PluginLocationEditor: NSView, NSTextFieldDelegate {
     path.placeholderString="Choose a VST3 bundle to scan";path.delegate=self
     path.setAccessibilityLabel("VST3 bundle path");candidates.setAccessibilityLabel("Verified matching VST3 bundles")
     candidates.target=self;candidates.action=#selector(selectCandidate)
+    for control in [path,candidates] as [NSControl] {control.setContentCompressionResistancePriority(.defaultLow,for:.horizontal)}
+    candidates.cell?.lineBreakMode = .byTruncatingMiddle
     saved.isSelectable=true
     for label in [saved,status] {label.maximumNumberOfLines=0;label.lineBreakMode = .byWordWrapping;label.preferredMaxLayoutWidth=620;label.setContentCompressionResistancePriority(.defaultLow,for:.horizontal)}
     let help=Theme.label("Scan a local VST3 bundle, then choose a verified match. Reconnect preserves the saved sound and routing, stops playback, and can be undone.",size:11,color:Theme.muted)
