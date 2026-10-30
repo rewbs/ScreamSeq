@@ -19,7 +19,12 @@ extension SampleEditor {
     saveStagedDrawing(); return true
   }
   func makeNumericDrawingControls() -> NSView {
-    for field in [drawingFrame, drawingValue] { field.delegate = self; field.target = self; field.action = #selector(stageDrawingPoint) }
+    for field in [drawingFrame, drawingValue] {
+      field.delegate = self; field.target = self; field.action = #selector(stageDrawingPoint)
+      // Focus movement must keep raw input unstaged. In particular, leaving a
+      // field after Command-Return must not recreate the just-saved stroke.
+      field.cell?.sendsActionOnEndEditing = false
+    }
     drawingInterpolation.addItems(withTitles: ["Linear", "Step"])
     drawingInterpolation.setAccessibilityLabel("Drawing interpolation")
     drawingInterpolation.target = self; drawingInterpolation.action = #selector(numericDrawingInterpolationChanged)

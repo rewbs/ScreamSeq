@@ -97,6 +97,54 @@ extension InterfaceTests {
     try require(forms.name.isEnabled && forms.looping.isEnabled && forms.control(forms.name, textShouldBeginEditing: fieldEditor), "Discarding raw drawing fields releases other forms")
     try numericDrawingNewerInputChecks(info: info, samples: samples)
     try numericDrawingLoopOwnershipChecks(info: info, samples: samples)
+    try numericDrawingFocusLossChecks(info: info, samples: samples)
+  }
+  static func numericDrawingFocusLossChecks(info: [String: Any], samples: [[String: Any]]) throws {
+    let editor = SampleEditor(frame: NSRect(x: 0, y: 0, width: 900, height: 1400))
+    editor.update(info, samples: samples, revision: "original")
+    editor.waveform.peaksRange = 0..<8192; editor.waveform.peaks = Array(repeating: 0.25, count: 4096)
+    editor.waveformRevision = "original"; editor.waveformDocumentID = "song"
+    var calls = [(String, [String: Any])](), replies = [([String: Any]) -> Void]()
+    editor.onSettingsRequest = { method, params, _, done in calls.append((method, params)); replies.append(done) }
+    func expand(_ view: NSView) {
+      if let section = view as? ToolSection { section.setExpanded(true, persist: false) }
+      view.subviews.forEach(expand)
+    }
+    expand(editor)
+    let window = NSWindow(contentRect: editor.frame, styleMask: [.titled], backing: .buffered, defer: false)
+    window.isReleasedWhenClosed = false; window.contentView = editor; editor.layoutSubtreeIfNeeded()
+    defer { window.orderOut(nil); window.contentView = nil }
+    window.makeFirstResponder(editor.drawingFrame)
+    guard let frameText = editor.drawingFrame.currentEditor() as? NSTextView else { throw InterfaceFailure(message: "Drawing focus fixture needs the native frame editor") }
+    frameText.insertText("15", replacementRange: NSRange(location: 0, length: frameText.string.utf16.count))
+    window.makeFirstResponder(editor.drawingValue)
+    guard let valueText = editor.drawingValue.currentEditor() as? NSTextView else { throw InterfaceFailure(message: "Drawing focus fixture needs the native value editor") }
+    try require(editor.drawingFrame.currentEditor() == nil && editor.waveform.stroke.isEmpty && editor.drawingDraft == nil && calls.isEmpty,
+      "Moving from Frame to Value keeps numeric input unstaged instead of staging the old value")
+    valueText.insertText("0.5", replacementRange: NSRange(location: 0, length: valueText.string.utf16.count))
+    valueText.doCommand(by: #selector(NSResponder.insertNewline(_:)))
+    try require(editor.waveform.stroke == [15: 0.5] && calls.isEmpty, "Return still stages a numeric point through the native field editor")
+    window.makeFirstResponder(editor.drawingValue)
+    let saveKey = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: .command, timestamp: 0,
+      windowNumber: window.windowNumber, context: nil, characters: "\r", charactersIgnoringModifiers: "\r", isARepeat: false, keyCode: 36)!
+    try require(editor.performKeyEquivalent(with: saveKey) && calls.count == 1 && calls[0].0 == "sample.draw",
+      "Command-Return submits the staged point from its native field")
+    func answer(_ data: [String: Any]) {
+      replies.removeFirst()(["result": ["revision": "accepted", "documentId": "song", "data": data]])
+    }
+    answer(["changedFrames": 1]); answer(info)
+    var wave = calls.last!.1; wave["peaks"] = Array(repeating: 0.5, count: 4096); answer(wave)
+    try require(editor.drawingDraft == nil && !editor.hasDraft && editor.drawingValue.currentEditor() != nil,
+      "Verified numeric completion leaves the saved value focused without a draft")
+    window.makeFirstResponder(editor.waveform)
+    var canContinue: Bool?
+    editor.finishAutomaticEdit { canContinue = $0 }
+    try require(editor.drawingValue.currentEditor() == nil && window.firstResponder === editor.waveform &&
+      editor.drawingDraft == nil && editor.waveform.stroke.isEmpty && !editor.hasDraft && canContinue == true && calls.count == 3,
+      "Resigning a saved numeric field does not recreate its stroke or block Save and Undo")
+    editor.stageDrawingButton.performClick(nil)
+    try require(editor.waveform.stroke == [15: 0.5] && calls.count == 3,
+      "The explicit Stage point button can still stage unchanged saved coordinates")
   }
   static func numericDrawingLoopOwnershipChecks(info: [String: Any], samples: [[String: Any]]) throws {
     let editor = SampleEditor(frame: NSRect(x: 0, y: 0, width: 729, height: 1400))
