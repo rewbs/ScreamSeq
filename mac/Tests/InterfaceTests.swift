@@ -789,7 +789,7 @@ struct InterfaceFailure: Error { let message: String }
     editorDraftGroups + [
       ("automation-tools", automationToolsChecks), ("automation-target", automationTargetChecks),
       ("parameter-activity", parameterActivityChecks), ("mixer-strips", mixerStripsChecks),
-      ("plugin-preset", pluginPresetChecks), ("song-timing", songTimingChecks), ("song-settings", songSettingsChecks),
+      ("plugin-preset", pluginPresetChecks), ("song-timing", songTimingChecks), ("song-settings", songSettingsChecks), ("plugin-location", pluginLocationChecks),
       ("plugin-programs", pluginProgramsChecks), ("precise-notes", preciseNotesChecks),
       ("keyboard-settings", keyboardSettingsChecks), ("mac-parity", macParityChecks), ("workspace", workspaceChecks), ("signal-graph", signalGraphChecks),
       ("graph-actions", graphActionCatalogChecks), ("graph-ports", graphPortActionChecks),

@@ -242,13 +242,48 @@ Greptile's review of `b87371d8b` completed at 07:29:04 UTC: 73 files, zero new
 comments, confidence 5/5, all eight threads resolved. The later Return-binding
 fix requires a fresh review of its own commit.
 
+## Explicit VST3 location repair follow-up — 2026-10-30
+
+Added the six shared rack/graph `plugin.path.get/scan/set` operations, a private
+verified module cache, and retained native Plugin location windows. Explicit
+isolated scanning ties the matching class/role to the current executable SHA-256;
+reconnect validates saved state before stopping playback and changing only the
+selected stored path. Chronological Undo also preserves the old Windows hint
+when automatic resolution had already found the same Mac module. Reads/scans/dry
+runs do not drain unrelated native input in the application wrapper. AU identity
+remains registered component identity, without format conversion.
+
+The editor captures document/processor identity and a revision, retains newer
+path input and candidate selection through asynchronous replies, and requires
+explicit readback/acknowledgement after an unknown outcome. Closing/reopening
+retains the draft. Scanning never silently chooses the first cached candidate.
+
+Targeted validation before the next full build:
+
+- Seven CTest groups passed: session, unified-history, signal-graph-session,
+  plugin-trust, plugin-inventory, plugin-locations and plugin-paths.
+- 42/42 native interface groups passed, including delayed plugin-location reads,
+  stale writes, explicit uncertain-result review and changed-document ownership.
+- Full Swift application type-checking and six API inventory checks passed.
+- The complete existing windowless socket suite passed; the new focused socket
+  path suite then passed real scanning, hash/refusal receipts, retained preview,
+  dry run, exact rack/graph state preservation, no-op and chronological Undo/Redo.
+- Direct native fixture tests also cover original hints, equal runtime paths,
+  unknown-field preservation and native save/reopen. Cache tests cover changed
+  executables/metadata, failed scans, canonical aliases and private cache files.
+
+Evidence is under `bin/mac-parity-current/evidence/` (`*plugin-path*`,
+`interface-plugin-path-all.log`, `test-plugin-path-validation.log`). Integrated
+bundle, desktop and latest-commit Greptile qualification remain pending at this
+source checkpoint; the preceding build 6 is not evidence for these changes.
+
 ## Remaining parity work
 
 These items are deliberately outside this checkpoint and must be resolved before
 claiming complete Windows parity:
 
-- Explicit rack/graph plugin path scan and reconnect with module-hash guards and
-  Undo. Mac's trusted automatic class resolution is not an equivalent workflow.
+- Integrated bundle and desktop qualification of the explicit plugin-location
+  workflow added above.
 - Integrated application/socket/computer-use qualification of the newly added
   keyboard settings, rack editor APIs and retained Song Settings.
 - Additional composing departure, panel-close and newer-input guards in other

@@ -3,7 +3,7 @@
   "policy": "Evidence ratchet only. Baseline matches are not parity passes, loss waivers, or permission to skip release gates. Intentional changes require reviewing exact vectors, inventory and native behavior on both platforms.",
   "schema": {
     "path": "mac/Tools/resonance-api.schema.json",
-    "sha256": "c0733b0a0acdda1de1795967bb6f3e47f1dda4c56c8f24a8a60bb945cf3472f4",
+    "sha256": "b57ac0021a27d16fc9bbf4b081713dded20f324f710c92fe59c343ac5542fc27",
     "review20261023": "Source review f4d0fb7a4/a33b7dca9: seven native-take descriptions now describe guarded Mac VST3 processing verification; Commit adds strict optional boolean restoreSavedState with completed/stopped/closed-editor guards. Method inventory and expected vector outcomes are unchanged. New behavior awaits native qualification; see doc/windows-parity-plan-2026-10-09/LIVE-PARAMETER-RELEASE-2026-10-23.md.",
     "methods": [
       "api.describe",
@@ -87,6 +87,9 @@
       "graph.plugin.editor.commit",
       "graph.plugin.editor.open",
       "graph.plugin.get",
+      "graph.plugin.path.get",
+      "graph.plugin.path.scan",
+      "graph.plugin.path.set",
       "graph.plugin.preset.load",
       "graph.plugin.preset.save",
       "graph.plugin.preview.cancel",
@@ -189,6 +192,9 @@
       "plugin.parameters.preview.get",
       "plugin.parameters.preview.set",
       "plugin.parameters.set",
+      "plugin.path.get",
+      "plugin.path.scan",
+      "plugin.path.set",
       "plugin.preset.inspect",
       "plugin.preset.load",
       "plugin.preset.save",
@@ -562,13 +568,7 @@
       ],
       "additionalMethods": [
         "document.new",
-        "document.open",
-        "graph.plugin.path.get",
-        "graph.plugin.path.scan",
-        "graph.plugin.path.set",
-        "plugin.path.get",
-        "plugin.path.scan",
-        "plugin.path.set"
+        "document.open"
       ],
       "inventoryReview20261019": {
         "sourceCommit": "07424c0c675c57caf7828ea23b6c7a4a13a5cf4b",
@@ -687,6 +687,7 @@
         "graph.listen.get",
         "graph.note.activity",
         "graph.plugin.get",
+        "graph.plugin.path.get",
         "graph.plugin.preview.get",
         "graph.provenance.get",
         "graph.scope.get",
@@ -718,6 +719,7 @@
         "plugin.meters",
         "plugin.parameters.get",
         "plugin.parameters.preview.get",
+        "plugin.path.get",
         "plugin.preset.inspect",
         "plugin.programs.get",
         "plugin.state.get",
@@ -796,6 +798,8 @@
         "graph.plugin.editor.close",
         "graph.plugin.editor.commit",
         "graph.plugin.editor.open",
+        "graph.plugin.path.scan",
+        "graph.plugin.path.set",
         "graph.plugin.preset.load",
         "graph.plugin.preset.save",
         "graph.plugin.preview.cancel",
@@ -867,6 +871,8 @@
         "plugin.parameters.preview.commit",
         "plugin.parameters.preview.set",
         "plugin.parameters.set",
+        "plugin.path.scan",
+        "plugin.path.set",
         "plugin.preset.load",
         "plugin.preset.save",
         "plugin.programs.load",
@@ -1004,7 +1010,8 @@
         "removed": [],
         "evidence": "doc/SCREAMSEQ_MAC_PARITY_CURRENT_MAIN_2026-10-28.md",
         "note": "Final rebased Mac app advertised exactly the reviewed read/write inventory. App socket and focused audio/MIDI settings tests passed; see the parity report for source fingerprint and scope. Earlier receipts remain historical; this is not complete cross-platform qualification."
-      }
+      },
+      "pluginLocationReview20261030": "Six rack/graph plugin.path methods added to Mac source with isolated explicit scans, executable hashes, saved path hints and chronological history. Current native/socket/UI qualification recorded in the parity report; historical binary receipts above are unchanged."
     }
   },
   "pairedContractReview20261020": {

@@ -23765,6 +23765,310 @@
       ],
       "additionalProperties": false,
       "x-application-only": true
+    },
+    {
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "plugin.path.get"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "plugin": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          "required": [
+            "plugin"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false,
+      "description": "Inspect verified VST3 candidates without loading code."
+    },
+    {
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "plugin.path.scan"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "plugin": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "expectedRevision": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "path": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 8192
+            }
+          },
+          "required": [
+            "plugin",
+            "expectedRevision",
+            "path"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false,
+      "description": "Explicitly scan the selected VST3 bundle outside the app process; song state is unchanged."
+    },
+    {
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "plugin.path.set"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "plugin": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "expectedRevision": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "path": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 8192
+            },
+            "expectedModuleSHA256": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "dryRun": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "plugin",
+            "expectedRevision",
+            "path",
+            "expectedModuleSHA256"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false,
+      "description": "Reconnect only the selected stable plugin to a matching scanned VST3 module, guarding its executable SHA-256; preserves sound/routes, supports dry run, no-op and chronological Undo."
+    },
+    {
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "graph.plugin.path.get"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "graph": {
+              "type": "string",
+              "pattern": "^n[1-9][0-9]*$"
+            },
+            "node": {
+              "type": "string",
+              "pattern": "^n[1-9][0-9]*$"
+            }
+          },
+          "required": [
+            "graph",
+            "node"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false,
+      "description": "Inspect verified VST3 candidates without loading code."
+    },
+    {
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "graph.plugin.path.scan"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "graph": {
+              "type": "string",
+              "pattern": "^n[1-9][0-9]*$"
+            },
+            "node": {
+              "type": "string",
+              "pattern": "^n[1-9][0-9]*$"
+            },
+            "expectedRevision": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "path": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 8192
+            }
+          },
+          "required": [
+            "graph",
+            "node",
+            "expectedRevision",
+            "path"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false,
+      "description": "Explicitly scan the selected VST3 bundle outside the app process; song state is unchanged."
+    },
+    {
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "graph.plugin.path.set"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "graph": {
+              "type": "string",
+              "pattern": "^n[1-9][0-9]*$"
+            },
+            "node": {
+              "type": "string",
+              "pattern": "^n[1-9][0-9]*$"
+            },
+            "expectedRevision": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "path": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 8192
+            },
+            "expectedModuleSHA256": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "dryRun": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "graph",
+            "node",
+            "expectedRevision",
+            "path",
+            "expectedModuleSHA256"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false,
+      "description": "Reconnect only the selected stable plugin to a matching scanned VST3 module, guarding its executable SHA-256; preserves sound/routes, supports dry run, no-op and chronological Undo."
     }
   ],
   "$defs": {

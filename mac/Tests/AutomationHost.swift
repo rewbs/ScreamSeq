@@ -62,10 +62,12 @@ import AppKit
         if let result {
           reply(["result": result])
         } else {
+          var data:[String:Any] = ["revision":session.automationRevision]
+          if let outcome=error?.userInfo["writeOutcome"] as? String {data["writeOutcome"]=outcome}
           reply(
             AutomationServer.error(
               error?.code ?? -32003, error?.localizedDescription ?? "Failure",
-              data: ["revision": session.automationRevision]))
+              data:data))
         }
       }
     }

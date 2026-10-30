@@ -11,11 +11,37 @@ class PluginInventory {
 
 public:
   static NSString *defaultPath();
+  static void setStorePath(NSString *path); // Tests only; nil restores the default.
   explicit PluginInventory(NSString *path = defaultPath()) : path_(path) {}
   NSArray<NSDictionary *> *load(bool rescan, const std::function<NSArray<NSDictionary *> *()> &scan);
   // The last completed scan, from memory or the cache file. Never starts a
   // scanner; returns nil when no valid inventory has been stored yet.
   NSArray<NSDictionary *> *cached();
+};
+// Explicit, isolated VST3 scans used for location repair. Separate from the
+// legacy descriptor cache: an old discovered path is not proof of the current
+// executable's identity. Accessed on the serial document queue, never in audio.
+class PluginLocations {
+  NSString *path_;
+  NSArray<NSDictionary *> *records_ = nil;
+  NSArray<NSDictionary *> *records();
+public:
+  static NSString *defaultPath();
+  static void setStorePath(NSString *path); // Tests only; nil restores the default.
+  explicit PluginLocations(NSString *path = defaultPath()) : path_(path) {}
+  // SHA-256 of the bundle's current executable bytes; does not load code.
+  static NSString *moduleSHA256(NSString *bundle);
+  // Scanner must run out of process. Publish only after a matching class was
+  // found and the executable is unchanged across the scan. Failed scans retain
+  // the last successful records; a read-only cache remains usable in memory.
+  NSArray<NSDictionary *> *scan(NSString *bundle, NSString *classID, bool instrument,
+      const std::function<NSArray<NSDictionary *> *(NSString *)> &scanner);
+  // Each candidate has descriptor + moduleSHA256. Changed/missing modules are
+  // omitted. These read operations neither execute plugins nor add load trust.
+  NSArray<NSDictionary *> *candidates(NSString *classID, bool instrument);
+  // Requires a matching successful scan and current bytes. Pass nil expected
+  // for a read-only verification; reconnect supplies its captured hash.
+  NSString *verify(NSString *bundle, NSString *classID, bool instrument, NSString *expected);
 };
 // Decides whether a VST3 bundle may be loaded into this process. A bundle path
 // stored in a project, recovery file or graph recipe is untrusted input: it is

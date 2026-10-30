@@ -9,6 +9,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
   let sampleEditor = SampleEditor(frame: .zero), instrumentEditor = InstrumentEditor(frame: .zero)
   let keyboardSettings = KeyboardSettings()
   var songSettingsWindow: SongSettingsWindow?
+  var pluginLocationWindows=[String:PluginLocationWindow]()
   let pluginEditor = PluginEditor(frame: .zero)
   let pluginPortsEditor = PluginPortsEditor(frame: .zero)
   var pluginPortsWindow: NSWindow?
@@ -1149,6 +1150,9 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     instrumentEditor.onCommit = {[weak self] values,revision,index,identity,reply in
       self?.submitInstrumentEdit(values,revision:revision,index:index,identity:identity,reply:reply)
     }
+    pluginEditor.onLocation = {[weak self] id in self?.showPluginLocation(["plugin":id])}
+    signalGraphEditor.rackControls.onLocation = {[weak self] id in self?.showPluginLocation(["plugin":id])}
+    signalGraphEditor.pluginControls.onLocation = {[weak self] graph,node in self?.showPluginLocation(["graph":graph,"node":node])}
     pluginEditor.onPrograms = { [weak self] slot in self?.showPluginPrograms(slot) }
     pluginEditor.onInstruments = { [weak self] slot in self?.showPluginInstruments(slot) }
     pluginEditor.onPorts = { [weak self] slot in self?.showPluginPorts(slot) }

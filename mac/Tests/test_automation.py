@@ -17,6 +17,7 @@ from resonance_api import APIError, Client, drum_roll, endpoints
 from test_audio_fanout import audio_fanout
 from test_scratch_gestures import scratch_gestures
 from test_plugin_editor_api import plugin_editor_api
+from test_plugin_paths_api import plugin_paths_api
 sys.path.insert(0, str(ROOT / 'editor/Tests'))
 from parameter_preview_contract import parameter_preview_contract
 from recipe_parameter_contract import recipe_parameter_contract
@@ -2268,6 +2269,9 @@ def main():
                 if busy_only:
                     busy_receipts(client)
                     return
+                if "--plugin-paths-only" in sys.argv:
+                    plugin_paths_api(client, directory, BUILD)
+                    return
                 navigation_tools(client)
                 note_track_tools(client)
                 plugin_library_tools(client, directory)
@@ -2435,6 +2439,7 @@ def main():
                 rack_dry_run_contract(client, directory, expect_error)
                 integer_api_contract(client, directory, expect_error)
                 request_replay_contract(client, directory, APIError)
+                plugin_paths_api(client, directory, BUILD)
 
                 pattern_gates(client, directory)
                 print("PASS local API socket: private discovery/permissions, JSON framing, real crescendo-roll client, dry run, one-step undo, preserved cells/effects, retry deduplication, competing writers and method schema; no windows or audio output")

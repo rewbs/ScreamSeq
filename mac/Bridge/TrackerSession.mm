@@ -277,6 +277,13 @@ struct PluginPathHints {
   std::map<std::pair<uint64_t, uint64_t>, PluginPathHint> graph;     // By subgraph and node ID.
   void clear() { rack.clear(); graph.clear(); }
 };
+GraphPluginRecipe &locationRecipe(NativeSong &native,uint64_t graph,uint64_t node) {
+  auto definition=std::find_if(native.signal.library.begin(),native.signal.library.end(),[&](const auto &d){return d.id==graph;});
+  if(definition==native.signal.library.end())throw std::invalid_argument("Subgraph no longer exists");
+  auto found=std::find_if(definition->nodes.begin(),definition->nodes.end(),[&](const auto &n){return n.id==node;});
+  if(found==definition->nodes.end() || found->kind!=SignalNodeKind::Plugin)throw std::invalid_argument("Select a graph plugin node");
+  return found->plugin;
+}
 std::string missingPlugin(const std::string &name, const std::string &path) {
   return "Plugin \"" + name + "\" is unavailable: its VST3 bundle " +
          (path.empty() ? std::string("has no known location")
@@ -376,10 +383,20 @@ struct EffectSnapshot {
   uint64_t sequence = 0;
   std::string bypassTarget; // A delta, so save/state capture cannot turn Undo into a rack rebuild.
   std::vector<ParameterChange> parameterValues; // Historical manual scalars, never effective modulation output.
+  struct Location {
+    std::string plugin,path;
+    uint64_t graph=0,node=0;
+    std::optional<PluginPathHint> hint;
+  };
+  // Explicit location repair also changes which original path is saved. Keep
+  // that small delta in chronological history, including an auto-resolved path
+  // whose runtime location was already equal to the newly accepted location.
+  std::optional<Location> location;
   size_t bytes() const {
     size_t result = (automation.size() + manual.size() + parameterValues.size()) * sizeof(ParameterChange) + bypassTarget.size();
     for (const auto &plugin : plugins)
       result += plugin.state.size() + plugin.audioLayout.size() + plugin.descriptor.name.size() + sizeof(PluginState) + plugin.aliases.size() * sizeof(PluginInstrumentAlias);
+    if(location){result+=sizeof(Location)+location->plugin.size()+location->path.size();if(location->hint)result+=location->hint->path.size()+location->hint->loaded.size()+location->hint->classID.size();}
     return result;
   }
 };
@@ -409,6 +426,7 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
   std::unique_ptr<MidiInput> _midi;
   uint32_t _recordingMidiDrops;
   std::unique_ptr<PluginInventory> _pluginInventory;
+  std::unique_ptr<PluginLocations> _pluginLocations;
   std::unique_ptr<PluginLibrary> _pluginLibrary;
   std::vector<PluginState> _plugins;
   std::vector<ParameterChange> _automation;
@@ -455,6 +473,7 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
     _audio = std::make_unique<AudioDevice>();
     _midi = std::make_unique<MidiInput>();
     _pluginInventory = std::make_unique<PluginInventory>();
+    _pluginLocations = std::make_unique<PluginLocations>();
     _pluginLibrary = std::make_unique<PluginLibrary>();
   }
   return self;
@@ -1915,6 +1934,28 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
     EffectSnapshot current{_plugins, _automation, _manualParameters, source.back().sequence, source.back().bypassTarget};
     destination.reserve(destination.size() + 1);
     const auto &saved=source.back();
+    std::optional<PluginPathHints> locationHints;
+    if(saved.location) {
+      const auto &location=*saved.location;locationHints=_pluginPathHints;current.location=location;
+      if(location.graph) {
+        const auto key=std::pair(location.graph,location.node);
+        auto next=_document->native();auto &recipe=locationRecipe(next,location.graph,location.node);
+        current.location->path=recipe.path;
+        const auto old=_pluginPathHints.graph.find(key);
+        current.location->hint=old==_pluginPathHints.graph.end()?std::nullopt:std::optional(old->second);
+        if(location.hint)locationHints->graph[key]=*location.hint;else locationHints->graph.erase(key);
+        recipe.path=location.path;next.validate(_document->song());
+        _audio->stop();_document->restoreNative(std::move(next));std::swap(_pluginPathHints,*locationHints);++_pluginRevision;
+        if(_graphEditorGraph==location.graph&&_graphEditorNode==location.node){_graphEditorPlugin.reset();_graphEditorID=nil;}
+        destination.push_back(std::move(current));source.pop_back();trimEffectHistory(destination);return YES;
+      }
+      const auto old=_pluginPathHints.rack.find(location.plugin);
+      current.location->hint=old==_pluginPathHints.rack.end()?std::nullopt:std::optional(old->second);
+      if(location.hint)locationHints->rack[location.plugin]=*location.hint;else locationHints->rack.erase(location.plugin);
+      // Restoring an old missing path is permitted, but never while a renderer
+      // continues using the repaired incarnation.
+      _audio->stop();
+    }
     if(_pluginError.empty()&&saved.plugins==_plugins&&saved.manual==_manualParameters&&saved.automation!=_automation) {
       [self restorePluginGraph:saved.plugins automation:saved.automation];
       destination.push_back(std::move(current));source.pop_back();trimEffectHistory(destination);return YES;
@@ -1977,6 +2018,7 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
       _pluginError = previousError;
       throw;
     }
+    if(locationHints)std::swap(_pluginPathHints,*locationHints);
     destination.push_back(std::move(current));
     source.pop_back();
     trimEffectHistory(destination);

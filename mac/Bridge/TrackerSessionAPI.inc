@@ -33,10 +33,13 @@
 }
 - (NSDictionary *)dispatchAutomationMethod:(NSString *)method params:(NSDictionary *)p error:(NSError **)error {
   using namespace Automation;
+  const bool locationSet=[method isEqual:@"plugin.path.set"]||[method isEqual:@"graph.plugin.path.set"];
+  bool locationCommitStarted=false;
   try {
     string(method, 80);
     object(p);
     NSArray *reads = @[
+      @"plugin.path.get", @"graph.plugin.path.get",
       @"automation.recovery.list", @"automation.recovery.get",
       @"automation.recording.get", @"automation.recording.events",
       @"graph.plugin.preview.get",
@@ -46,7 +49,7 @@
       @"plugin.programs.get", @"plugin.instruments.get", @"document.timing.get", @"track.get", @"plugin.parameters.preview.get", @"api.describe", @"document.get", @"pattern.get", @"pattern.timeline.get", @"pattern.commands", @"sample.get", @"sample.waveform.get", @"sample.snap.get", @"sample.pcm.get", @"sample.clipboard.get", @"instrument.get",
       @"plugin.preset.inspect", @"plugin.library.get", @"plugin.locations.get", @"plugin.discover", @"plugin.parameters.get", @"plugin.meters", @"plugin.state.get", @"plugin.buses.get", @"automation.get", @"automation.target.get", @"arrangement.get", @"arrangement.matrix", @"automation.pattern.get", @"automation.pattern.copy", @"mixer.get", @"mixer.meters"
     ];
-    NSArray *writes = @[@"plugin.editor.open", @"plugin.editor.close", @"plugin.parameters.preview.set", @"plugin.parameters.preview.commit", @"plugin.parameters.preview.cancel",
+    NSArray *writes = @[@"plugin.path.scan", @"plugin.path.set", @"graph.plugin.path.scan", @"graph.plugin.path.set", @"plugin.editor.open", @"plugin.editor.close", @"plugin.parameters.preview.set", @"plugin.parameters.preview.commit", @"plugin.parameters.preview.cancel",
       @"automation.recording.start", @"automation.recording.capture", @"automation.recording.stop", @"automation.recording.commit", @"automation.recording.discard",
       @"graph.plugin.preview.set", @"graph.plugin.preview.commit", @"graph.plugin.preview.cancel",
       @"sample.renderSelection", @"sample.recording.start", @"sample.recording.stop", @"sample.recording.commit", @"sample.recording.discard",
@@ -63,6 +66,7 @@
     const bool mutation = [writes containsObject:method];
     const bool parameterRecording=[method hasPrefix:@"automation.recording."];
     const bool pluginEditor=[method isEqual:@"plugin.editor.open"]||[method isEqual:@"plugin.editor.close"];
+    const bool pluginLocation=[method hasPrefix:@"plugin.path."]||[method hasPrefix:@"graph.plugin.path."];
     const bool clearRecorded=[method isEqual:@"automation.recorded.clear"];
     if(clearRecorded){keys(p,@[@"expectedRevision",@"dryRun"]);if(p[@"dryRun"])(void)boolean(p[@"dryRun"]);}
     // Stop/discard belong to an exact retained take, independent of document
@@ -79,7 +83,8 @@
       throw Error(-32001, "Song changed; read its current revision and prepare the edit again");
     if (mutation && !libraryMutation && ![method isEqual:@"graph.signal.clear"] && ![method isEqual:@"graph.scope.watch"] && ![method isEqual:@"graph.listen.set"] && ![method hasPrefix:@"sample.clipboard."] && ![method hasPrefix:@"transport."])
       require(_document->editable(), "This document is read-only");
-    if(mutation&&!parameterRecording&&!pluginEditor&&!_parameterPreviewCommitting&&![method isEqual:@"document.exportModule"]&&![method isEqual:@"document.exportAudio"]&&![method hasPrefix:@"plugin.parameters.preview."]&&![method hasPrefix:@"graph.plugin.preview."]&&!(p[@"dryRun"]&&boolean(p[@"dryRun"]))&&!(clearRecorded&&_automation.empty())) [self cancelParameterPreview];
+    if(pluginLocation&&mutation)require(!_parameterPreview.active()&&!_recipePreview.active(),"Finish or cancel the retained parameter preview before changing plugin locations");
+    if(mutation&&!parameterRecording&&!pluginEditor&&!pluginLocation&&!_parameterPreviewCommitting&&![method isEqual:@"document.exportModule"]&&![method isEqual:@"document.exportAudio"]&&![method hasPrefix:@"plugin.parameters.preview."]&&![method hasPrefix:@"graph.plugin.preview."]&&!(p[@"dryRun"]&&boolean(p[@"dryRun"]))&&!(clearRecorded&&_automation.empty())) [self cancelParameterPreview];
     const bool wasPlaying = self.playing;
     auto &song = _document->song();
     id result = @{};
@@ -386,6 +391,7 @@
       result = info;
 #include "TrackAPI.inc"
 #include "MixerAPI.inc"
+#include "PluginPathAPI.inc"
 #include "GraphPluginAPI.inc"
 #include "SignalGraphAPI.inc"
     } else if ([method isEqual:@"arrangement.get"]) {
@@ -1627,13 +1633,13 @@
     };
   } catch (const std::exception &e) {
     auto apiError = dynamic_cast<const Automation::Error *>(&e);
-    if (error)
+    if (error) {
+      NSMutableDictionary *details=[@{NSLocalizedDescriptionKey:@(e.what()),@"revision":self.automationRevision} mutableCopy];
+      if(locationSet&&!locationCommitStarted)details[@"writeOutcome"]=@"notCommitted";
       *error = [NSError errorWithDomain:@"ResonanceAPI"
                                    code:apiError ? apiError->code : -32003
-                               userInfo:@{
-                                 NSLocalizedDescriptionKey : @(e.what()),
-                                 @"revision" : self.automationRevision
-                               }];
+                               userInfo:details];
+    }
     return nil;
   }
 }

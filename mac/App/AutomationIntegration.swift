@@ -78,7 +78,9 @@ extension AppController {
     // retained take rather than being retried through the manual edit prefix.
     let retainedTransportExit = session.parameterRecordingTakeID != nil && (method == "transport.stop" || method == "transport.panic")
     let retainedEditorExit = session.parameterRecordingTakeID != nil && method == "plugin.editor.close"
-    let edits = method == "document.exportModule" || method == "document.exportAudio" || method.hasPrefix("automation.recording.") || retainedRecovery || retainedTransportExit || retainedEditorExit ? 0 :
+    let locationInspection = (method.hasPrefix("plugin.path.") || method.hasPrefix("graph.plugin.path.")) &&
+      (!method.hasSuffix(".set") || params["dryRun"] as? Bool == true)
+    let edits = locationInspection || method == "document.exportModule" || method == "document.exportAudio" || method.hasPrefix("automation.recording.") || retainedRecovery || retainedTransportExit || retainedEditorExit ? 0 :
       session.collectPluginEdits(pluginEditor.record.state == .on, error: &error)
     if edits > 0 && session.parameterRecordingTakeID == nil {
       dirty = true
@@ -136,7 +138,11 @@ extension AppController {
       DispatchQueue.main.async {
         let response: [String: Any]
         if let result { response = ["result": result] }
-        else { response = AutomationServer.error(error?.code ?? -32003, error?.localizedDescription ?? "Operation failed", data: ["revision": revision]) }
+        else {
+          var data:[String:Any] = ["revision":revision]
+          if let outcome=error?.userInfo["writeOutcome"] as? String {data["writeOutcome"]=outcome}
+          response = AutomationServer.error(error?.code ?? -32003, error?.localizedDescription ?? "Operation failed", data:data)
+        }
         self.pluginRecordingInput.observe(method, response: response)
         self.busy = false
         if changed {
