@@ -17,6 +17,7 @@ final class SongAutomationEditor: NSView, NSSearchFieldDelegate {
   private(set) var catalog=[[String:Any]](),filtered=[[String:Any]](),points=[[String:Any]]()
   private(set) var pending=false,hasDraft=false,fieldDraft=false,failed=false
   private var generation=0,setting=false,unitIndex=0
+  private var displayedPoint:(frame:Int,value:Double,time:String,valueText:String)?
   private var work:DispatchWorkItem?,waiters=[(Bool)->Void](),dragWasDirty=false
   private var selectionFrame:Int? {canvas.selected.flatMap{points.indices.contains($0) ? points[$0]["frame"] as? Int:nil}}
   private var target:[String:Any]? {catalog.first{$0["id"] as? Int==parameterID}}
@@ -90,7 +91,7 @@ final class SongAutomationEditor: NSView, NSSearchFieldDelegate {
   private func load(plugin wanted:String,parameter desired:Int?) {
     guard !pending,let context=onContext?(),let request=onRequest else{return}
     let chosen=context.nativePlugins.firstIndex{$0["instanceID"] as? String==wanted} ?? (wanted.isEmpty ? context.nativePlugins.indices.first:nil)
-    guard let chosen,let id=context.nativePlugins[chosen]["instanceID"] as? String else{status.stringValue="Captured plugin is unavailable. Choose a plugin from the rack.";return}
+    guard let chosen,let id=context.nativePlugins[chosen]["instanceID"] as? String else{fail("Captured plugin is unavailable. Choose a plugin from the rack.");return}
     let expected=context.revisionToken,token=generation,oldFrame=selectionFrame
     let same=pluginID==id && desired==parameterID && revision.split(separator:":").first==expected.split(separator:":").first
     pending=true;canvas.allowsEditing=false
@@ -115,6 +116,7 @@ final class SongAutomationEditor: NSView, NSSearchFieldDelegate {
         self.canvas.allowsEditing=self.target?["writable"] as? Bool != false && self.parameterID != nil
         self.plugin.removeAllItems();for p in context.nativePlugins{let item=NSMenuItem(title:p["name"] as? String ?? "Plugin",action:nil,keyEquivalent:"");item.representedObject=p["instanceID"];self.plugin.menu?.addItem(item)};self.plugin.selectItem(at:chosen)
         self.filter();self.showPoint();if !same{self.fit()};self.status.stringValue="\(self.points.count) points · saved song time · Undo restores each edit."
+        self.complete(true)
       }
     }};readPage()
   }
@@ -135,6 +137,10 @@ final class SongAutomationEditor: NSView, NSSearchFieldDelegate {
   func showPoint(){guard !fieldDraft else{return};setting=true;defer{setting=false}
     pointIndex.stringValue=String(canvas.selected ?? -1)
     if let i=canvas.selected,points.indices.contains(i){time.stringValue=unitIndex==0 ? String(format:"%.10g",Double(points[i]["frame"] as! Int)/48000):String(points[i]["frame"] as! Int);value.stringValue=String(format:"%.9g",(points[i]["value"] as! NSNumber).doubleValue)}else{time.stringValue="0";value.stringValue=String(format:"%.9g",(target?["value"] as? NSNumber)?.doubleValue ?? minimum)}
+    displayedPoint=canvas.selected.flatMap { i in
+      guard points.indices.contains(i) else{return nil}
+      return (points[i]["frame"] as! Int,(points[i]["value"] as! NSNumber).doubleValue,time.stringValue,value.stringValue)
+    }
     updateAccessiblePoint()
   }
   private func updateAccessiblePoint(){
@@ -144,14 +150,18 @@ final class SongAutomationEditor: NSView, NSSearchFieldDelegate {
     canvas.setAccessibilityValue("\(points.count) song points; selected time \(position), value \(String(format:"%.9g",scalar))")
   }
   @discardableResult private func acceptFields()->Bool {
-    guard parameterID != nil,target?["writable"] as? Bool != false,let t=Double(time.stringValue),t.isFinite,t>=0,let v=Double(value.stringValue),v.isFinite,v>=minimum,v<=maximum else{fail("Enter a finite time and a value within the parameter's native range.");return false}
+    let original=displayedPoint.flatMap { $0.frame==selectionFrame ? $0:nil }
+    let unchangedValue=original.flatMap{value.stringValue==$0.valueText ? $0.value:nil}
+    guard parameterID != nil,target?["writable"] as? Bool != false,let t=Double(time.stringValue),t.isFinite,t>=0,let v=unchangedValue ?? Double(value.stringValue),v.isFinite,v>=minimum,v<=maximum else{fail("Enter a finite time and a value within the parameter's native range.");return false}
     let raw=t*(unitIndex==0 ? 48000:1)
     guard raw<=Double(Self.maxFrame),(unitIndex==0 || raw.rounded()==raw) else{fail("Use seconds up to 604800, or whole 48 kHz frames.");return false}
-    let frame=Int(raw.rounded()),selected=canvas.selected
+    let selected=canvas.selected
+    let frame=original.flatMap{time.stringValue==$0.time ? $0.frame:nil} ?? Int(raw.rounded())
     guard !points.enumerated().contains(where:{$0.offset != selected && $0.element["frame"] as? Int==frame}) else{fail("Another point occupies this frame; your fields are retained.");return false}
     var next=points;if let selected,next.indices.contains(selected){next.remove(at:selected)}
     guard next.count<100000 else{fail("Automation is limited to 100000 points.");return false}
     next.append(["frame":frame,"value":v]);next.sort{($0["frame"] as! Int)<($1["frame"] as! Int)}
+    displayedPoint=(frame,v,time.stringValue,value.stringValue)
     fieldDraft=false;if !(next as NSArray).isEqual(points as NSArray){points=next;renderPoints();canvas.selected=points.firstIndex{$0["frame"] as? Int==frame};changed()};updateAccessiblePoint();return true
   }
   @objc func setPoint(){guard !pending else{return};if acceptFields(){schedule()}}
@@ -183,7 +193,7 @@ final class SongAutomationEditor: NSView, NSSearchFieldDelegate {
   private func open(_ pattern:Bool){afterEdits{[weak self] in guard let self,let id=self.parameterID else{return};self.onOpen?(self.pluginID,id,pattern)}}
   private func lastTouched(){afterEdits{[weak self] in guard let self,!self.pending,let request=self.onRequest else{return};self.pending=true
     request("automation.target.get",[:]){[weak self] response in guard let self else{return};self.pending=false
-      guard let result=response["result"] as? [String:Any],let data=result["data"] as? [String:Any],let target=data["target"] as? [String:Any],let plugin=target["plugin"] as? String,let id=target["parameter"] as? Int else{self.status.stringValue="No available last-touched parameter.";return};self.load(plugin:plugin,parameter:id)
+      guard let result=response["result"] as? [String:Any],let data=result["data"] as? [String:Any],let target=data["target"] as? [String:Any],let plugin=target["plugin"] as? String,let id=target["parameter"] as? Int else{self.fail("No available last-touched parameter.");return};self.load(plugin:plugin,parameter:id)
     }
   }}
   func fit(){let first=Double(points.first?["frame"] as? Int ?? 0),last=Double(points.last?["frame"] as? Int ?? 384000),width=max(points.count>1 ? 1:48000,(last-first)*1.1);canvas.valueLow=0;canvas.valueHigh=1;canvas.setViewport(start:max(0,first-(width-(last-first))/2),span:width)}

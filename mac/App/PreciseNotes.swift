@@ -548,8 +548,10 @@ final class PreciseNotesEditor:NSView,NSTableViewDataSource,NSTableViewDelegate,
       guard let result=reply["result"] as? [String:Any],let next=result["revision"] as? String else{self.failure(reply);return}
       self.revision=next;if !dryRun {self.events=replacement;self.originalDraft=submittedDraft;if self.fieldValues==submittedFields {self.originalFields=submittedFields};self.moveLegacyEffect=false}
       self.status.stringValue=dryRun ? "Edit is valid.":"Saved · Undo restores the previous notes.";self.controls()
-      if !dryRun,self.hasDraft,!self.inlineInvalid {self.scheduleSave()}
-      else if !dryRun {self.finishBoundaries(!self.hasDraft)}
+      if self.hasDraft {
+        guard !self.inlineInvalid,self.saveSelectedFields() else{self.finishBoundaries(false);return}
+        if !self.boundaryWaiters.isEmpty {self.apply(dryRun:false)}else{self.scheduleSave()}
+      } else {self.finishBoundaries(true)}
     }
   }
   func numberOfRows(in tableView:NSTableView)->Int {draft.count}

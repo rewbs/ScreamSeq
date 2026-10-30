@@ -2,6 +2,8 @@ import AppKit
 
 extension InterfaceTests {
   static func songAutomationChecks() throws {
+    try songAutomationReadBoundaryChecks()
+    try automationPointOwnershipChecks()
     try audioSettingsChecks()
     try instrumentAutomaticChecks()
     try activityDraftChecks()
@@ -51,6 +53,59 @@ extension InterfaceTests {
     stored=[]
     editor.reload();try require(editor.points.isEmpty && !editor.hasDraft,"Explicit Reload discards the retained lane draft")
     print("PASS song automation: frame precision, captured targets, search, retained viewport, ordered Save and refused drafts")
+  }
+  static func songAutomationReadBoundaryChecks() throws {
+    let editor=SongAutomationEditor(frame:.zero)
+    let model=PatternModel(["revisionToken":"song:1","nativePlugins":[["instanceID":"a","name":"Fixture"]]]),scalar=0.123456789123
+    var requests=[(String,[String:Any],([String:Any])->Void)](),finished=[Bool]()
+    editor.onContext={model};editor.onRequest={requests.append(($0,$1,$2))}
+    func answer(_ data:Any){requests.removeFirst().2(["result":["revision":"song:1","data":data]])}
+    let catalog:[[String:Any]]=[["id":7,"min":scalar,"max":1,"writable":true]]
+    let latePoints:[[String:Any]]=[["slot":0,"id":7,"frame":28_000_000_001,"value":scalar]]
+    let earlyPoints:[[String:Any]]=[["slot":0,"id":7,"frame":48001,"value":scalar]]
+    editor.inspect(plugin:"a",parameter:7)
+    editor.finishAutomaticEdit{finished.append($0)}
+    answer(["points":latePoints,"total":1,"sampleRate":48000])
+    editor.finishAutomaticEdit{finished.append($0)}
+    try require(finished.isEmpty,"Save and close wait through both lane read stages")
+    answer(catalog)
+    try require(finished==[true,true] && !editor.pending && editor.points.count==1,"Successful lane load releases every waiting boundary")
+    editor.value.stringValue="0.25";editor.controlTextDidChange(Notification(name:NSControl.textDidChangeNotification,object:editor.value));editor.finishAutomaticEdit{finished.append($0)}
+    try require((requests[0].1["points"] as! [[String:Any]])[0]["frame"] as? Int==28_000_000_001,"Value-only edits preserve exact late-song frame: request=\(requests[0].1), fields=\(editor.time.stringValue), points=\(editor.points)")
+    answer([:])
+    editor.reload();answer(["points":earlyPoints,"total":1,"sampleRate":48000]);answer(catalog)
+    editor.canvas.selected=0;editor.showPoint()
+    editor.time.stringValue="2";editor.controlTextDidChange(Notification(name:NSControl.textDidChangeNotification,object:editor.time));editor.finishAutomaticEdit{finished.append($0)}
+    try require(requests.count==1,"Time-only editing dispatches one lane write")
+    let moved=(requests[0].1["points"] as! [[String:Any]])[0]
+    try require(moved["frame"] as? Int==96000 && moved["value"] as? Double==scalar,"Time-only edits preserve the untouched native parameter value exactly")
+    answer([:]);let count=finished.count;editor.setPoint()
+    try require(!editor.hasDraft && requests.isEmpty,"Accepting unchanged point fields cannot round the native value")
+    editor.reload();editor.finishAutomaticEdit{finished.append($0)};requests.removeFirst().2(["error":["message":"Read failed"]])
+    try require(finished.count==count+1 && finished.last==false,"Failed reads release Save without discarding the prior lane")
+    editor.reload();answer(["points":[],"total":0,"sampleRate":48000]);editor.finishAutomaticEdit{finished.append($0)};requests.removeFirst().2(["error":["message":"Catalog failed"]])
+    try require(finished.count==count+2 && finished.last==false,"Failed parameter catalogs also release Save")
+  }
+  static func automationPointOwnershipChecks() throws {
+    let pattern=PatternAutomationEditor(frame:.zero),graph=GraphEnvelopeEditor(frame:.zero)
+    pattern.parameterID=7
+    let original=[EnvelopePoint(position:0,value:0.25,curve:"linear"),EnvelopePoint(position:256,value:0.75,curve:"linear")]
+    for (canvas,field,show,change,commit,ramp) in [
+      (pattern.canvas,pattern.pointValue,{pattern.showPoint()},{pattern.controlTextDidChange($0)},{pattern.setPoint()},{pattern.ramp(false);pattern.addPointAtCursor()}),
+      (graph.canvas,graph.value,{graph.showPoint()},{graph.controlTextDidChange($0)},{graph.setPoint()},{graph.ramp()})
+    ] as [(AutomationCanvas,NSTextField,()->Void,(Notification)->Void,()->Void,()->Void)] {
+      canvas.frame=NSRect(x:0,y:0,width:600,height:240);canvas.points=original;canvas.selected=0;show()
+      let window=NSWindow(contentRect:canvas.frame,styleMask:[],backing:.buffered,defer:false);window.contentView=canvas
+      field.stringValue="unfinished";change(Notification(name:NSControl.textDidChangeNotification,object:field));commit()
+      let event=NSEvent.mouseEvent(with:.leftMouseDown,location:canvas.convert(canvas.location(original[1]),to:nil),modifierFlags:[],timestamp:0,windowNumber:window.windowNumber,context:nil,eventNumber:0,clickCount:1,pressure:1)!
+      canvas.mouseDown(with:event);canvas.mouseUp(with:event)
+      func press(_ code:UInt16){canvas.keyDown(with:NSEvent.keyEvent(with:.keyDown,location:.zero,modifierFlags:[],timestamp:0,windowNumber:window.windowNumber,context:nil,characters:"",charactersIgnoringModifiers:"",isARepeat:false,keyCode:code)!)}
+      press(48);press(124);canvas.removeSelected();ramp()
+      try require(canvas.selected==0 && canvas.points==original && field.stringValue=="unfinished","Invalid curve fields retain their original point through mouse, keyboard, delete and replacement actions")
+      field.stringValue="40";change(Notification(name:NSControl.textDidChangeNotification,object:field));commit()
+      try require(canvas.points[0].value==0.4 && canvas.points[1]==original[1],"Corrected curve fields apply only to the original point")
+      press(48);try require(canvas.selected==1,"Point navigation resumes once fields are accepted")
+    }
   }
   static func audioSettingsChecks() throws {
     let editor=AudioSettingsEditor(frame:.zero)

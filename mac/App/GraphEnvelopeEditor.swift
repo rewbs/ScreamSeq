@@ -29,6 +29,7 @@ final class GraphEnvelopeEditor:NSView,NSTextFieldDelegate {
     for field in [row,value]{field.target=self;field.action=#selector(commitPointField);field.toolTip="Commits on Return or leaving the field"}
     formula.font = .monospacedSystemFont(ofSize:11,weight:.regular);formula.isHidden=true
     canvas.onEdit = {[weak self] in self?.markDraft()};canvas.onSelect = {[weak self] in self?.showPoint()};canvas.onViewport = {[weak self] in self?.preview()}
+    canvas.beforeInteraction = {[weak self] in self?.pointFieldsDirty == false}
     canvas.onEditFinished = {[weak self] in self?.apply()}
     canvas.setAccessibilityLabel("Graph pattern automation curve");canvas.heightAnchor.constraint(greaterThanOrEqualToConstant:140).isActive=true
     let controls=stack(.vertical,[stack(.horizontal,[heading,pattern,enabled,NSView()],spacing:4),stack(.horizontal,[curve,snap,NSView(),ActionButton("−"){[weak self] in self?.canvas.zoom(0.5)},ActionButton("+"){[weak self] in self?.canvas.zoom(2)},ActionButton("Fit"){[weak self] in self?.canvas.fit()}],spacing:4)],spacing:4)
@@ -156,7 +157,7 @@ final class GraphEnvelopeEditor:NSView,NSTextFieldDelegate {
     pointFieldsDirty=false
     canvas.replaceSelected(position:position,value:v/100,curve:curves[max(0,curve.indexOfSelectedItem)])
   }
-  func ramp(){pointFieldsDirty=false;canvas.points=[EnvelopePoint(position:0,value:0,curve:"linear"),EnvelopePoint(position:canvas.rows*256-1,value:1,curve:"linear")];canvas.selected=0;showPoint();markDraft()}
+  func ramp(){guard !pointFieldsDirty else{return};canvas.points=[EnvelopePoint(position:0,value:0,curve:"linear"),EnvelopePoint(position:canvas.rows*256-1,value:1,curve:"linear")];canvas.selected=0;showPoint();markDraft()}
   private func completeAutomaticEdit(_ accepted:Bool){let callbacks=completionWaiters;completionWaiters=[];for callback in callbacks{callback(accepted)}}
   func finishAutomaticEdit(_ done:@escaping(Bool)->Void){
     guard !automaticEditFailed,!canvas.isDragging else{done(false);return}

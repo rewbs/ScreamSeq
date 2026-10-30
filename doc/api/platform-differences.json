@@ -3,7 +3,7 @@
   "policy": "Evidence ratchet only. Baseline matches are not parity passes, loss waivers, or permission to skip release gates. Intentional changes require reviewing exact vectors, inventory and native behavior on both platforms.",
   "schema": {
     "path": "mac/Tools/resonance-api.schema.json",
-    "sha256": "a3eab460df45b8b2345034e921e01f50341e1f973a651b06dc37877224794be3",
+    "sha256": "f3e12f8c8cd4469037899dc4e9925aca8c3ce9678dcbdd1e0b0fbad89624e946",
     "review20261023": "Source review f4d0fb7a4/a33b7dca9: seven native-take descriptions now describe guarded Mac VST3 processing verification; Commit adds strict optional boolean restoreSavedState with completed/stopped/closed-editor guards. Method inventory and expected vector outcomes are unchanged. New behavior awaits native qualification; see doc/windows-parity-plan-2026-10-09/LIVE-PARAMETER-RELEASE-2026-10-23.md.",
     "methods": [
       "api.describe",
@@ -266,7 +266,8 @@
     ],
     "review20261024": "Source adds guarded accepted-state document.exportAudio on both platforms, with shared WAV rendering and native atomic publication. Inventory reviewed; runtime qualification pending. See AUDIO-EXPORT-2026-10-24.md. No parity/performance gate is waived.",
     "review20261028": "Advanced gate PR: the five native-command enumerations and nativePatternCommand definition accept gate/gate-stop, with typed target, range, timing, shape and binding constraints. The method inventory and existing vector expectations are unchanged. Both adapters use the shared command validator and stable parameter-binding rules. Gate session, socket, persistence and rendered-audio tests were added; Windows native runtime qualification remains pending.",
-    "macParityReview20261028": "Adds the existing Windows audio.devices.get, audio.settings.get/set and midi.devices.get, midi.settings.get/set workflows to the shared schema and Mac adapter. Device identifiers remain platform-specific. Separate settings revisions, dry-run/no-op and strict invalid-input guards are tested by mac/Tests/test_mac_parity.py. No broader parity claim."
+    "macParityReview20261028": "Adds the existing Windows audio.devices.get, audio.settings.get/set and midi.devices.get, midi.settings.get/set workflows to the shared schema and Mac adapter. Device identifiers remain platform-specific. Separate settings revisions, dry-run/no-op and strict invalid-input guards are tested by mac/Tests/test_mac_parity.py. No broader parity claim.",
+    "review20261030Audio": "Mark Core Audio settings and device inventory application-only: the windowless TrackerSession host does not own the audio device."
   },
   "platforms": {
     "windows": {

@@ -23600,7 +23600,8 @@
         "method",
         "params"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "x-application-only": true
     },
     {
       "type": "object",
@@ -23657,7 +23658,8 @@
         "method",
         "params"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "x-application-only": true
     }
   ],
   "$defs": {

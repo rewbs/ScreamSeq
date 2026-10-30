@@ -163,7 +163,7 @@ final class AutomationCanvas: NSView {
     onEdit?(); onSelect?()
   }
   func removeSelected() {
-    guard allowsEditing, let selected, points.indices.contains(selected) else { return }
+    guard allowsEditing,beforeInteraction?() ?? true,let selected,points.indices.contains(selected) else { return }
     guard !fixedPositions.contains(points[selected].position) else { return }
     points.remove(at: selected); self.selected = nil; onEdit?(); onSelect?()
   }
@@ -279,6 +279,7 @@ final class PatternAutomationEditor: NSView, NSTableViewDataSource, NSTableViewD
     for field in [pointRow,pointValue] {field.delegate=self;field.target=self;field.action=#selector(setPoint)}
     enabled.state = .on; enabled.target = self; enabled.action = #selector(markDraft)
     canvas.onEdit = { [weak self] in self?.markDraft() }
+    canvas.beforeInteraction = {[weak self] in self?.pointFieldsDirty == false}
     canvas.onEditFinished = {[weak self] in self?.apply()}
     canvas.onSelect = { [weak self] in self?.showPoint() }
     canvas.onViewport = { [weak self] in
@@ -550,7 +551,7 @@ final class PatternAutomationEditor: NSView, NSTableViewDataSource, NSTableViewD
     canvas.replaceSelected(position: position, value: value / 100, curve: curves[max(0, curve.indexOfSelectedItem)])
   }
   func addPointAtCursor() {
-    guard parameterID != nil, !loading else { return }
+    guard parameterID != nil,!loading,!pointFieldsDirty else { return }
     let position = max(0,min(canvas.rows * 256 - 1,Int(canvas.editPosition ?? 0)))
     if let existing=canvas.points.firstIndex(where: { $0.position==position }) { canvas.selected=existing; showPoint(); return }
     canvas.points.append(EnvelopePoint(position:position,value:0.5,curve:canvas.curve,formula:canvas.curve == "scripted" ? "mix(start, end, t)" : ""))
@@ -558,7 +559,7 @@ final class PatternAutomationEditor: NSView, NSTableViewDataSource, NSTableViewD
     markDraft(); showPoint()
   }
   func ramp(_ down: Bool) {
-    guard parameterID != nil else { return }
+    guard parameterID != nil,!pointFieldsDirty else { return }
     canvas.points = [EnvelopePoint(position: 0, value: down ? 1 : 0, curve: canvas.curve, formula: canvas.curve == "scripted" ? "mix(start, end, t)" : ""),
                      EnvelopePoint(position: canvas.rows * 256 - 1, value: down ? 0 : 1, curve: canvas.curve, formula: canvas.curve == "scripted" ? "mix(start, end, t)" : "")]
     canvas.selected = 0; markDraft(); showPoint()
