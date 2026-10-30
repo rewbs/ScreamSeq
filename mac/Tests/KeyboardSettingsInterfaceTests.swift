@@ -52,5 +52,18 @@ extension InterfaceTests {
     try require(editor.low.stringValue=="unfinished mapping" && editor.status.stringValue=="Stale keyboard settings",
       "Refused keyboard settings retain raw text and the captured revision until explicit reload")
     editor.load();try require(editor.low.stringValue=="ZSXDCVGBHNJM","Explicit keyboard Reload discards only the preference draft")
+    let oldMenu=NSApp.mainMenu;defer{NSApp.mainMenu=oldMenu}
+    let menu=NSMenu(),play=NSMenuItem(title:"Play / Stop",action:NSSelectorFromString("playOrStop"),keyEquivalent:"")
+    menu.addItem(play);NSApp.mainMenu=menu
+    let contextual=WorkspaceCommandPalette();contextual.persistPreferences=false
+    contextual.additionalMenus={let graph=NSMenu(title:"Graph");graph.addItem(ContextAction("Open plugin",id:"graph.openPlugin",key:"\r",run:{}));return [graph]}
+    contextual.collect()
+    let playID=contextual.entries.first(where:WorkspaceCommandPalette.isTransport)!.id
+    try require(contextual.setShortcut(playID,keys:["return"])==nil,
+      "Pattern-only Return transport coexists with the graph's local Return action in the full command catalog")
+    let globalReturn=NSMenuItem(title:"Global Return",action:#selector(NSObject.description),keyEquivalent:"\r");globalReturn.keyEquivalentModifierMask=[]
+    menu.addItem(globalReturn);contextual.collect()
+    try require(contextual.validateShortcut(playID,keys:["return"]) != nil,
+      "A true global Return collision still rejects transport remapping")
   }
 }

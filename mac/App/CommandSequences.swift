@@ -52,6 +52,9 @@ extension WorkspaceCommandPalette {
       guard allowUnmodified || localTransport || !first.modifiers.intersection([.command,.control,.option]).isEmpty else{return "The first key needs cmd, ctrl or opt to preserve note entry"}
       for other in entries where other.id != id {
         let existing=shortcutKeys(other).compactMap(WorkspaceStroke.init)
+        // Bare Return transports only in PatternView. Graph/panel responders
+        // retain their own Return action, so that local binding does not collide.
+        if localTransport,first.key=="\r",isContextCommand(other.id),existing==strokes {continue}
         if !existing.isEmpty && (existing.starts(with:strokes) || strokes.starts(with:existing)) {return "That sequence overlaps another shortcut"}
       }
       if sequences.conflict(strokes,except:id){return "That sequence overlaps another shortcut"}

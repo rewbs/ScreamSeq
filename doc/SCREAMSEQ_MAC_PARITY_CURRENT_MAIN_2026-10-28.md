@@ -212,6 +212,36 @@ pass for no-row refreshes, trace selection during an outstanding read, removed
 rows, recorded-origin trace points and table-owned time edits/reordering. The
 full application build and desktop confirmation follow this source checkpoint.
 
+### Full build 6 and integrated follow-up
+
+Full build 6 started at 07:25:00 UTC on `b87371d8b`, more than an hour after
+build 5. All 3,527 tracked files remained unchanged through the build; bundle
+signature verification passed. The fingerprint is
+`4d26ec8340a9597c4cb790604c0bdc9004e8e7ce79a135e6bbe219220fb86f9b`.
+The complete application socket suite passes, including the rack editor API.
+
+Computer use in the separately identified QA6 app verified populated Song
+Settings, invalid-field refusal, hidden/reopened draft retention, Command-S
+completion after correction and Undo restoring the original title/tempo.
+Keyboard settings retain invalid mappings and accept the default optional top C.
+The native-editor API opened Apple's AULowpass window visibly and closed it
+without changing document data. An accessibility lookup timed out after hiding
+Song Settings; focusing a workspace panel restored computer-use access while
+the app continued responding through its API.
+
+The integrated Mac parity socket test uncovered a separate Return-binding
+collision with the graph's local Open plugin shortcut. The follow-up source fix
+allows that local binding to coexist with Return transport, which already only
+handles Return in PatternView; true global collisions still reject. Focused
+keyboard interface regressions and full application Swift type-checking pass.
+This fix is newer than build 6 and still needs integrated app qualification;
+no second full build is permitted before 08:25:00 UTC. The failed integrated
+receipt is retained as `socket-build6-mac-parity.log`.
+
+Greptile's review of `b87371d8b` completed at 07:29:04 UTC: 73 files, zero new
+comments, confidence 5/5, all eight threads resolved. The later Return-binding
+fix requires a fresh review of its own commit.
+
 ## Remaining parity work
 
 These items are deliberately outside this checkpoint and must be resolved before

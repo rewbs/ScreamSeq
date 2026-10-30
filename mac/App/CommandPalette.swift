@@ -13,6 +13,7 @@ final class WorkspaceCommandPalette: NSObject, NSTableViewDataSource, NSTableVie
   static func isTransport(_ entry: Entry) -> Bool { entry.item.action.map(NSStringFromSelector) == "playOrStop" }
   var additionalMenus: (() -> [NSMenu])?
   private var additionalIDs = Set<String>()
+  func isContextCommand(_ id:String)->Bool {additionalIDs.contains(id)}
   var recording = false
   var capturingSequence=false,recordedSequence=[String]()
   let sequences=WorkspaceSequences()
