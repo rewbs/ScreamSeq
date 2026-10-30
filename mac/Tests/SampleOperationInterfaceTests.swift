@@ -177,7 +177,43 @@ extension InterfaceTests {
     try require(l.sampleOperation == nil && l.hasLoopDraft && l.loopStart.stringValue == "-" && l.loopDraftRevision == "original", "Copy may finish without changing audio or rebasing the retained loop draft")
     let beforeWrite = loops.calls.count; l.process(dryRun: false)
     try require(loops.calls.count == beforeWrite, "Audio writes still require the loop draft to finish")
+    for trim in [false, true] {
+      let f = SampleOperationFixture(), e = f.editor
+      e.selectionStart.stringValue = "030"; e.selectionEnd.stringValue = "50"
+      if trim { e.operationPicker.selectItem(at: 9) }
+      e.process(dryRun: false)
+      try require(e.waveform.selection == 10...20 && e.selectionStart.stringValue == "030", "Submitting typed bounds preserves presentation until readback")
+      let report: [String: Any] = trim ? ["sample": 1, "removedFrames": 1004, "resultFrames": 20] : f.processResult()
+      try f.answer(report, revision: "accepted"); try f.finishRead(frames: trim ? 20 : 1024)
+      try require(e.waveform.selection == (trim ? 0...20 : 30...50) && e.selectionStart.stringValue == (trim ? "0" : "30"), "Verified processing adopts its submitted range, including Trim's new coordinates")
+    }
+    try sampleOperationKeyboardRetryChecks()
     try sampleOperationFocusChecks()
+  }
+  static func sampleOperationKeyboardRetryChecks() throws {
+    let f = SampleOperationFixture(), e = f.editor
+    let window = NSWindow(contentRect: e.frame, styleMask: [.titled], backing: .buffered, defer: false)
+    window.isReleasedWhenClosed = false; window.contentView = e; defer { window.orderOut(nil) }
+    func expand(_ view: NSView) {
+      if let section = view as? ToolSection, section.preference == "toolSection.sample.processing" { section.setExpanded(true, persist: false) }
+      view.subviews.forEach(expand)
+    }
+    expand(e); window.layoutIfNeeded(); window.makeFirstResponder(e.processButton)
+    e.processButton.handler?()
+    try require(f.calls.count == 1 && e.processing && window.firstResponder === e.processButton, "Keyboard Apply sends one owned request without resigning its focused button")
+    let original = f.calls[0].1 as NSDictionary
+    try f.fail("notCommitted")
+    try require(window.makeFirstResponder(e.retryOperationButton), "The native retry button accepts keyboard focus")
+    e.retryOperationButton.handler?()
+    try require(e.processing && f.calls.count == 2 && original.isEqual(to: f.calls[1].1) && window.firstResponder === e.retryOperationButton,
+      "Keyboard activation retries the exact refused payload while capturing the retry button's focus")
+    var done = [Bool](); e.finishAutomaticEdit { done.append($0) }
+    try f.answer(f.processResult(), revision: "accepted"); try f.finishRead()
+    try require(e.sampleOperation == nil && !e.hasDraft && done == [true], "Keyboard retry can complete readback and release waiting Save")
+    // Focus may change freely at activation, but text and musical ownership may not.
+    e.process(dryRun: false); try f.fail("notCommitted"); let count = f.calls.count
+    window.makeFirstResponder(e.retryOperationButton); e.gain.stringValue = "-9"; e.retryOperationButton.handler?()
+    try require(f.calls.count == count && e.sampleOperation != nil && !e.processing, "Keyboard retry still refuses newer raw input")
   }
   static func sampleOperationFocusChecks() throws {
     let f = SampleOperationFixture(), e = f.editor

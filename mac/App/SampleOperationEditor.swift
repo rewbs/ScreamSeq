@@ -7,7 +7,7 @@ final class SampleOperation {
   let dryRun: Bool, signature: NSDictionary, fields: [String: String], options: [Int]
   let settingsGeneration: Int, loopGeneration: Int, region: SampleViewRegion, channels: String
   weak var responder: NSResponder?
-  let focusedField: Int?, caret: NSRange?
+  var focusedField: Int?, caret: NSRange?
   var params: [String: Any]
   var busy = true, submitted = false, retryable = false
   var acceptedRevision: String?, result: [String: Any]?, reviewed: SampleOperationRead?
@@ -17,10 +17,13 @@ final class SampleOperation {
     fields = editor.drawingFields; options = editor.sampleSelectionOptions
     settingsGeneration = editor.settingsEditGeneration; loopGeneration = editor.loopEditGeneration
     region = SampleViewRegion(editor); channels = editor.waveformChannels
-    responder = editor.window?.firstResponder; focusedField = editor.focusedSampleField
-    caret = focusedField.flatMap { (editor.sampleEditingFields[$0].currentEditor() as? NSTextView)?.selectedRange() }
+    captureFocus(editor)
     self.params["expectedRevision"] = revision
     if method != "sample.clipboard.copy" { self.params["dryRun"] = dryRun }
+  }
+  func captureFocus(_ editor: SampleEditor) {
+    responder = editor.window?.firstResponder; focusedField = editor.focusedSampleField
+    caret = focusedField.flatMap { (editor.sampleEditingFields[$0].currentEditor() as? NSTextView)?.selectedRange() }
   }
   var usesClipboard: Bool { ["sample.clipboard.copy", "sample.cut", "sample.paste"].contains(method) }
 }
@@ -41,12 +44,19 @@ extension SampleEditor {
   }
   func updateOperationActions() {
     let busy = sampleOperation?.busy == true, retained = sampleOperation != nil
-    retryOperationButton.isHidden = !retained; reviewOperationButton.isHidden = !retained; acceptOperationButton.isHidden = !retained
-    retryOperationButton.isEnabled = !busy && sampleOperation?.retryable == true
-    reviewOperationButton.isEnabled = !busy && sampleOperation?.submitted == true
-    acceptOperationButton.isEnabled = !busy && sampleOperation?.reviewed != nil
-    previewButton.isEnabled = !protectsSampleOperation; processButton.isEnabled = !protectsSampleOperation
-    crossfadePreviewButton.isEnabled = !protectsSampleOperation; crossfadeApplyButton.isEnabled = !protectsSampleOperation
+    let recovery = [retryOperationButton, reviewOperationButton, acceptOperationButton]
+    if !retained, recovery.contains(where: { window?.firstResponder === $0 }) { window?.makeFirstResponder(self) }
+    recovery.forEach { $0.isHidden = !retained }
+    func enable(_ button: NSButton, _ permitted: Bool) {
+      // Disabling the focused AppKit button resigns first responder. The owned
+      // action guards reject duplicate activation while its focus stays put.
+      button.isEnabled = permitted || window?.firstResponder === button
+    }
+    enable(retryOperationButton, !busy && sampleOperation?.retryable == true)
+    enable(reviewOperationButton, !busy && sampleOperation?.submitted == true)
+    enable(acceptOperationButton, !busy && sampleOperation?.reviewed != nil)
+    enable(previewButton, !protectsSampleOperation); enable(processButton, !protectsSampleOperation)
+    enable(crossfadePreviewButton, !protectsSampleOperation); enable(crossfadeApplyButton, !protectsSampleOperation)
   }
   func operationMessage(_ method: String, _ text: String) {
     operationStatus.stringValue = text
@@ -64,12 +74,12 @@ extension SampleEditor {
   func ownsOperation(_ operation: SampleOperation) -> Bool {
     sampleOperation === operation && index == operation.sample && sampleGeneration == operation.generation && settingsIdentity == operation.identity
   }
-  func operationFieldsUnchanged(_ operation: SampleOperation) -> Bool {
+  func operationFieldsUnchanged(_ operation: SampleOperation, includingFocus: Bool = true) -> Bool {
     drawingFields == operation.fields && sampleSelectionOptions == operation.options &&
       settingsEditGeneration == operation.settingsGeneration && loopEditGeneration == operation.loopGeneration &&
       SampleViewRegion(self) == operation.region && waveformChannels == operation.channels && !hasSampleComposition &&
-      window?.firstResponder === operation.responder && focusedSampleField == operation.focusedField &&
-      focusedSampleField.flatMap({ (sampleEditingFields[$0].currentEditor() as? NSTextView)?.selectedRange() }) == operation.caret
+      (!includingFocus || (window?.firstResponder === operation.responder && focusedSampleField == operation.focusedField &&
+      focusedSampleField.flatMap({ (sampleEditingFields[$0].currentEditor() as? NSTextView)?.selectedRange() }) == operation.caret))
   }
   func beginOperation(_ method: String, params: [String: Any], dryRun: Bool = false, previewRevision: String? = nil) -> SampleOperation? {
     let mayKeepLoops = dryRun || method == "sample.clipboard.copy"
@@ -141,6 +151,10 @@ extension SampleEditor {
   }
   func retryOperation() {
     guard let operation = sampleOperation, !operation.busy, operation.retryable else { return }
+    guard operationFieldsUnchanged(operation, includingFocus: false) else { retainOperation(operation, "Newer sample input kept"); return }
+    // Keyboard navigation to Retry is intentional. Preserve this activation's
+    // focus during completion without changing the captured edit or revision.
+    operation.captureFocus(self)
     submitOperation(operation)
   }
   func operationResult(_ response: [String: Any], _ operation: SampleOperation, revision: String?) -> [String: Any]? {
@@ -184,7 +198,11 @@ extension SampleEditor {
         guard let result = self.operationResult(response, operation, revision: current), let info = result["data"] as? [String: Any], self.validDrawingInfo(info, sample), let frames = info["frames"] as? Int else { done(nil); return }
         var region = (copied ? SampleViewRegion(frames: 0) : operation.region).clamped(to: frames)
         if revision != nil {
-          if ["sample.cut", "sample.delete"].contains(operation.method), let first = operation.params["start"] as? Int, first <= frames {
+          if ["sample.process", "sample.clipboard.copy"].contains(operation.method),
+            let first = operation.params["start"] as? Int, let last = operation.params["end"] as? Int {
+            let selection = operation.params["operation"] as? String == "trim" ? 0...frames : min(first, frames)...min(last, frames)
+            region = SampleViewRegion(frames: frames, viewport: region.viewport, selection: selection)
+          } else if ["sample.cut", "sample.delete"].contains(operation.method), let first = operation.params["start"] as? Int, first <= frames {
             region = SampleViewRegion(frames: frames, viewport: region.viewport, selection: first...first)
           } else if operation.method == "sample.paste", let first = operation.result?["start"] as? Int, let count = operation.result?["insertedFrames"] as? Int,
             first >= 0, count >= 0, first <= frames, count <= frames - first {
