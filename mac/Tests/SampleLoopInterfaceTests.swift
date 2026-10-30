@@ -92,5 +92,37 @@ extension InterfaceTests {
     try answer("accepted")
     try require(editor.loopStart.integerValue == 180 && editor.loopDraftRevision == "reviewed" && editor.loopNeedsReload, "A later loop write completion cannot authorize newer text at its revision")
     editor.loopSaveWork?.cancel();editor.onRequest=nil
+    try sampleLoopRetryCompletionChecks()
+  }
+  static func sampleLoopRetryCompletionChecks() throws {
+    for action in ["Return", "checkbox", "handle release"] {
+      let editor = SampleEditor(frame: .zero)
+      editor.update(["frames": 2048, "loop": true, "loopStart": 64, "loopEnd": 1024], samples: [["index": 1, "name": "Loops"]], revision: "retry:0")
+      var calls = [[String: Any]](), replies = [([String: Any]) -> Void](), finished = [Bool]()
+      editor.onRequest = { _, params, reply in calls.append(params); replies.append(reply) }
+      editor.waveform.moveLoopMarker(.start, to: 100, finished: true)
+      let original = calls[0] as NSDictionary
+      replies.removeFirst()(["error": ["code": -32002, "message": "Busy", "data": ["writeOutcome": "notCommitted"]]])
+      editor.finishAutomaticEdit { finished.append($0) }
+      switch action {
+      case "Return":
+        editor.loopStart.stringValue = "120"
+        editor.controlTextDidChange(Notification(name: NSControl.textDidChangeNotification, object: editor.loopStart)); editor.loopFieldChanged()
+      case "checkbox": editor.sustaining.state = .on; editor.loopModeChanged(editor.sustaining)
+      default: editor.waveform.moveLoopMarker(.start, to: 120, finished: true)
+      }
+      pumpMainRunLoop(0.08)
+      try require(calls.count == 2 && original.isEqual(to: calls[1]) && editor.loopsBusy && finished.isEmpty,
+        "\(action) keeps the pending exact-payload retry alive while Save waits")
+      replies.removeFirst()(["result": ["revision": "retry:1", "data": ["loopsChanged": true]]])
+      if action == "handle release" {
+        pumpMainRunLoop(0.08)
+        try require(calls.count == 3 && calls[2]["expectedRevision"] as? String == "retry:1", "Continuous handle movement follows the acknowledged retry")
+        replies.removeFirst()(["result": ["revision": "retry:2", "data": ["loopsChanged": true]]])
+        try require(finished == [true] && !editor.hasDraft, "A completed handle retry releases Save")
+      } else {
+        try require(finished == [false] && editor.loopNeedsReload && !editor.loopsBusy, "Newer fields settle Save with retained review instead of stranding it")
+      }
+    }
   }
 }
