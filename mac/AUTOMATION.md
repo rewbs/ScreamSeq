@@ -1715,6 +1715,15 @@ are marked `x-application-only`.
 | `recovery.save` | `expectedRevision` | Force a snapshot and return the updated autosave status. Does not change the song revision or mark it saved. |
 | `recovery.restore` | `expectedRevision`, `id` from `recovery.list` | Preserve the current unsaved song in a separate recovery copy, then restore the selected copy as an unsaved document with a new revision. Never overwrites the original project. |
 
+Mac Open, New and recovery restore recheck retained native editor work after
+preparing the replacement song and before stopping/adopting it. A refused
+replacement returns `-32002` with `data.writeOutcome: "notCommitted"`; the error
+names the editors to finish or reload. This check does not apply or discard
+their drafts, including invalid gate text and expanded formula text. Native
+input remains protected through successful adoption and workspace refresh.
+Save, history and departure also require an unfinished gate edit to be applied
+or explicitly reloaded using Follow; they do not implicitly write a gate.
+
 `context.get.data.autosave` also exposes the status. Stale write revisions return
 `-32001`; busy operations return `-32002`; invalid parameters return `-32602`;
 filesystem and restore failures return `-32003`. Standard request-ID retries

@@ -32,6 +32,18 @@ extension AppController {
       reply(AutomationServer.error(-32002, "The application is shutting down"))
       return
     }
+    if documentDepartureInput.blocked, documentDepartureInput.adopted, method.hasSuffix(".get") {
+      // A synchronous refresh may request its new inspector data. Service it
+      // after that refresh releases input, preserving the original parameters.
+      DispatchQueue.main.async { [weak self] in
+        self?.handleAutomation(method, params: params, reply: reply, recordingInputAdmitted: recordingInputAdmitted)
+      }
+      return
+    }
+    guard !documentDepartureInput.blocked else {
+      reply(AutomationServer.notAdmittedBusy("Document replacement is finishing; no request was queued"))
+      return
+    }
     if !recordingInputAdmitted && PluginRecordingInput.isBoundary(method) {
       guard (!busy || pluginRecordingInput.delivery.submitted), window.attachedSheet == nil, NSApp.modalWindow == nil else {
         reply(AutomationServer.notAdmittedBusy("The document is busy; retry shortly")); return

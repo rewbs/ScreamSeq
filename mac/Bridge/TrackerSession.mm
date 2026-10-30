@@ -1,4 +1,5 @@
 #import "TrackerSession.h"
+#include "DocumentDeparture.hpp"
 #include "../Audio/AudioDevice.hpp"
 #include "../Audio/AudioExport.hpp"
 #include "../Audio/SampleRecorder.hpp"
@@ -71,6 +72,10 @@ namespace {
 #include "EnvelopeCatalogue.inc"
 #include "PluginPrograms.inc"
 void failure(NSError **e, const std::exception &ex) {
+  if(e && dynamic_cast<const ScreamSeq::NativeDepartureRefused *>(&ex)) {
+    *e=[NSError errorWithDomain:@"Tracker" code:-32002 userInfo:@{NSLocalizedDescriptionKey:@(ex.what()),@"writeOutcome":@"notCommitted"}];
+    return;
+  }
   if (e)
     *e = [NSError errorWithDomain:@"Tracker" code:1 userInfo:@{NSLocalizedDescriptionKey : @(ex.what())}];
 }
@@ -530,6 +535,7 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
   [self requireNoParameterTake];
   auto next=demo?Document::demo():std::make_unique<Document>();
   NSString *identity=NSUUID.UUID.UUIDString;
+  ScreamSeq::NativeDocumentDeparture departure(self.documentDepartureDelegate,self.automationRevision);
   _audio->setPlugins({});
   _sampleRecorder.reset();
   _sampleRecordingID = nil; _sampleRecordingDocument = nil; _sampleRecordingRevision = nil;
@@ -553,6 +559,7 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
   _loadRecovery={};_loadSourcePath=nil;_projectMetadata={};
   _graphEditorPlugin.reset();_graphEditorID=nil;
   _lastTouchedPlugin.clear(); _touchSequence = 0; _lastTouchedSource = nil;
+  departure.adopted();
   return YES;
   } catch(const std::exception &e){failure(error,e);return NO;}
 }
@@ -651,6 +658,7 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
     } else
       next = Document::open(path.UTF8String);
     validatePluginCapacity(plugins, next->native().mixer.buses.size());
+    ScreamSeq::NativeDocumentDeparture departure(self.documentDepartureDelegate,self.automationRevision);
     _audio->stop();
     _pluginError.clear();
     _pluginWarning.clear();
@@ -680,6 +688,7 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
     _midi->discardPending();
     _recordingRevision = _recording ? (recoveredTakeCompatible ? self.automationRevision : @"unmatched-recovered-take") : nil;
     _lastTouchedPlugin.clear(); _touchSequence = 0; _lastTouchedSource = nil;
+    departure.adopted();
     return YES;
   } catch (const std::exception &e) {
     failure(error, e);

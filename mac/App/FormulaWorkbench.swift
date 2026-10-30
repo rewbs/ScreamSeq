@@ -101,6 +101,8 @@ final class FormulaPreviewView:NSView {
 }
 
 final class FormulaWorkbench:NSWindowController,NSTextViewDelegate {
+  private var originalSource = ""
+  var hasDraft:Bool { code.string != originalSource || code.hasMarkedText() }
   let code=FormulaCodeView(),reference=FormulaReferenceView(frame:.zero),preview=FormulaPreviewView(frame:.zero)
   let status=Theme.label("",size:12,color:Theme.muted)
   var onUse:((String)->Bool)?,onRequest:EnvelopeRequest?
@@ -109,6 +111,7 @@ final class FormulaWorkbench:NSWindowController,NSTextViewDelegate {
   init(source:String,title:String,points:[[String:Any]],selected:Int,rows:Int,rowsPerBeat:Int,span:Int?=nil,scratchContext:Bool=false,request:EnvelopeRequest?,use:@escaping (String)->Bool){
     let window=NSWindow(contentRect:NSRect(x:0,y:0,width:960,height:660),styleMask:[.titled,.closable,.resizable],backing:.buffered,defer:false)
     super.init(window:window);window.title=title;window.minSize=NSSize(width:740,height:510);window.isReleasedWhenClosed=false
+    originalSource = source
     onRequest=request;onUse=use;pointIndex=selected;reference.scratchContext=scratchContext
     status.maximumNumberOfLines=3;status.lineBreakMode = .byWordWrapping;status.preferredMaxLayoutWidth=540;status.setContentCompressionResistancePriority(.defaultLow,for:.horizontal)
     previewParams=["points":points,"rows":rows,"rowsPerBeat":rowsPerBeat,"samples":1024];if let span{previewParams["span"]=span}

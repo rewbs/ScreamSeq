@@ -1,6 +1,17 @@
 import AppKit
 extension AppController {
   func finishPendingNotes(_ action:@escaping ()->Void)->Bool {
+    if patternView.nudgeEditor?.needsCompletion == true {
+      statusLabel.stringValue="Save the in-grid command with Return, or cancel it with Escape, before continuing."
+      return true
+    }
+    // Gate editing is explicitly Apply/Follow. Save, history and departure must
+    // not silently apply its raw text or discard an invalid/composing draft.
+    if gateInspector.needsCompletion {
+      statusLabel.stringValue="Apply the retained gate edit, or use Follow to reload it, before continuing."
+      workspace?.show("gate")
+      return true
+    }
     if let editor=songSettingsWindow?.editor,editor.needsCompletion {
       editor.finishAutomaticEdit {[weak self] accepted in
         if accepted {action()} else {self?.statusLabel.stringValue="Finish or reload the retained song settings before continuing."}

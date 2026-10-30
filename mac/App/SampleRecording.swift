@@ -22,6 +22,7 @@ final class SampleRecordingView: NSView, NSWindowDelegate {
   lazy var add = ActionButton("Add to song", symbol: "plus", prominent: true) { [weak self] in self?.commit() }
   lazy var discard = ActionButton("Discard take") { [weak self] in self?.discardTake() }
   private(set) var take = "", capturing = false, frames = 0, pending = false
+  var needsDocumentCompletion: Bool { pending || permissionPending || capturing || !take.isEmpty }
   private var deviceData = [[String: Any]](), channelChoices = [(Int, Int)]()
   private var timer: Timer?, closing = false, permissionPending = false
   private var polling = false, pollGeneration: UInt64 = 0

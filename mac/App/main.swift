@@ -3,6 +3,7 @@ import UniformTypeIdentifiers
 
 final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
   let session = TrackerSession()
+  let documentDepartureInput = DocumentDepartureInput()
   var window: NSWindow!
   let patternView = PatternView()
   lazy var patternGraphHost=PatternGraphHost(patternView)
@@ -177,6 +178,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
   let inspectionTest = CommandLine.arguments.contains("--inspection")
 
   func applicationDidFinishLaunching(_ notification: Notification) {
+    session.documentDepartureDelegate = self
     NSApp.setActivationPolicy(automationTest ? .prohibited : .regular)
     NSApp.appearance = NSAppearance(named: .darkAqua)
     makeMenu()
@@ -529,6 +531,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
   }
   func refreshAll() {
     guard !busy else { return }
+    defer { documentDepartureInput.refreshed() }
     refreshPattern()
     selectedOrder = max(0, min(selectedOrder, model.orders.count - 1))
     titleLabel.stringValue = model.title.isEmpty ? "Untitled" : model.title

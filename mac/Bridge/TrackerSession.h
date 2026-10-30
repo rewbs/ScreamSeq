@@ -1,7 +1,9 @@
 #import <Foundation/Foundation.h>
+#import "DocumentDeparture.h"
 #include "../../editor/NativePresentation.h"
 NS_ASSUME_NONNULL_BEGIN
 @interface TrackerSession : NSObject
+@property(nonatomic, weak, nullable) id<TrackerDocumentDepartureDelegate> documentDepartureDelegate;
 @property(nonatomic, readonly) BOOL playing;
 @property(nonatomic, readonly) BOOL canUndo;
 @property(nonatomic, readonly) BOOL canRedo;
