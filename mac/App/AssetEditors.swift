@@ -242,8 +242,13 @@ final class SampleEditor: NSView, NSTextFieldDelegate {
     settingsStatus.lineBreakMode = .byWordWrapping; settingsStatus.maximumNumberOfLines = 3
     settingsStatus.preferredMaxLayoutWidth = 600; settingsStatus.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
     waveform.fixed(height: 180)
+    waveform.canEditLoops = { [weak self] in
+      guard let self else { return false }
+      if self.protectsDrawingInput { self.drawingStatus.stringValue = "Save or discard drawing input before changing loops."; return false }
+      return true
+    }
     waveform.onLoopMarker = { [weak self] marker,frame,finished in
-      guard let self else{return}
+      guard let self, !self.protectsDrawingInput else{return}
       [self.loopStart,self.loopEnd,self.sustainStart,self.sustainEnd][marker.rawValue].stringValue=String(frame)
       self.saveLoopsSoon(immediate:finished)
     }

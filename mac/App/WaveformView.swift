@@ -18,11 +18,12 @@ final class WaveformView: NSView {
   enum LoopMarker: Int, CaseIterable {case start, end, sustainStart, sustainEnd}
   var selectedLoopMarker: LoopMarker?, draggingLoop = false
   var onLoopMarker: ((LoopMarker, Int, Bool) -> Void)?
+  var canEditLoops: (() -> Bool)?
   func markerFrame(_ marker:LoopMarker)->Int { [loopStart,loopEnd,sustainStart,sustainEnd][marker.rawValue] }
   var loopMarkers:[LoopMarker] {LoopMarker.allCases.filter{$0.rawValue<2 ? loopEnd>loopStart : sustainEnd>sustainStart}}
   func markerLocation(_ marker:LoopMarker)->NSPoint {NSPoint(x:max(5,min(bounds.width-5,x(Double(markerFrame(marker))))),y:marker.rawValue<2 ? bounds.height-7 : 7)}
   func moveLoopMarker(_ marker:LoopMarker,to frame:Int,finished:Bool) {
-    guard stroke.isEmpty else { return }
+    guard stroke.isEmpty, canEditLoops?() ?? true else { return }
     let start=marker.rawValue<2 ? loopStart:sustainStart,end=marker.rawValue<2 ? loopEnd:sustainEnd
     let value=marker.rawValue%2==0 ? max(0,min(end-1,frame)):max(start+1,min(frames,frame))
     switch marker {case .start:loopStart=value;case .end:loopEnd=value;case .sustainStart:sustainStart=value;case .sustainEnd:sustainEnd=value}

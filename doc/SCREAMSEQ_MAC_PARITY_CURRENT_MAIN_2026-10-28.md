@@ -566,7 +566,9 @@ The sample editor now exposes exact frame/value staging and linear/step
 interpolation through a Numeric drawing section. Return stages a point;
 Command-Return from a drawing field or the waveform saves the batch. Repeated
 frames replace their existing staged value, and batches contain at most 4096
-finite normalized points. Staging works at any zoom and changes no song data.
+finite normalized points spanning no more than 1,048,576 inclusive frames.
+Oversized spans leave the batch editable, with the rejected frame text retained
+for correction. Staging works at any zoom and changes no song data.
 The explicit Save sends one sorted `sample.draw` request through the existing
 shared editing API and its Undo/persistence implementation.
 
@@ -574,7 +576,9 @@ Numeric batches retain their captured sample, revision, range and interpolation.
 Escape, navigation and automatic refresh cannot discard them. Newer unstaged
 frame/value text must be staged before Save. Raw drawing input and staged points
 prevent settings/loop controls from accepting a second musical form; existing
-settings/loop drafts likewise refuse new numeric input. Discard releases that
+settings/loop drafts likewise refuse new numeric input. Raw point text also
+blocks mouse/keyboard loop-handle edits before markers or fields can change,
+and joins the application's other-audio-write guard. Discard releases that
 ownership. Full sample Reload still discards the batch only after successful
 staged readback. Pointer gestures retain their existing release-to-save behavior.
 
@@ -586,10 +590,13 @@ draws sparse linear or stepped segments without interpolating the stored batch
 into additional points.
 
 All 43 native interface groups and complete application Swift type checking
-pass (`interface-numeric-drawing-all.log`, `typecheck-numeric-drawing-final.log`).
+pass, including both Greptile follow-ups (`interface-numeric-review-all.log`,
+`typecheck-numeric-review.log`).
 Coverage includes bounds/non-finite input, replacement at the 4096-point limit,
 coarse-zoom staging, sorted payloads, mode-preserving retry, form ownership,
-Command-Return focus scope and native composition/caret retention. The existing
+Command-Return focus scope, native composition/caret retention, the exact shared
+span limit in either staging order, and unstaged-text ownership across native
+mouse/keyboard loop edits. The existing
 shared API socket tests cover exact linear/step/channel PCM, preview, one-step
 Undo and retry behavior. This new native workflow is newer than build 9 and
 still requires packaged computer-use and save/reopen qualification. No new full

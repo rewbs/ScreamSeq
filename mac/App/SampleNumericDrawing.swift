@@ -7,6 +7,7 @@ extension SampleEditor {
       "interpolation": drawingInterpolation.indexOfSelectedItem == 1 ? "step" : "linear"]
   }
   var hasNumericDrawingInput: Bool { numericDrawingInput != numericDrawingBaseline }
+  var protectsDrawingInput: Bool { drawingDraft?.submitted == true || drawingDraft?.numeric == true || hasNumericDrawingInput }
   var hasUnstagedDrawingPoint: Bool {
     ["frame", "value"].contains { numericDrawingInput[$0] != numericDrawingBaseline[$0] }
   }
@@ -23,7 +24,7 @@ extension SampleEditor {
     drawingInterpolation.setAccessibilityLabel("Drawing interpolation")
     drawingInterpolation.target = self; drawingInterpolation.action = #selector(numericDrawingInterpolationChanged)
     saveDrawingButton.toolTip = "Save the staged batch · ⌘Return from a drawing field or waveform"
-    let help = Theme.label("Return stages an exact frame/value point; ⌘Return saves the batch in one Undo step. Values range from −1 to 1; up to 4096 points. Staging an existing frame replaces its value.", size: 11, color: Theme.muted)
+    let help = Theme.label("Return stages an exact frame/value point; ⌘Return saves the batch in one Undo step. Values range from −1 to 1. A batch holds up to 4096 points spanning at most 1,048,576 frames. Staging an existing frame replaces its value.", size: 11, color: Theme.muted)
     help.lineBreakMode = .byWordWrapping; help.maximumNumberOfLines = 4; help.preferredMaxLayoutWidth = 600
     help.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
     return stack(.vertical, [
@@ -75,6 +76,12 @@ extension SampleEditor {
     }
     guard waveform.stroke[frame] != nil || waveform.stroke.count < 4096 else {
       drawingStatus.stringValue = "A batch holds at most 4096 points. Save or discard it before adding more."; return
+    }
+    let first = min(waveform.stroke.keys.min() ?? frame, frame), last = max(waveform.stroke.keys.max() ?? frame, frame)
+    // Match maximumSampleDrawFrames in the shared sample drawing API. The
+    // inclusive span must remain writable before the batch becomes submitted.
+    guard last - first < 1_048_576 else {
+      drawingStatus.stringValue = "A drawing batch spans at most 1,048,576 frames. Points and fields kept; choose a nearer frame."; return
     }
     let draft = drawingDraft ?? SampleDrawingDraft(self, revision: waveformRevision!, numeric: true)
     drawingDraft = draft; strokeRevision = draft.revision

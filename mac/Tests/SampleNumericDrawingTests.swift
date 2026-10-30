@@ -6,10 +6,11 @@ extension InterfaceTests {
       "loop": false, "loopStart": 0, "loopEnd": 0, "pingpong": false, "reverseLoop": false,
       "sustainLoop": false, "sustainStart": 0, "sustainEnd": 0, "sustainPingpong": false, "sustainReverse": false]
     let samples: [[String: Any]] = [["index": 1, "id": "numeric", "name": "Numeric"]]
-    func makeEditor() -> SampleEditor {
+    func makeEditor(frames: Int = 8192) -> SampleEditor {
       let editor = SampleEditor(frame: NSRect(x: 0, y: 0, width: 729, height: 1400))
-      editor.update(info, samples: samples, revision: "original")
-      editor.waveform.peaksRange = 0..<8192; editor.waveform.peaks = Array(repeating: 0.25, count: 4096)
+      var metadata = info; metadata["frames"] = frames
+      editor.update(metadata, samples: samples, revision: "original")
+      editor.waveform.peaksRange = 0..<frames; editor.waveform.peaks = Array(repeating: 0.25, count: 4096)
       editor.waveformRevision = "original"; editor.waveformDocumentID = "song"
       return editor
     }
@@ -70,6 +71,16 @@ extension InterfaceTests {
     try require(bounded.waveform.stroke.count == 4096 && bounded.waveform.stroke[4096] == nil, "A 4097th numeric point is rejected without dropping the batch")
     stage(bounded, "4095", "0.5")
     try require(bounded.waveform.stroke.count == 4096 && bounded.waveform.stroke[4095] == 0.5, "A full batch still permits replacement of an existing frame")
+    for first in [0, 1_048_576] {
+      let span = makeEditor(frames: 2_097_152)
+      stage(span, String(first), "0.25")
+      stage(span, String(1_048_576 - first), "-0.5")
+      try require(span.waveform.stroke == [first: 0.25] && span.drawingDraft?.submitted == false && span.drawingFrame.stringValue == String(1_048_576 - first) && span.hasUnstagedDrawingPoint,
+        "A point exceeding the shared API's inclusive span is refused while the batch remains editable")
+      stage(span, String(first == 0 ? 1_048_575 : 1), "-0.5")
+      try require(span.waveform.stroke.count == 2 && span.waveform.stroke.keys.max()! - span.waveform.stroke.keys.min()! + 1 == 1_048_576 && !span.hasUnstagedDrawingPoint,
+        "Correcting either endpoint to the exact maximum span preserves and completes the staged batch")
+    }
     let stale = makeEditor()
     stale.drawingFrame.stringValue = "4"; stale.numericDrawingInputChanged()
     stale.onSampleRevision = { "later" }; stale.stageDrawingPoint()
@@ -85,6 +96,38 @@ extension InterfaceTests {
     forms.discardDrawing()
     try require(forms.name.isEnabled && forms.looping.isEnabled && forms.control(forms.name, textShouldBeginEditing: fieldEditor), "Discarding raw drawing fields releases other forms")
     try numericDrawingNewerInputChecks(info: info, samples: samples)
+    try numericDrawingLoopOwnershipChecks(info: info, samples: samples)
+  }
+  static func numericDrawingLoopOwnershipChecks(info: [String: Any], samples: [[String: Any]]) throws {
+    let editor = SampleEditor(frame: NSRect(x: 0, y: 0, width: 729, height: 1400))
+    var metadata = info; metadata["loop"] = true; metadata["loopStart"] = 10; metadata["loopEnd"] = 1000
+    editor.update(metadata, samples: samples, revision: "original"); editor.waveformRevision = "original"
+    var requests = [String]()
+    editor.onRequest = { method, _, _ in requests.append(method) }; editor.onSelect = { _ in }
+    let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 729, height: 1400), styleMask: [.titled], backing: .buffered, defer: false)
+    window.isReleasedWhenClosed = false; window.contentView = editor; editor.layoutSubtreeIfNeeded()
+    defer { window.orderOut(nil); window.contentView = nil }
+    editor.drawingValue.stringValue = "0.25"; editor.numericDrawingInputChanged()
+    let loops = editor.rawLoopDraft
+    try require(editor.drawingDraft == nil && editor.protectsDrawingInput, "Unstaged numeric text participates in the application's audio-write guard")
+    let start = editor.waveform.convert(editor.waveform.markerLocation(.start), to: nil)
+    func mouse(_ type: NSEvent.EventType, _ location: NSPoint) -> NSEvent {
+      NSEvent.mouseEvent(with: type, location: location, modifierFlags: [], timestamp: 0, windowNumber: window.windowNumber, context: nil, eventNumber: 1, clickCount: 1, pressure: 1)!
+    }
+    editor.waveform.mouseDown(with: mouse(.leftMouseDown, start))
+    try require(editor.waveform.draggingLoop && editor.waveform.selectedLoopMarker == .start, "Loop ownership fixture reaches the real native loop-handle gesture")
+    editor.waveform.mouseDragged(with: mouse(.leftMouseDragged, NSPoint(x: start.x + 20, y: start.y)))
+    editor.waveform.mouseUp(with: mouse(.leftMouseUp, NSPoint(x: start.x + 20, y: start.y)))
+    let right = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: window.windowNumber,
+      context: nil, characters: "", charactersIgnoringModifiers: "", isARepeat: false, keyCode: 124)!
+    editor.waveform.selectedLoopMarker = .start; editor.waveform.keyDown(with: right)
+    editor.waveform.moveLoopMarker(.end, to: 1100, finished: true)
+    editor.waveform.onLoopMarker?(.end, 1100, true)
+    editor.setLoops(dryRun: false)
+    try require(requests.isEmpty && editor.rawLoopDraft.isEqual(loops) && editor.waveform.loopStart == 10 && editor.waveform.loopEnd == 1000 && editor.numericDrawingRevision == "original" && editor.drawingValue.stringValue == "0.25",
+      "Mouse drags, keyboard nudges and direct loop actions cannot mutate loop fields or advance an unstaged drawing's revision")
+    editor.discardDrawing(); editor.waveform.keyDown(with: right)
+    try require(requests == ["sample.loops.set"] && editor.waveform.loopStart == 11, "Discard releases loop-handle editing without rebasing or losing a pending numeric point")
   }
   static func numericDrawingNewerInputChecks(info: [String: Any], samples: [[String: Any]]) throws {
     let editor = SampleEditor(frame: NSRect(x: 0, y: 0, width: 729, height: 1400))
