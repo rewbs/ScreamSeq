@@ -1373,7 +1373,13 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     panel.allowedContentTypes = [.wav, .aiff, .mp3]
     panel.allowsOtherFileTypes = true
     panel.beginSheetModal(for: window) { [weak self] result in
-      self?.sampleEditor.finishSampleReplacement(operation, path: result == .OK ? panel.url?.path : nil)
+      let path = result == .OK ? panel.url?.path : nil
+      // AppKit still reports the picker as attached while this callback runs.
+      // Submit after it returns, retaining the original owner and revision;
+      // finishSampleReplacement rechecks both before admitting any write.
+      DispatchQueue.main.async { [weak self] in
+        self?.sampleEditor.finishSampleReplacement(operation, path: path)
+      }
     }
   }
   func importInstrument() {
