@@ -61,7 +61,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
   let instrumentEnvelopeClipboard=InstrumentEnvelopeClipboard()
   let tempoLabel = TempoField()
   var tempoEditRevision=""
-  let octavePicker=NSPopUpButton()
+  let octavePicker=NSPopUpButton(),stepPicker=NSPopUpButton()
   let inputLabel=Theme.label("",size:11,color:Theme.muted,mono:true)
   let infoLabel = Theme.label("Pattern 00", size: 13, weight: .semibold)
   let cursorLabel = Theme.label("ROW 000   CH 01", size: 11, color: Theme.muted, mono: true)
@@ -70,7 +70,8 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
   let audioLabel = Theme.label(
     "CORE AUDIO   48 kHz / 128", size: 10, color: Theme.muted, mono: true)
   let meter = LevelMeter()
-  let sidebar = NSStackView()
+  let contextPanel = WorkspaceContextPanel(frame: .zero), contextRule = Panel(Theme.border)
+  var contextPanelButton: ActionButton?, contextPanelMenuItem: NSMenuItem?
   let orderStack = NSStackView()
   var playButton: ActionButton!
   var followButton: ActionButton!
@@ -340,7 +341,8 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     liveKeyboardButton = ActionButton("Live keys") { [weak self] in self?.toggleLiveKeyboard() }
     liveKeyboardButton?.toolTip = "Keep musical keyboard input active while using other panels (⌘⌥L)"
     let paletteButton = ActionButton("Commands ⌘K",symbol:"magnifyingglass") { [weak self] in self?.showCommandPalette() }
-    let header = stack(.horizontal, [brand, spacer, paletteButton, liveKeyboardButton!, transport, position, tempo], spacing: 16)
+    contextPanelButton = ActionButton("Hide context", symbol: "sidebar.left") { [weak self] in self?.toggleContextPanel() }
+    let header = stack(.horizontal, [brand, spacer, contextPanelButton!, paletteButton, liveKeyboardButton!, transport, position, tempo], spacing: 12)
     header.fill(toolbar, inset: 10)
     brand.widthAnchor.constraint(lessThanOrEqualToConstant: 350).isActive = true
     titleLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
@@ -358,25 +360,10 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     workspace.distribution = .fill
     workspace.spacing = 0
     workspace.alignment = .top
-    let side = Panel()
-    side.fixed(width: 165)
-    sidebar.orientation = .vertical
-    sidebar.distribution = .fill
-    sidebar.alignment = .leading
-    sidebar.spacing = 7
-    let sideScroll = verticalScrollView()
-    sideScroll.documentView = sidebar
-    sideScroll.fill(side, inset: 10)
-    sidebar.translatesAutoresizingMaskIntoConstraints = false
-    NSLayoutConstraint.activate([
-      sidebar.topAnchor.constraint(equalTo: sideScroll.contentView.topAnchor, constant: 6),
-      sidebar.leadingAnchor.constraint(equalTo: sideScroll.contentView.leadingAnchor),
-      sidebar.widthAnchor.constraint(equalTo: sideScroll.contentView.widthAnchor),
-    ])
-    workspace.addArrangedSubview(side)
-    let sideRule = Panel(Theme.border)
-    sideRule.fixed(width: 1)
-    workspace.addArrangedSubview(sideRule)
+    contextPanel.fixed(width: 200)
+    workspace.addArrangedSubview(contextPanel)
+    contextRule.fixed(width: 1)
+    workspace.addArrangedSubview(contextRule)
     let editor = NSStackView()
     editor.orientation = .vertical
     editor.distribution = .fill
@@ -417,7 +404,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     octave.target = self
     octave.action = #selector(changeOctave(_:))
     octave.fixed(width: 112)
-    let editStep = NSPopUpButton()
+    let editStep = stepPicker
     for i in [0, 1, 2, 4, 8] {
       editStep.addItem(withTitle: "Step \(i)")
       editStep.lastItem?.tag = i
@@ -452,6 +439,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     editor.addArrangedSubview(gridRule)
     editor.addArrangedSubview(editorHost)
     installWorkspace()
+    installContextPanel()
     let gridFooter = Panel(Theme.panel)
     gridFooter.fixed(height: 27)
     commandHelpLabel.lineBreakMode = .byTruncatingTail
@@ -547,72 +535,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     window.title = "\(model.title) — ScreamSeq"
     updateRecoveryStatus()
   }
-  func refreshSidebar() {
-    sidebar.arrangedSubviews.forEach {
-      sidebar.removeArrangedSubview($0)
-      $0.removeFromSuperview()
-    }
-    sidebar.addArrangedSubview(
-      Theme.label("SCREAMSEQ", size: 10, color: Theme.accent, weight: .bold))
-    let gap = NSView()
-    gap.fixed(height: 12)
-    sidebar.addArrangedSubview(gap)
-    sidebar.addArrangedSubview(
-      Theme.label("PROJECT", size: 10, color: Theme.muted, weight: .semibold))
-    sidebar.addArrangedSubview(
-      ActionButton("Open module…", symbol: "folder") { [weak self] in self?.openFile() })
-    sidebar.addArrangedSubview(
-      ActionButton("Save", symbol: "square.and.arrow.down") { [weak self] in self?.saveFile() })
-    sidebar.addArrangedSubview(
-      ActionButton("Export audio…", symbol: "waveform") { [weak self] in self?.exportAudio() })
-    let space = NSView()
-    space.fixed(height: 16)
-    sidebar.addArrangedSubview(space)
-    sidebar.addArrangedSubview(
-      Theme.label(
-        "SAMPLES   \(model.samples.count)", size: 10, color: Theme.muted, weight: .semibold))
-    for s in model.samples.prefix(16) {
-      let index = s["index"] as? Int ?? 1
-      let name = s["name"] as? String ?? "Sample"
-      let b = ActionButton(
-        String(format: "%02d  ", index) + (name.isEmpty ? "Sample \(index)" : name)
-      ) { [weak self] in
-        self?.patternView.instrument = index
-        self?.sampleEditor.index = index
-        self?.refreshAssets()
-        self?.statusLabel.stringValue = "Selected sample \(index): \(name)"
-      }
-      b.bezelStyle = .inline
-      b.alignment = .left
-      b.contentTintColor = index == patternView.instrument ? Theme.selectionMark : Theme.text
-      b.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
-      b.fixed(width: 174, height: 27)
-      sidebar.addArrangedSubview(b)
-    }
-    if model.samples.isEmpty {
-      sidebar.addArrangedSubview(Theme.label("No samples yet", size: 11, color: Theme.muted))
-    }
-    let gap2 = NSView()
-    gap2.fixed(height: 20)
-    sidebar.addArrangedSubview(gap2)
-    sidebar.addArrangedSubview(
-      ActionButton("Import sample…", symbol: "plus") { [weak self] in self?.importSample() })
-    sidebar.addArrangedSubview(
-      ActionButton("Song settings…") { [weak self] in self?.songSettings() })
-    sidebar.addArrangedSubview(
-      Theme.label("WORKSPACE", size: 10, color: Theme.muted, weight: .semibold))
-    sidebar.addArrangedSubview(
-      ActionButton("Audio settings…", symbol: "slider.horizontal.3") { [weak self] in
-        self?.audioSettings()
-      })
-    sidebar.addArrangedSubview(
-      ActionButton("MIDI input…", symbol: "pianokeys") { [weak self] in self?.midiSettings() })
-    sidebar.addArrangedSubview(
-      ActionButton("Keyboard settings…") { [weak self] in self?.keyboardPreferences() })
-    sidebar.addArrangedSubview(
-      ActionButton("Import report…") { [weak self] in self?.importReport() })
-    sidebar.addArrangedSubview(Theme.label("OpenMPT audio engine", size: 10, color: Theme.muted))
-  }
+  func refreshSidebar() { refreshContextPanel() }
   func refreshOrders() {
     orderEditor.update(model, selected: selectedOrder)
     orderStack.arrangedSubviews.forEach {
@@ -1504,7 +1427,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     keyboardSettings.show { self.patternView.rowHeight = KeyboardSettings.rowHeight }
     keyboardSettings.window?.delegate = self
   }
-  func importReport() {
+  @objc func importReport() {
     if documentLoadReportWindow == nil {
       let view = DocumentLoadReportView(frame: .zero)
       view.saveCopy.handler = { [weak self] in self?.saveDocumentAs() }
@@ -1945,6 +1868,8 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     item(file, "Browse Samples…", #selector(showSampleBrowser), "l", [.command, .shift])
     item(file, "Record Microphone to Sample…", #selector(showSampleRecorder))
     item(file, "Recover a Song…", #selector(recoverDocument))
+    item(file, "Song Settings…", #selector(songSettings))
+    item(file, "Import Report…", #selector(importReport))
     file.addItem(.separator())
     item(file, "Save", #selector(saveFile), "s")
     item(file, "Save As…", #selector(saveAs), "s", [.command, .shift])
@@ -2011,6 +1936,9 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     item(pattern, "Insert Row", #selector(insertRow))
     item(pattern, "Delete Row", #selector(deleteRow))
     let workspaceMenu = submenu("Workspace")
+    item(workspaceMenu, "Show Context Panel", #selector(toggleContextPanel), "b", [.command,.option])
+    contextPanelMenuItem=workspaceMenu.items.last;contextPanelMenuItem?.state = .on
+    workspaceMenu.addItem(.separator())
     for tab in InspectorTabs.items {
       let entry=NSMenuItem(title:"Show "+tab.label,action:#selector(focusInspector(_:)),keyEquivalent:tab.key)
       entry.keyEquivalentModifierMask=[.control,.option];entry.target=self;entry.representedObject=tab.id

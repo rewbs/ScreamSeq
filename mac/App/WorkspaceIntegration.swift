@@ -250,7 +250,7 @@ extension AppController {
     }
   }
   func updateWorkspaceContext(){
-    guard let workspace else{return};workspace.refreshFocus()
+    guard let workspace else{return};workspace.refreshFocus();refreshContextPanel()
     for id in workspace.visibleIDs {followWorkspacePanel(id,force:false)}
   }
   func returnToPanel(_ id:String){
@@ -310,6 +310,7 @@ extension AppController {
       case "Reload saved": try workspaceLayouts.reload()
       case "Restore custom":
         guard var state=workspaceLayouts.layouts[name] else{return "Choose a saved layout"}
+        guard DockWorkspace.validContextVisibility(state) else{return "Saved context-panel visibility must be boolean"}
         state.removeValue(forKey:"pins")
         var focused=NSApp.keyWindow?.firstResponder as? NSView
         if let field=focused as? NSTextView,let owner=field.delegate as? NSView {focused=owner}
@@ -371,7 +372,7 @@ extension AppController {
       if let raw=params["savedName"] {guard ["Save custom","Restore custom","Delete custom"].contains(name),let savedName=raw as? String,WorkspaceLayouts.validName(savedName) else{fail("savedName is a 1–64 character name for Save, Restore or Delete custom");return true}}
       if let error=applyWorkspaceLayout(name,savedName:params["savedName"] as? String){reply(AutomationServer.error(-32001,error));return true}
     } else {reply(AutomationServer.error(-32601,"Unknown workspace method"));return true}
-    var state=workspace?.state ?? [:];state["panels"]=workspace?.panels.keys.sorted() ?? [];state["visible"]=workspace?.visibleIDs ?? [];state["focus"]=workspace?.focusedPanel()?.id ?? "pattern";state["liveKeyboard"]=liveKeyboard;state["positionMode"]=patternView.positionMode.rawValue
+    var state=workspace?.state ?? [:];state["panels"]=workspace?.panels.keys.sorted() ?? [];state["visible"]=workspace?.visibleIDs ?? [];state["focus"]=workspace?.focusedPanel()?.id ?? "pattern";state["liveKeyboard"]=liveKeyboard;var context=contextPanel.snapshot;context["visible"]=workspace?.contextPanelVisible ?? true;state["contextPanel"]=context;state["positionMode"]=patternView.positionMode.rawValue
     state["targets"]=workspace?.panels.mapValues{$0.target.stringValue};state["screens"]=NSScreen.screens.map{["name":$0.localizedName,"width":$0.visibleFrame.width,"height":$0.visibleFrame.height,"scale":$0.backingScaleFactor]}
     state["savedLayouts"]=workspaceLayouts.names
     reply(["result":["revision":session.automationRevision,"data":state,"changed":false,"playbackStopped":false]]);return true

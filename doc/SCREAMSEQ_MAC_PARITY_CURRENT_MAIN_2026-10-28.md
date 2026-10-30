@@ -2,8 +2,8 @@
 
 This PR is a tested partial parity checkpoint, not a claim that every Windows
 change has been ported. At the user's request, the work is being brought to a
-reviewable stopping point. The dynamic left menu is owned by another session and
-is outside this PR.
+reviewable stopping point. This checkpoint now includes the dynamic left context
+pane; the separate left-pane session had not produced changes to integrate.
 
 ## Base and scope
 
@@ -22,6 +22,11 @@ editing continues through the existing shared model, APIs, Undo and persistence.
 
 ## Implemented in this checkpoint
 
+- A retained context pane following the focused editor, with editor-specific
+  actions, pattern/order/input selectors and the complete sample catalogue. Toolbar,
+  menu and Command–Option–B toggles reclaim width; named/last-used layouts retain
+  visibility. Tracked menus retain captured identities, and malformed visibility
+  rejects before changing panel placements.
 - Named workspace layouts, retained layout management, Connected and Graph editing
   presets, categorized command search and keyboard traversal.
 - Independent pinned/dockable Graph Curve with staged target capture and draft
@@ -64,14 +69,48 @@ in a newly launched process with verified inspection flags. All test apps used
 separate bundle identities and disposable songs. No musician process was replaced.
 The GUI observations do not establish sustained 60 fps or physical-device latency.
 
-Final app source fingerprint: `dceb7bea65d6eb4d7a70ca1a1a3d8c6758570a2fb4aee6e1f9388f79ee775cf6`.
-Executable SHA-256 before assigning the QA bundle identity: `ab20eb6426ff18101328ae4fdd78e28318e837c7ffb0a17dfc7708e40dbf8d40`.
+Build 3 app source fingerprint: `dceb7bea65d6eb4d7a70ca1a1a3d8c6758570a2fb4aee6e1f9388f79ee775cf6`.
+Build 3 executable SHA-256 before assigning the QA bundle identity: `ab20eb6426ff18101328ae4fdd78e28318e837c7ffb0a17dfc7708e40dbf8d40`.
 The complete advertised read/write inventory matched the updated reviewed baseline.
 A computer-use connection timed out during command-palette dismissal; the app
 continued responding to its socket, and reconnecting the tool restored UI access.
 
 Full builds are at least one hour apart, with computer-use validation after each.
 Swift type checks and the interface harness are separate from full app builds.
+
+## Context-pane checkpoint, 2026-10-30
+
+Main was fetched again before this checkpoint; it remains `d1b52ade532d2d8fd9308a374ad61dd91ec7968c`.
+The full build started at 05:19:04 UTC, more than 25 hours after build 3, and
+completed successfully at 05:21:56 UTC. Bundle signature verification passed and
+2,127 frozen source/test files were unchanged through that build.
+
+- All 39 native interface groups passed, including new context-menu identity,
+  retained-control, disabled-action, 80-sample catalogue and atomic layout tests.
+- All six API inventory checks and the complete app socket suite passed.
+  The focused Mac parity socket suite passed,
+  including the new context snapshot and saved-layout visibility checks.
+- CTest passed 137/138 tests in its first run. The real CoreMIDI loopback test
+  reported `Receive all five MIDI events` while the GUI QA process was running.
+  After closing that process, the isolated MIDI rerun passed. The initial failure
+  remains recorded; concurrency is not established as its cause.
+- Computer use in the separate `qa4` inspection bundle confirmed step changes in
+  both selectors; hide/show reclaiming width; retained sample-name text, caret and
+  focus across toggles; restored hidden-layout visibility; retained text after
+  reopening a sample inspector hidden by layout restore; context Add group followed
+  by Undo restoring the bus count; and Mixer-to-song-graph navigation updating the
+  pane and focusing the graph. Readback confirmed presentation changes did not
+  change song data.
+
+Build 4 source fingerprint: `7858155009cd228810c9092f6dcbc5efc03cc765c75ccf0c193f8875f2af61d8`.
+Executable SHA-256 before QA identity signing: `16cf6d00570f07fd7abf7debfc06f5af90acbfef109851380cbd8a42eefa972e`.
+After those desktop checks, one additional line makes the toggle's accessibility
+label follow its current Show/Hide action instead of the image's initial label.
+The complete Swift application type-check passed after that change. It was not
+followed by another full build inside the hour; the build fingerprint above
+identifies the binary actually exercised. Reports and API documentation are also
+updated separately from that binary. This remains bounded functional evidence,
+not sustained presentation or physical-device qualification.
 
 ## Remaining parity work
 

@@ -68,6 +68,11 @@ def check(client):
 
     client.call("workspace.layout", {"name": "Graph editing"})
     state = client.call("workspace.get")["data"]
+    assert isinstance(state["contextPanelVisible"], bool)
+    assert state["contextPanel"]["visible"] == state["contextPanelVisible"]
+    assert isinstance(state["contextPanel"]["editor"], str)
+    assert all({"command", "label", "visible", "enabled"} <= action.keys()
+               for action in state["contextPanel"]["actions"])
     assert {"graph", "graphCurve", "automation"} <= set(state["visible"])
     client.call("workspace.panel", {"panel": "graphCurve", "pinned": True})
     client.call("workspace.panel", {"panel": "graphCurve", "placement": "float"})
@@ -78,6 +83,7 @@ def check(client):
     client.call("workspace.layout", {"name": "Restore custom", "savedName": "Parity graph"})
     restored = client.call("workspace.get")["data"]
     assert restored["locations"]["graphCurve"] == "right" and not restored["pins"]["graphCurve"]
+    assert restored["contextPanelVisible"] == state["contextPanelVisible"]
     assert "Parity graph" in restored["savedLayouts"]
     client.call("workspace.layout", {"name": "Delete custom", "savedName": "Parity graph"})
     assert "Parity graph" not in client.call("workspace.get")["data"]["savedLayouts"]

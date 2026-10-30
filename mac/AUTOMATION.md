@@ -1598,6 +1598,15 @@ document or source boundary is quarantined, including delayed old callbacks.
 
 ### Retained workspace layouts
 
+On macOS, **Workspace → Show Context Panel** (Command–Option–B) and the toolbar
+toggle the retained left pane. It follows the focused editor and offers relevant
+actions; Pattern also exposes pattern/order/input selectors, and Samples exposes
+the full sample catalogue. Hiding it releases space without changing song data or
+editor drafts. Named and last-used layouts retain `contextPanelVisible`; older
+layouts default to visible. Invalid visibility values reject before layout changes.
+`workspace.get` includes that boolean plus `contextPanel`, with `visible`, `editor`
+and the currently presented actions (`command`, `label`, `visible`, `enabled`).
+
 `workspace.layout` accepts Compose, Pattern focus, Sound design, Connected and
 Graph editing presets. Graph editing exposes routing, the independent
 `graphCurve` panel and pattern automation together. The curve panel supports the

@@ -88,6 +88,7 @@ extension InterfaceTests {
     try qualificationDisplayChecks()
     try workspaceWindowPersistenceChecks()
     try layoutRestoreChecks()
+    try workspaceContextChecks()
     print("PASS connected workspace: retained panels/pins, focus layout, placement, saved layout, compact automation, changed-field asset apply, restored dividers")
   }
   static func qualificationDisplayChecks() throws {
