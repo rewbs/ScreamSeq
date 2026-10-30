@@ -523,7 +523,8 @@ interface groups and complete application Swift type checking pass. Evidence:
 `interface-sample-navigation-all.log`, `interface-sample-navigation-final.log`
 and `typecheck-sample-navigation-final.log`. This source is newer than build 9 and still needs
 packaged computer-use validation. The next source checkpoint covers target
-selection/reload below; numeric staged-point drawing remains open.
+selection/reload below; numeric staged-point drawing is covered in the later
+source checkpoint below.
 
 ## Staged sample selection and reload — 2026-10-30
 
@@ -558,6 +559,42 @@ This source is newer than build 9. Build 9 remains running in its separate QA
 bundle; computer use again reported the Mac locked at approximately 11:42 UTC.
 No additional full build was started while its desktop validation was pending.
 The pending unlock request and the one-full-build-per-hour limit remain in force.
+
+## Numeric waveform drawing — 2026-10-30
+
+The sample editor now exposes exact frame/value staging and linear/step
+interpolation through a Numeric drawing section. Return stages a point;
+Command-Return from a drawing field or the waveform saves the batch. Repeated
+frames replace their existing staged value, and batches contain at most 4096
+finite normalized points. Staging works at any zoom and changes no song data.
+The explicit Save sends one sorted `sample.draw` request through the existing
+shared editing API and its Undo/persistence implementation.
+
+Numeric batches retain their captured sample, revision, range and interpolation.
+Escape, navigation and automatic refresh cannot discard them. Newer unstaged
+frame/value text must be staged before Save. Raw drawing input and staged points
+prevent settings/loop controls from accepting a second musical form; existing
+settings/loop drafts likewise refuse new numeric input. Discard releases that
+ownership. Full sample Reload still discards the batch only after successful
+staged readback. Pointer gestures retain their existing release-to-save behavior.
+
+The existing retained drawing completion handles both batch types: definite
+not-committed failures allow exact-payload retry; accepted or unknown outcomes
+require Review/Accept or Discard. Newer numeric text and composition survive
+completion and explicit review at their original revision. The waveform overlay
+draws sparse linear or stepped segments without interpolating the stored batch
+into additional points.
+
+All 43 native interface groups and complete application Swift type checking
+pass (`interface-numeric-drawing-all.log`, `typecheck-numeric-drawing-final.log`).
+Coverage includes bounds/non-finite input, replacement at the 4096-point limit,
+coarse-zoom staging, sorted payloads, mode-preserving retry, form ownership,
+Command-Return focus scope and native composition/caret retention. The existing
+shared API socket tests cover exact linear/step/channel PCM, preview, one-step
+Undo and retry behavior. This new native workflow is newer than build 9 and
+still requires packaged computer-use and save/reopen qualification. No new full
+build was started while build 9 desktop validation remained blocked by the
+locked Mac.
 
 ## Remaining parity work
 

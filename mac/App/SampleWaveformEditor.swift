@@ -42,7 +42,7 @@ extension SampleEditor {
     viewportStatus.stringValue="Showing \(range.lowerBound) → \(range.upperBound) · \(range.count) frames" + (waveformQuery == nil ? "" : " · loading…")
   }
   @objc func toggleDrawing() {
-    if drawingDraft?.submitted == true { drawToggle.state = waveform.drawing ? .on : .off; drawingStatus.stringValue = "Review or discard the retained stroke before changing drawing mode."; return }
+    if drawingDraft?.submitted == true || drawingDraft?.numeric == true { drawToggle.state = waveform.drawing ? .on : .off; drawingStatus.stringValue = "Save, review or discard the drawing before changing drawing mode."; return }
     waveform.drawing=drawToggle.state == .on
     drawingStatus.stringValue=waveform.drawing ? "Zoom to individual frames, then drag to draw. Both channels receive the same shape." : "Drag to select audio. Zoom with + / − or Option-scroll."
     if waveform.drawing { refreshWaveform() }

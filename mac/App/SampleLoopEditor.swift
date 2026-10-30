@@ -12,6 +12,7 @@ extension SampleEditor {
     return stack(.horizontal, [enabled, ping, reverse, labeled("START FRAME", first), labeled("END FRAME", last), NSView(),
       ActionButton("Use selection") { [weak self] in
         guard let self, let range = self.waveform.selection else { return }
+        guard self.drawingDraft?.numeric != true, !self.hasNumericDrawingInput else { self.drawingStatus.stringValue = "Save or discard drawing input before changing loops."; return }
         first.stringValue = String(range.lowerBound); last.stringValue = String(range.upperBound); enabled.state = .on
         self.syncLoopMarkers();self.saveLoopsSoon(immediate:true)
       }], spacing: 10)
@@ -42,6 +43,7 @@ extension SampleEditor {
   }
   @objc func loopFieldChanged() {syncLoopMarkers();saveLoopsSoon(immediate:true)}
   func controlTextDidChange(_ notification:Notification) {
+    if let field = notification.object as? NSTextField, field === drawingFrame || field === drawingValue { numericDrawingInputChanged(); return }
     if let field = notification.object as? NSTextField, [name, rate, volume, pan].contains(where: { $0 === field }) { scheduleSettings(); return }
     loopEditGeneration += 1; syncLoopMarkers();saveLoopsSoon()
   }
@@ -78,6 +80,7 @@ extension SampleEditor {
     sustainReverse.state = info["sustainReverse"] as? Bool == true ? .on : .off
   }
   func reloadLoops() {
+    if drawingDraft?.numeric == true || hasNumericDrawingInput { drawingStatus.stringValue = "Save or discard drawing input before reloading loops."; return }
     guard !loopsBusy, !settingsPending, !hasSampleComposition, let onRequest else { return }
     loopSaveWork?.cancel();loopSaveWork=nil
     let sample = index, generation = sampleGeneration, signature = rawLoopDraft, edited = loopEditGeneration

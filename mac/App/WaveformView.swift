@@ -48,6 +48,12 @@ final class WaveformView: NSView {
   private var anchor = 0, strokeActive = false
   private var previousPoint: SampleStrokePoint?
   private(set) var stroke = [Int: Double]()
+  var strokeInterpolation = "linear" { didSet { needsDisplay = true } }
+  func stagePoints(_ points: [SampleStrokePoint], interpolation: String) {
+    strokeActive = false; previousPoint = nil
+    stroke = Dictionary(uniqueKeysWithValues: points.map { ($0.frame, $0.value) })
+    strokeInterpolation = interpolation; needsDisplay = true
+  }
   var precise: Bool {
     let range = visibleRange
     return !range.isEmpty && Double(range.count) <= min(4096, max(1, Double(bounds.width))) &&
@@ -104,7 +110,7 @@ final class WaveformView: NSView {
   }
   func beginStroke(_ point: SampleStrokePoint) -> Bool {
     guard stroke.isEmpty, drawing, precise, visibleRange.contains(point.frame), point.value.isFinite, onBeginStroke?() == true else { return false }
-    stroke.removeAll(keepingCapacity:true); previousPoint=nil; strokeActive=true; extendStroke(point); return true
+    stroke.removeAll(keepingCapacity:true); strokeInterpolation = "linear"; previousPoint=nil; strokeActive=true; extendStroke(point); return true
   }
   func extendStroke(_ point: SampleStrokePoint) {
     guard strokeActive, visibleRange.contains(point.frame), point.value.isFinite else { return }
@@ -155,9 +161,14 @@ final class WaveformView: NSView {
     }
     if !stroke.isEmpty {
       Theme.gold.setStroke();let path=NSBezierPath();path.lineWidth=2
+      var previous: NSPoint?
       for (i,frame) in stroke.keys.sorted().enumerated() {
         let point=NSPoint(x:x(Double(frame)+0.5),y:mid+CGFloat(stroke[frame]!)*height)
-        if i==0 { path.move(to:point) } else { path.line(to:point) }
+        if i==0 { path.move(to:point) } else {
+          if strokeInterpolation == "step", let previous { path.line(to: NSPoint(x: point.x, y: previous.y)) }
+          path.line(to:point)
+        }
+        previous = point
         Theme.gold.setFill();NSBezierPath(ovalIn:NSRect(x:point.x-2,y:point.y-2,width:4,height:4)).fill()
       };path.stroke()
     }

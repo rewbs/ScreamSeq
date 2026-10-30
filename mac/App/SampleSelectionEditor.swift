@@ -78,7 +78,7 @@ extension SampleEditor {
   }
   func refreshSample(samples: [[String: Any]]) {
     updateCatalogue(samples)
-    guard sampleSelectionQuery == nil, !sampleOperationPending, drawingDraft?.submitted != true, !hasSampleComposition else { return }
+    guard sampleSelectionQuery == nil, !sampleOperationPending, drawingDraft?.submitted != true, drawingDraft?.numeric != true, !hasSampleComposition else { return }
     let revision = onSampleRevision?() ?? sampleRevision
     if !waveform.stroke.isEmpty {
       guard revision != sampleRevision else { return }

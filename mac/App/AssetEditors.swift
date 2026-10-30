@@ -95,6 +95,10 @@ final class SampleEditor: NSView, NSTextFieldDelegate {
   var onSampleSelected: ((Int) -> Void)?
   override var acceptsFirstResponder: Bool { true }
   override func mouseDown(with event: NSEvent) { window?.makeFirstResponder(self); super.mouseDown(with:event) }
+  override func performKeyEquivalent(with event: NSEvent) -> Bool {
+    if handleNumericDrawingKey(event) { return true }
+    return super.performKeyEquivalent(with: event)
+  }
 
   lazy var settingsDraft = AssetFieldDraft(["name":name,"rate":rate,"volume":volume,"pan":pan])
   var settingsPending = false, settingsNeedsReload = false
@@ -105,7 +109,7 @@ final class SampleEditor: NSView, NSTextFieldDelegate {
   var onSettingsRequest: ((String, [String: Any], String, @escaping ([String: Any]) -> Void) -> Void)?
   let settingsStatus = Theme.label("Changes save automatically · ⌘Z to undo", size: 11, color: Theme.muted)
   var hasLoopDraft: Bool { loopDraftBaseline != nil && loopDraftBaseline?.isEqual(rawLoopDraft) != true }
-  var hasDraft: Bool { settingsDraft.hasDraft || hasLoopDraft || settingsPending || settingsNeedsReload || loopNeedsReload || loopsBusy || drawingBusy || !waveform.stroke.isEmpty || hasSampleComposition }
+  var hasDraft: Bool { settingsDraft.hasDraft || hasLoopDraft || settingsPending || settingsNeedsReload || loopNeedsReload || loopsBusy || drawingBusy || !waveform.stroke.isEmpty || hasNumericDrawingInput || hasSampleComposition }
   func resetDocumentContext() { cancelSampleSelection(); sampleViewStates = [:]; resetSettingsContext(); resetDrawingContext(); sampleGeneration += 1; loopSaveWork?.cancel();loopSaveWork=nil;waveform.selectedLoopMarker=nil;waveform.draggingLoop=false; loopDraftBaseline=nil; loopDraftRevision=nil; loopPreviewSignature=nil; loopPreviewRevision=nil; savedLoopInfo=[:]; retireWaveform(); waveform.selection=nil; waveform.setViewport(nil,notify:false) }
   let waveform = WaveformView(frame: .zero),
     heading = Theme.label("Sample", size: 16, weight: .semibold),
@@ -169,6 +173,13 @@ final class SampleEditor: NSView, NSTextFieldDelegate {
   lazy var snapOriginGroup = labeled("ORIGIN (frame)", snapOrigin)
   var drawingBusy = false
   var drawingDraft: SampleDrawingDraft?
+  let drawingFrame = numberField(0, width: 108, label: "Drawing point frame")
+  let drawingValue = numberField(0, width: 108, label: "Drawing point value from minus one to one")
+  let drawingInterpolation = NSPopUpButton()
+  var numericDrawingBaseline = ["frame": "0", "value": "0", "interpolation": "linear"]
+  var numericDrawingRevision: String?
+  lazy var stageDrawingButton = ActionButton("Stage point") { [weak self] in self?.stageDrawingPoint() }
+  lazy var saveDrawingButton = ActionButton("Save staged points") { [weak self] in self?.saveStagedDrawing() }
   var drawingWaiters = [(Bool) -> Void]()
   var waveformDocumentID: String?
   lazy var reviewDrawingButton = ActionButton("Review stroke") { [weak self] in self?.reviewDrawing() }
@@ -268,6 +279,7 @@ final class SampleEditor: NSView, NSTextFieldDelegate {
       .vertical,
       [
         top, details, waveform, makeWaveformControls(), makeDrawingActions(), drawingStatus, viewportStatus, selectionRow, rangeLabel,
+        ToolSection("Numeric drawing", id: "sample.numericDrawing", views: [makeNumericDrawingControls()]),
         ToolSection("Loops", id: "sample.loops", views: [makeLoopRow(sustain: false), makeLoopRow(sustain: true), makeLoopActions(), loopsStatus], expanded: true),
         ToolSection("Edit audio", id: "sample.processing", views: [editButtons, options, processingStatus]),
         ToolSection("Selection snapping", id: "sample.snap", views: [makeSnapControls(), makeSnapActions(), snapStatus]),
@@ -412,7 +424,7 @@ final class SampleEditor: NSView, NSTextFieldDelegate {
   }
   func update(_ info: [AnyHashable: Any], samples: [[String: Any]], revision: String? = nil, loaded: SampleSelectionRead? = nil) {
     let identity = samples.first { $0["index"] as? Int == index }?["id"] as? String ?? ""
-    if let draft = drawingDraft, draft.submitted {
+    if let draft = drawingDraft, draft.submitted || draft.numeric {
       updateCatalogue(samples)
       if identity != draft.identity { drawingStatus.stringValue = "The captured sample is unavailable. Stroke kept for review or discard." }
       return

@@ -1138,8 +1138,8 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
     sampleEditor.onRequest = { [weak self] method, params, reply in
       guard let self else { return }
-      if !method.hasSuffix(".get"), self.sampleEditor.drawingDraft?.submitted == true {
-        reply(AutomationServer.notAdmittedBusy("Review or discard the retained stroke before editing audio.")); return
+      if !method.hasSuffix(".get"), self.sampleEditor.drawingDraft?.submitted == true || self.sampleEditor.drawingDraft?.numeric == true {
+        reply(AutomationServer.notAdmittedBusy("Save, review or discard the drawing before editing audio.")); return
       }
       if !method.hasSuffix(".get"), self.sampleEditor.settingsDraft.hasDraft || self.sampleEditor.settingsPending || self.sampleEditor.settingsNeedsReload {
         reply(AutomationServer.notAdmittedBusy("Finish or reload the retained sample settings before editing audio.")); return

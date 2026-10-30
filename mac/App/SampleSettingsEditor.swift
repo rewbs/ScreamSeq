@@ -6,6 +6,15 @@ extension SampleEditor {
     sampleEditingFields.contains { ($0.currentEditor() as? NSTextView)?.hasMarkedText() == true }
   }
   func control(_ control: NSControl, textShouldBeginEditing fieldEditor: NSText) -> Bool {
+    if drawingDraft?.numeric == true || hasNumericDrawingInput, (settingsFields + [loopStart, loopEnd, sustainStart, sustainEnd]).contains(where: { $0 === control }) {
+      drawingStatus.stringValue = "Save or discard staged points before editing sample settings or loops."; return false
+    }
+    if control === drawingFrame || control === drawingValue {
+      guard !hasOtherDrawingForm else { drawingStatus.stringValue = "Finish sample settings and loops before entering drawing fields."; return false }
+      if onSettingsRequest != nil, waveformRevision == nil || settingsIdentity.isEmpty {
+        drawingStatus.stringValue = "Wait for the sample waveform to load before entering drawing fields."; return false
+      }
+    }
     if settingsFields.contains(where: { $0 === control }), onSettingsRequest != nil {
       guard settingsRevision != nil, !settingsIdentity.isEmpty else { settingsStatus.stringValue = "Wait for the sample to load before editing."; return false }
     }
@@ -41,6 +50,7 @@ extension SampleEditor {
       drawingWaiters.append { [weak self] accepted in if accepted { self?.finishAutomaticEdit(done) } else { done(false) } }; return
     }
     guard !drawingBusy, waveform.stroke.isEmpty else { drawingStatus.stringValue = "Finish or discard the retained stroke before continuing."; done(false); return }
+    guard !hasNumericDrawingInput else { drawingStatus.stringValue = "Stage and save the drawing point, or discard its fields before continuing."; done(false); return }
     if loopsBusy {
       loopCompletionWaiters.append { [weak self] accepted in if accepted { self?.finishAutomaticEdit(done) } else { done(false) } }; return
     }
@@ -115,6 +125,7 @@ extension SampleEditor {
     settingsStatus.stringValue = "Discarded local sample drafts."
   }
   func reloadSettings() {
+    if drawingDraft?.numeric == true || hasNumericDrawingInput { drawingStatus.stringValue = "Save or discard drawing input before reloading settings."; return }
     guard !settingsPending, !loopsBusy, !hasSampleComposition, let onSettingsRequest, !settingsIdentity.isEmpty else { return }
     settingsWork?.cancel(); settingsWork = nil
     let sample = index, identity = settingsIdentity, generation = sampleGeneration, edited = settingsEditGeneration, snapshot = settingsDraft.snapshot

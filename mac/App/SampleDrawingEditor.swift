@@ -3,18 +3,20 @@ import AppKit
 final class SampleDrawingDraft {
   let sample: Int, generation: Int, frames: Int
   let identity: String, revision: String, documentID: String?, channels: String
-  let range: Range<Int>, fields: [String: String], settingsGeneration: Int, loopGeneration: Int
+  let range: Range<Int>, numeric: Bool
+  var fields: [String: String], settingsGeneration: Int, loopGeneration: Int, interpolation: String
   var points = [SampleStrokePoint]()
   var submitted = false, retryable = false
   var acceptedRevision: String?, changedFrames: Int?, reviewed: SampleDrawingRead?
-  init(_ editor: SampleEditor, revision: String) {
+  init(_ editor: SampleEditor, revision: String, numeric: Bool = false) {
     sample = editor.index; generation = editor.sampleGeneration; frames = editor.waveform.frames
     identity = editor.settingsIdentity; self.revision = revision; documentID = editor.waveformDocumentID
     channels = editor.selectedChannels; range = editor.waveform.visibleRange; fields = editor.drawingFields
     settingsGeneration = editor.settingsEditGeneration; loopGeneration = editor.loopEditGeneration
+    self.numeric = numeric; interpolation = numeric ? editor.numericDrawingInput["interpolation"]! : "linear"
   }
   var params: [String: Any] {
-    ["sample": sample, "channels": channels, "expectedRevision": revision,
+    ["sample": sample, "channels": channels, "expectedRevision": revision, "interpolation": interpolation,
       "points": points.map { ["frame": $0.frame, "value": $0.value] as [String: Any] }]
   }
 }
@@ -27,10 +29,12 @@ extension SampleEditor {
   var sampleEditingFields: [NSTextField] {
     settingsFields + [loopStart, loopEnd, sustainStart, sustainEnd, selectionStart, selectionEnd,
       exponent, gain, target, smoothing, crossfadeFrames, pasteSourceGain, pasteDestinationGain,
-      snapRadius, snapStep, snapOrigin]
+      snapRadius, snapStep, snapOrigin, drawingFrame, drawingValue]
   }
   var drawingFields: [String: String] {
     var values = settingsDraft.snapshot
+    values["drawingInterpolation"] = numericDrawingInput["interpolation"]
+    values["numericFrame"] = numericDrawingInput["frame"]; values["numericValue"] = numericDrawingInput["value"]
     for (i, field) in sampleEditingFields.enumerated() { values["field\(i)"] = field.currentEditor()?.string ?? field.stringValue }
     for (i, control) in [looping, pingpong, loopReverse, sustaining, sustainPingpong, sustainReverse].enumerated() {
       values["loop\(i)"] = String(control.state.rawValue)
@@ -46,7 +50,13 @@ extension SampleEditor {
     retryDrawingButton.isEnabled = !drawingBusy && drawingDraft?.retryable == true
     reviewDrawingButton.isEnabled = !drawingBusy && submitted
     acceptDrawingButton.isEnabled = !drawingBusy && drawingDraft?.reviewed != nil
-    discardDrawingButton.isEnabled = !drawingBusy && (submitted || !waveform.stroke.isEmpty)
+    discardDrawingButton.isEnabled = !drawingBusy && (submitted || !waveform.stroke.isEmpty || hasNumericDrawingInput)
+    stageDrawingButton.isEnabled = !drawingBusy && !submitted
+    saveDrawingButton.isEnabled = !drawingBusy && !submitted && drawingDraft?.numeric == true
+    // A staged batch must finish before another musical form accepts input.
+    let editable = drawingDraft?.numeric != true && !hasNumericDrawingInput
+    for field in settingsFields + [loopStart, loopEnd, sustainStart, sustainEnd] { field.isEnabled = editable }
+    for control in [looping, pingpong, loopReverse, sustaining, sustainPingpong, sustainReverse] { control.isEnabled = editable }
   }
   func finishDrawingWaiters(_ accepted: Bool) {
     let callbacks = drawingWaiters; drawingWaiters = []; callbacks.forEach { $0(accepted) }
@@ -54,6 +64,7 @@ extension SampleEditor {
   func resetDrawingContext() {
     drawingDraft = nil; drawingBusy = false; waveform.retainsStroke = false
     waveform.cancelStroke(force: true); strokeRevision = nil; waveformDocumentID = nil
+    resetNumericDrawingInput()
     updateDrawingActions(); finishDrawingWaiters(false)
   }
   func ownsDrawing(_ draft: SampleDrawingDraft) -> Bool {
@@ -160,6 +171,11 @@ extension SampleEditor {
     }
   }
   func adoptDrawing(_ read: SampleDrawingRead, draft: SampleDrawingDraft) {
+    if draft.numeric {
+      numericDrawingBaseline = ["frame": draft.fields["numericFrame"] ?? drawingFrame.stringValue,
+        "value": draft.fields["numericValue"] ?? drawingValue.stringValue, "interpolation": draft.interpolation]
+      numericDrawingRevision = hasNumericDrawingInput ? draft.revision : nil
+    }
     drawingDraft = nil; drawingBusy = false; waveform.retainsStroke = false; waveform.cancelStroke(force: true)
     // Retire ordinary reads that began before this owned readback.
     cancelWaveformQuery()

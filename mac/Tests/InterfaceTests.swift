@@ -133,6 +133,7 @@ struct InterfaceFailure: Error { let message: String }
     try drawingRetentionChecks()
     try sampleNavigationChecks()
     try sampleSelectionChecks()
+    try numericDrawingChecks()
     return editor
   }
   static func parameterBoundaryChecks() throws {
