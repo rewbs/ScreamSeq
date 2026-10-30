@@ -11,9 +11,13 @@
 #include <stdexcept>
 #include <string>
 #include <sys/utsname.h>
+#include <CommonCrypto/CommonDigest.h>
+#include <array>
 
 namespace Tracker {
 namespace {
+struct InventoryLocation {std::mutex mutex;NSString *path=nil;};
+InventoryLocation &inventoryLocation(){static InventoryLocation *value=new InventoryLocation;return *value;}
 NSString *architecture() {
 #if defined(__arm64__)
   return @"arm64";
@@ -141,10 +145,12 @@ NSArray<NSDictionary *> *readInventory(NSString *path) {
 }
 } // namespace
 NSString *PluginInventory::defaultPath() {
+  auto &location=inventoryLocation();std::lock_guard lock(location.mutex);if(location.path)return location.path;
   NSString *root = NSSearchPathForDirectoriesInDomains(NSCachesDirectory, NSUserDomainMask, YES).firstObject;
   return [[root stringByAppendingPathComponent:@"org.resonance"]
       stringByAppendingPathComponent:[NSString stringWithFormat:@"plugins-v1-%@.json", architecture()]];
 }
+void PluginInventory::setStorePath(NSString *path){auto &location=inventoryLocation();std::lock_guard lock(location.mutex);location.path=path.isAbsolutePath?[path copy]:nil;}
 NSArray<NSDictionary *> *PluginInventory::cached() {
   if (!cached_)
     cached_ = readInventory(path_);
@@ -342,5 +348,133 @@ NSArray<NSDictionary *> *PluginInventory::load(bool rescan, const std::function<
   if (ownedDirectory(path_.stringByDeletingLastPathComponent, Access::NotWritableByOthers, true))
     writePrivateFile(path_, data, ".plugins.XXXXXX");
   return cached_;
+}
+namespace {
+bool moduleHash(id value) {
+  return string(value,64) && [value length]==64 &&
+    [value rangeOfCharacterFromSet:[[NSCharacterSet characterSetWithCharactersInString:@"0123456789abcdef"] invertedSet]].location==NSNotFound;
+}
+StoreLocation &moduleStoreLocation(){static StoreLocation *location=new StoreLocation;return *location;}
+bool sameClass(NSDictionary *descriptor, NSString *classID, bool instrument) {
+  return [descriptor[@"format"] isEqual:@"VST3"] &&
+    [descriptor[@"classID"] caseInsensitiveCompare:classID]==NSOrderedSame &&
+    [descriptor[@"isInstrument"] boolValue]==instrument;
+}
+bool sameFile(const struct stat &a,const struct stat &b) {
+  return a.st_dev==b.st_dev && a.st_ino==b.st_ino && a.st_size==b.st_size &&
+    a.st_mtimespec.tv_sec==b.st_mtimespec.tv_sec && a.st_mtimespec.tv_nsec==b.st_mtimespec.tv_nsec &&
+    a.st_ctimespec.tv_sec==b.st_ctimespec.tv_sec && a.st_ctimespec.tv_nsec==b.st_ctimespec.tv_nsec;
+}
+struct ModuleFile {
+  int fd;
+  explicit ModuleFile(NSString *path):fd(open(path.fileSystemRepresentation,O_RDONLY|O_CLOEXEC|O_NOFOLLOW|O_NONBLOCK)){}
+  ~ModuleFile(){if(fd>=0)close(fd);}
+};
+NSString *moduleExecutable(NSString *bundle) {
+  NSString *real=PluginTrust::canonical(bundle);
+  if(!real || !bundleName(real))throw std::invalid_argument("Choose an existing macOS VST3 bundle");
+  // Read the on-disk plist directly. CFBundle may retain metadata for a bundle
+  // already loaded in this process, including its former executable name.
+  NSString *info=[real stringByAppendingPathComponent:@"Contents/Info.plist"];
+  ModuleFile file(info);struct stat before{},after{},current{};
+  if(file.fd<0 || fstat(file.fd,&before)!=0 || !S_ISREG(before.st_mode) || before.st_size<=0 || before.st_size>1024*1024)
+    throw std::invalid_argument("VST3 bundle has no readable Info.plist within the size limit");
+  NSMutableData *bytes=[NSMutableData dataWithLength:size_t(before.st_size)];size_t position=0;
+  while(position<bytes.length){auto count=read(file.fd,static_cast<char *>(bytes.mutableBytes)+position,bytes.length-position);
+    if(count<0 && errno==EINTR)continue;
+    if(count<=0)throw std::runtime_error("VST3 bundle metadata changed while reading");position+=size_t(count);}
+  if(fstat(file.fd,&after)!=0 || lstat(info.fileSystemRepresentation,&current)!=0 || !sameFile(before,after) || !sameFile(after,current))
+    throw std::runtime_error("VST3 bundle metadata changed while reading");
+  id root=[NSPropertyListSerialization propertyListWithData:bytes options:0 format:nil error:nil];
+  id name=[root isKindOfClass:NSDictionary.class]?root[@"CFBundleExecutable"]:nil;
+  if(!string(name,512) || ![name length] || ![name isEqual:[name lastPathComponent]] || [name isEqual:@"."] || [name isEqual:@".."])
+    throw std::invalid_argument("VST3 bundle has an invalid executable name");
+  NSString *executable=PluginTrust::canonical([[real stringByAppendingPathComponent:@"Contents/MacOS"] stringByAppendingPathComponent:name]);
+  if(!executable || !inside(executable,real))throw std::invalid_argument("VST3 executable must exist inside its bundle");
+  return executable;
+}
+}
+NSString *PluginLocations::defaultPath() {
+  auto &location=moduleStoreLocation();std::lock_guard lock(location.mutex);if(location.override)return location.override;
+  return [PluginInventory::defaultPath().stringByDeletingLastPathComponent
+    stringByAppendingPathComponent:[NSString stringWithFormat:@"verified-vst3-v1-%@.json",architecture()]];
+}
+void PluginLocations::setStorePath(NSString *path){auto &location=moduleStoreLocation();std::lock_guard lock(location.mutex);location.override=path.isAbsolutePath?[path copy]:nil;}
+NSArray<NSDictionary *> *PluginLocations::records() {
+  if(records_)return records_;
+  records_=@[];
+  NSData *bytes=readOwnedFile(path_,8*1024*1024,Access::Private);
+  id root=bytes?[NSJSONSerialization JSONObjectWithData:bytes options:0 error:nil]:nil;
+  if(![root isKindOfClass:NSDictionary.class] || !integer(root[@"version"]) || ![root[@"version"] isEqual:@1] ||
+     ![root[@"architecture"] isEqual:architecture()] || ![root[@"modules"] isKindOfClass:NSArray.class] || [root[@"modules"] count]>4096)return records_;
+  for(id item in root[@"modules"]){
+    if(![item isKindOfClass:NSDictionary.class] || [item count]!=2 || !moduleHash(item[@"moduleSHA256"]) ||
+       ![item[@"descriptor"] isKindOfClass:NSDictionary.class] || !validated(@[item[@"descriptor"]]) ||
+       ![item[@"descriptor"][@"format"] isEqual:@"VST3"])return records_;
+  }
+  records_=[root[@"modules"] copy];return records_;
+}
+NSString *PluginLocations::moduleSHA256(NSString *bundle) {
+  NSString *path=moduleExecutable(bundle);
+  ModuleFile file(path);struct stat before{},after{},current{};
+  if(file.fd<0 || fstat(file.fd,&before)!=0 || !S_ISREG(before.st_mode) || before.st_size<=0 || uint64_t(before.st_size)>2ull*1024*1024*1024)
+    throw std::invalid_argument("VST3 executable must be a readable regular file within 2 GiB");
+  CC_SHA256_CTX digest;CC_SHA256_Init(&digest);std::array<unsigned char,65536> buffer;uint64_t bytes=0;
+  while(bytes<uint64_t(before.st_size)) {
+    auto count=read(file.fd,buffer.data(),std::min<uint64_t>(buffer.size(),uint64_t(before.st_size)-bytes));
+    if(count<0 && errno==EINTR)continue;
+    if(count<=0)throw std::runtime_error("VST3 executable changed while hashing");
+    CC_SHA256_Update(&digest,buffer.data(),CC_LONG(count));bytes+=uint64_t(count);
+  }
+  if(fstat(file.fd,&after)!=0 || lstat(path.fileSystemRepresentation,&current)!=0 || !sameFile(before,after) || !sameFile(after,current) ||
+     ![moduleExecutable(bundle) isEqual:path])throw std::runtime_error("VST3 executable changed while hashing; scan again");
+  std::array<unsigned char,CC_SHA256_DIGEST_LENGTH> hash;CC_SHA256_Final(hash.data(),&digest);
+  NSMutableString *result=[NSMutableString string];for(auto byte:hash)[result appendFormat:@"%02x",byte];return result;
+}
+NSArray<NSDictionary *> *PluginLocations::scan(NSString *bundle,NSString *classID,bool instrument,
+    const std::function<NSArray<NSDictionary *> *(NSString *)> &scanner) {
+  if(!string(classID,32) || classID.length!=32)throw std::invalid_argument("Choose a VST3 class identity");
+  NSString *real=PluginTrust::canonical(bundle),*hash=moduleSHA256(bundle);
+  NSArray *found=validated(scanner(real));
+  if(!found || !found.count)throw std::runtime_error("Scanner returned no valid VST3 descriptors");
+  bool matched=false;NSMutableArray *next=[NSMutableArray array];
+  for(NSDictionary *descriptor in found) {
+    if(![descriptor[@"format"] isEqual:@"VST3"] || ![PluginTrust::canonical(descriptor[@"path"]) isEqual:real])
+      throw std::runtime_error("Scanner returned a different VST3 bundle");
+    matched=matched||sameClass(descriptor,classID,instrument);
+    NSMutableDictionary *canonical=[descriptor mutableCopy];canonical[@"path"]=real;
+    [next addObject:@{@"descriptor":canonical,@"moduleSHA256":hash}];
+  }
+  if(!matched)throw std::invalid_argument("Scanned module has a different plugin class; choose a matching VST3");
+  if(![PluginTrust::canonical(bundle) isEqual:real] || ![moduleSHA256(real) isEqual:hash])
+    throw std::runtime_error("VST3 module changed during the scan; scan again");
+  for(NSDictionary *item in records())if(![item[@"descriptor"][@"path"] isEqual:real])[next addObject:item];
+  if(next.count>4096)throw std::runtime_error("Too many verified VST3 classes");
+  NSData *data=[NSJSONSerialization dataWithJSONObject:@{@"version":@1,@"architecture":architecture(),@"modules":next}
+    options:NSJSONWritingSortedKeys error:nil];
+  if(!data || data.length>8*1024*1024)throw std::runtime_error("Verified VST3 inventory exceeds its size limit");
+  records_=[next copy];
+  if(ownedDirectory(path_.stringByDeletingLastPathComponent,Access::Private,true))writePrivateFile(path_,data,".verified-vst3.XXXXXX");
+  return candidates(classID,instrument);
+}
+NSArray<NSDictionary *> *PluginLocations::candidates(NSString *classID,bool instrument) {
+  if(!string(classID,32) || classID.length!=32)throw std::invalid_argument("Choose a VST3 class identity");
+  NSMutableArray *result=[NSMutableArray array];NSMutableDictionary *hashes=[NSMutableDictionary dictionary];
+  for(NSDictionary *item in records()) {
+    NSDictionary *descriptor=item[@"descriptor"];if(!sameClass(descriptor,classID,instrument))continue;
+    NSString *path=descriptor[@"path"],*hash=hashes[path];
+    if(!hash){try{hash=moduleSHA256(path);}catch(const std::exception &){hash=@"";}hashes[path]=hash;}
+    if([PluginTrust::canonical(path) isEqual:path] && [hash isEqual:item[@"moduleSHA256"]])[result addObject:item];
+  }
+  return result;
+}
+NSString *PluginLocations::verify(NSString *bundle,NSString *classID,bool instrument,NSString *expected) {
+  if(expected && !moduleHash(expected))throw std::invalid_argument("Expected the module SHA-256 from plugin.path.get");
+  NSString *real=PluginTrust::canonical(bundle);
+  for(NSDictionary *item in candidates(classID,instrument))if([item[@"descriptor"][@"path"] isEqual:real]) {
+    if(expected && ![item[@"moduleSHA256"] isEqual:expected])throw std::invalid_argument("The scanned VST3 module changed; read its current hash again");
+    return real;
+  }
+  throw std::invalid_argument("No matching verified VST3 module at this path; scan it first");
 }
 } // namespace Tracker

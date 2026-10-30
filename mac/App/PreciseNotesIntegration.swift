@@ -1,8 +1,80 @@
 import AppKit
 extension AppController {
+  func finishPendingNotes(_ action:@escaping ()->Void)->Bool {
+    if sampleBrowser?.needsDocumentCompletion == true {
+      statusLabel.stringValue = "Review the retained sample-library import before saving, changing history or replacing the song."
+      showSampleBrowser(); return true
+    }
+    if patternView.nudgeEditor?.needsCompletion == true {
+      statusLabel.stringValue="Save the in-grid command with Return, or cancel it with Escape, before continuing."
+      return true
+    }
+    // Gate editing is explicitly Apply/Follow. Save, history and departure must
+    // not silently apply its raw text or discard an invalid/composing draft.
+    if gateInspector.needsCompletion {
+      statusLabel.stringValue="Apply the retained gate edit, or use Follow to reload it, before continuing."
+      workspace?.show("gate")
+      return true
+    }
+    if let editor=songSettingsWindow?.editor,editor.needsCompletion {
+      editor.finishAutomaticEdit {[weak self] accepted in
+        if accepted {action()} else {self?.statusLabel.stringValue="Finish or reload the retained song settings before continuing."}
+      }
+      return true
+    }
+    if mixerEditor.needsCompletion {
+      mixerEditor.finishAutomaticEdit { [weak self] accepted in
+        if accepted { action() } else { self?.statusLabel.stringValue = "Finish or reload the retained mixer edit before continuing." }
+      }
+      return true
+    }
+    if sampleEditor.hasDraft {
+      sampleEditor.finishAutomaticEdit { [weak self] accepted in
+        if accepted { action() } else { self?.statusLabel.stringValue = "Finish or reload the retained sample edit before continuing." }
+      }
+      return true
+    }
+    if instrumentEditor.hasDraft {
+      instrumentEditor.finishAutomaticEdit {[weak self] accepted in
+        if accepted {action()} else {self?.statusLabel.stringValue="Finish or reload the retained instrument edit before continuing."}
+      }
+      return true
+    }
+    if workspaceAutomation.hasDraft || workspaceAutomation.loading {
+      workspaceAutomation.finishAutomaticEdit {[weak self] accepted in
+        if accepted {action()} else {self?.statusLabel.stringValue="Finish or reload the retained pattern automation edit before continuing."}
+      }
+      return true
+    }
+    let curve=signalGraphEditor.envelopeEditor
+    if curve.hasDraft || curve.loading {
+      curve.finishAutomaticEdit {[weak self] accepted in
+        if accepted {action()} else {self?.statusLabel.stringValue="Finish or reload the retained graph curve edit before continuing."}
+      }
+      return true
+    }
+    if parameterActivity.needsCompletion {
+      parameterActivity.finishAutomaticEdit {[weak self] accepted in
+        if accepted {action()} else {self?.statusLabel.stringValue="Finish or reload the retained recorded-point edit before continuing."}
+      }
+      return true
+    }
+    if let editor=songAutomationWindow?.editor,editor.needsCompletion {
+      editor.finishAutomaticEdit {[weak self] accepted in
+        if accepted {action()} else {self?.statusLabel.stringValue="Finish or reload the retained song automation edit before continuing."}
+      }
+      return true
+    }
+    guard workspaceNotes.pending || workspaceNotes.hasDraft else{return false}
+    workspaceNotes.finishAutomaticEdit {[weak self] accepted in
+      if accepted {action()}
+      else {self?.statusLabel.stringValue="Finish or reload the retained precise-note edit before continuing."}
+    }
+    return true
+  }
   @objc func showPreciseNotes() {
     guard !busy,model.editable else{return}
-    workspaceReturnPoints["notes"]=patternView.navigation
+    capturePanelReturn("notes")
     workspace?.show("notes"); followWorkspacePanel("notes",force:true)
   }
 
@@ -28,17 +100,22 @@ extension AppController {
       else {self.statusLabel.stringValue=(reply["error"] as? [String:Any])?["message"] as? String ?? "Could not start recording"}
     }
   }
-  @objc func retryRecordingFinish() {recordingFinishing=false;finishLiveRecording()}
-  @objc func finishLiveRecording() {
+  @objc func retryRecordingFinish() {recordingFinishing=false;finishRecording(allowLoss:true)}
+  @objc func finishLiveRecording() { finishRecording(allowLoss:false) }
+  private func finishRecording(allowLoss:Bool) {
     guard !busy,!recordingFinishing,let take=recordingTakeID ?? session.recordingTakeID else{return}
     recordingFinishing=true
     handleAutomation("recording.stop",params:["take":take,"expectedRevision":session.automationRevision]){[weak self] reply in
       guard let self else{return}
       guard let result=reply["result"] as? [String:Any],let data=result["data"] as? [String:Any] else{self.recordingFailure(reply);return}
-      let drops=(data["missingTime"] as? Int ?? 0)+(data["exhaustedVoices"] as? Int ?? 0)+(data["overflow"] as? Int ?? 0)
+      guard self.session.recordingTakeID == take else { self.recordingFailure(["error":["message":"Recording take changed; review the current take."]]); return }
+      if !allowLoss, let loss = MIDIRecordingEditor.lossSummary(data) {
+        self.statusLabel.stringValue = "Take retained for review · " + loss
+        self.midiSettings(); self.midiEditor.refresh(); return
+      }
       self.handleAutomation("recording.commit",params:["take":take,"replaceRows":true,"expectedRevision":self.session.automationRevision]){[weak self] reply in
         guard let self else{return}
-        if reply["result"] != nil {self.recordingTakeID=nil;self.recordingFinishing=false;self.statusLabel.stringValue=drops>0 ? "Recording saved · \(drops) input events could not be captured; check the take" : "Recording saved · Undo restores the previous notes"}
+        if reply["result"] != nil {self.recordingTakeID=nil;self.recordingFinishing=false;self.statusLabel.stringValue="Recording saved · Undo restores the previous notes";self.midiEditor.refresh()}
         else {self.recordingFailure(reply)}
       }
     }
@@ -53,7 +130,7 @@ extension AppController {
     guard !busy,let take=recordingTakeID ?? session.recordingTakeID else{return}
     handleAutomation("recording.discard",params:["take":take,"expectedRevision":session.automationRevision]){[weak self] reply in
       guard let self else{return}
-      if reply["result"] != nil {self.recordingTakeID=nil;self.recordingFinishing=false;self.statusLabel.stringValue="Recording take discarded"}
+      if reply["result"] != nil {self.recordingTakeID=nil;self.recordingFinishing=false;self.statusLabel.stringValue="Recording take discarded";self.midiEditor.refresh()}
       else {self.recordingFailure(reply)}
     }
   }

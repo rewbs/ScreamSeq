@@ -50,12 +50,14 @@ struct InterfaceFailure: Error { let message: String }
     view.frames = 0; view.zoom(2); view.panFrames(1); try require(view.visibleRange.isEmpty, "Empty samples have a safe empty viewport")
     let editor = SampleEditor(frame: NSRect(x: 0, y: 0, width: 729, height: 1400))
     let samples: [[String: Any]] = [["index": 1, "name": "Drawing fixture"]]
-    editor.update(["frames": 1000, "channels": 2], samples: samples, revision: "initial")
+    editor.update(["frames": 1000, "channels": 2], samples: samples, revision: "fresh")
     editor.waveform.frame = NSRect(x: 0, y: 0, width: 512, height: 180)
     var requests = [(String, [String: Any])](), replies = [([String: Any]) -> Void]()
     editor.onRequest = { method, params, reply in requests.append((method, params)); replies.append(reply) }
     func answer(_ revision: String, _ count: Int = 32) {
-      replies.removeFirst()(["result": ["revision": revision, "data": ["peaks": Array(repeating: 0.25, count: count * 2)]]])
+      var data = requests[requests.count - replies.count].1
+      data["peaks"] = Array(repeating: 0.25, count: count * 2)
+      replies.removeFirst()(["result": ["revision": revision, "documentId": "wave-doc", "data": data]])
     }
     editor.waveform.setViewport(240..<272); editor.waveform.setViewport(248..<280); editor.waveform.setViewport(256..<288)
     try require(requests.count == 1, "Rapid viewport changes retain only one in-flight waveform read")
@@ -86,12 +88,17 @@ struct InterfaceFailure: Error { let message: String }
       (requests.last?.1["points"] as? [[String: Any]])?.count == 7, "One stroke is one API command with the original displayed revision")
     try require(!editor.waveform.beginStroke(SampleStrokePoint(frame: 264, value: 0)), "A pending drawing edit cannot be submitted twice")
     replies.removeFirst()(["error": ["code": -32001, "message": "Song changed"]])
-    try require(editor.drawingStatus.stringValue == "Song changed" && editor.waveform.stroke.isEmpty && requests.last?.0 == "sample.waveform.get",
-      "Stale drawings show the failure, discard the overlay and reload the waveform")
+    try require(editor.drawingStatus.stringValue.contains("Song changed") && !editor.waveform.stroke.isEmpty && requests.last?.0 == "sample.draw",
+      "Stale drawings retain their overlay and never automatically repeat the write")
+    editor.sampleRevision = "next"
+    editor.discardDrawing()
     answer("next")
     try require(editor.waveform.beginStroke(SampleStrokePoint(frame: 269, value: -1)), "A refreshed waveform accepts the next gesture")
     editor.waveform.finishStroke()
     replies.removeFirst()(["result": ["revision": "drawn", "data": ["changedFrames": 1]]])
+    replies.removeFirst()(["result": ["revision": "drawn", "documentId": "wave-doc", "data": ["index": 1, "frames": 1000, "channels": 2, "name": "Drawing fixture", "rate": 44100, "volume": 64, "pan": 128,
+      "loop": false, "loopStart": 0, "loopEnd": 0, "pingpong": false, "reverseLoop": false,
+      "sustainLoop": false, "sustainStart": 0, "sustainEnd": 0, "sustainPingpong": false, "sustainReverse": false]]])
     answer("drawn")
     try require(editor.drawingStatus.stringValue.contains("Drew 1 frame"), "A completed drawing reports its result")
     let beforeCancel = requests.count
@@ -104,7 +111,7 @@ struct InterfaceFailure: Error { let message: String }
     try require(retry != nil && editor.waveformPending, "Busy reads schedule a bounded retry")
     editor.waveform.setViewport(400..<432)
     try require(retry?.isCancelled == true && requests.last?.1["start"] as? Int == 400, "A new viewport retires the old busy retry")
-    answer("moved")
+    answer("drawn")
     try require(editor.waveform.beginStroke(SampleStrokePoint(frame: 410, value: 0)), "Begin before a document refresh")
     editor.update(["frames": 1000, "channels": 2], samples: samples, revision: "external")
     let afterRefresh = requests.count
@@ -123,6 +130,10 @@ struct InterfaceFailure: Error { let message: String }
     editor.waveformRevision = "snapshot"; editor.waveform.selection = 1004...1040
     _ = editor.waveform.beginStroke(SampleStrokePoint(frame: 1020, value: 0.2))
     editor.waveform.extendStroke(SampleStrokePoint(frame: 1032, value: -0.5))
+    try drawingRetentionChecks()
+    try sampleNavigationChecks()
+    try sampleSelectionChecks()
+    try numericDrawingChecks()
     return editor
   }
   static func parameterBoundaryChecks() throws {
@@ -162,7 +173,6 @@ struct InterfaceFailure: Error { let message: String }
     let recovery = try recoveryChecks()
     let commands = try patternCommandsChecks()
     try sampleCrossfadeChecks()
-    try sampleLoopChecks()
     try sampleSnapChecks()
     let zoomedSample = try waveformChecks()
     let samples: [[String: Any]] = [
@@ -188,68 +198,8 @@ struct InterfaceFailure: Error { let message: String }
     sample.selectionEnd.stringValue = "301"
     var sampleRequests = [(String, [String: Any])]()
     var sampleReplies = [([String: Any]) -> Void]()
-    sample.onRequest = { method, params, reply in sampleRequests.append((method, params)); sampleReplies.append(reply) }
-    sample.operationPicker.selectItem(at: 2); sample.curvePicker.selectItem(at: 2); sample.exponent.stringValue = "2.5"
-    sample.updateProcessingOptions(); sample.process(dryRun: true)
-    try require(sampleRequests.count == 1 && sampleRequests[0].0 == "sample.process" && sampleRequests[0].1["exponent"] as? Double == 2.5 && sampleRequests[0].1["start"] as? Int == 300, "Native fades send exact controls through the shared API")
-    try require(!sample.previewButton.isEnabled && !sample.processButton.isEnabled, "Processing cannot be submitted twice while pending")
-    sampleReplies.removeFirst()(["result": ["revision": "sample-preview", "data": ["changedFrames": 1, "peakAfter": 0.0]]])
-    sample.process(dryRun: false)
-    try require(sampleRequests.last?.1["expectedRevision"] as? String == "sample-preview", "Apply uses the preview revision rather than silently rebasing it")
-    sampleReplies.removeFirst()(["error": ["code": -32001, "message": "Song changed"]])
-    try require(sample.processingStatus.stringValue == "Song changed", "Stale sample previews surface the API error")
-    sample.operationPicker.selectItem(at: 6); sample.updateProcessingOptions(); sample.smoothing.stringValue = "4"; sample.process(dryRun: true)
-    try require(sampleRequests.count == 2 && sample.processingStatus.stringValue.contains("odd"), "Invalid smoothing is rejected before dispatch")
-    sample.smoothing.stringValue = "5"; sample.process(dryRun: true)
-    sampleReplies.removeFirst()(["result": ["revision": "old-sample", "data": ["changedFrames": 0]]])
-    sample.index = 2; sample.index = 1; sample.selectionStart.stringValue = "300"; sample.selectionEnd.stringValue = "301"; sample.process(dryRun: false)
-    try require(sampleRequests.last?.1["expectedRevision"] == nil, "Changing sample selection retires its preview")
-    sampleReplies.removeFirst()(["result": ["revision": "new-sample", "data": ["changedFrames": 1]]])
-    sample.selectionStart.stringValue = "300"; sample.selectionEnd.stringValue = "300"; sample.setRange()
-    try require(sample.waveform.selection == 300...300, "A zero-length range is a retained insertion cursor")
-    var clipboardCount = sampleRequests.count
-    sample.clipboardAction("copy")
-    try require(sampleRequests.count == clipboardCount && sample.clipboardStatus.stringValue.contains("nonempty"), "Copy rejects an insertion cursor before dispatch")
-    sample.selectionEnd.stringValue = "310"; sample.setRange()
-    sample.waveform.copy(nil)
-    try require(sampleRequests.last?.0 == "sample.clipboard.copy" && sampleRequests.last?.1["start"] as? Int == 300 && sampleRequests.last?.1["end"] as? Int == 310, "Waveform Copy dispatches the exact half-open region through the API")
-    sample.waveform.cut(nil)
-    try require(sampleRequests.count == clipboardCount + 1, "Clipboard controls cannot submit twice while pending")
-    sampleReplies.removeFirst()(["result": ["revision": "copy-revision", "data": ["frames": 10, "channels": 1, "rate": 44100]]])
-    sample.pasteMode.selectItem(at: 2); sample.pasteModeChanged()
-    sample.pasteSourceGain.stringValue = "-3"; sample.pasteDestinationGain.stringValue = "-6"
-    sample.pasteClipboard(dryRun: true)
-    try require(sampleRequests.last?.0 == "sample.clipboard.get" && !sample.pasteDestinationGroup.isHidden, "Mix preview reads the clipboard identity and exposes existing-audio gain")
-    sampleReplies.removeFirst()(["result": ["revision": "clipboard-read", "data": ["clipboardId": "clipboard-A"]]])
-    try require(sampleRequests.last?.0 == "sample.paste" && sampleRequests.last?.1["sourceGainDB"] as? Double == -3 && sampleRequests.last?.1["destinationGainDB"] as? Double == -6 && sampleRequests.last?.1["expectedRevision"] as? String == "clipboard-read", "Mix preview preserves exact gains, identity and the read revision")
-    sampleReplies.removeFirst()(["result": ["revision": "paste-preview", "data": ["insertedFrames": 10, "resultFrames": 5_000_000, "clippedSamples": 2]]])
-    try require(sample.clipboardStatus.stringValue.contains("2 clipped"), "Clipping is reported before applying a paste")
-    clipboardCount = sampleRequests.count
-    sample.waveform.paste(nil)
-    try require(sampleRequests.count == clipboardCount + 1 && sampleRequests.last?.0 == "sample.paste" && sampleRequests.last?.1["clipboardId"] as? String == "clipboard-A" && sampleRequests.last?.1["expectedRevision"] as? String == "paste-preview", "Applying a matching preview freezes both document and clipboard identities without rereading")
-    sampleReplies.removeFirst()(["error": ["code": -32001, "message": "Clipboard changed"]])
-    try require(sample.clipboardStatus.stringValue == "Clipboard changed" && sample.pastePreviewID == nil, "Stale clipboard failures surface and retire the preview")
-    sample.pasteClipboard(dryRun: true)
-    sample.index = 2
-    clipboardCount = sampleRequests.count
-    sampleReplies.removeFirst()(["result": ["revision": "retired", "data": ["clipboardId": "retired"]]])
-    try require(sampleRequests.count == clipboardCount && !sample.clipboardBusy, "A delayed clipboard lookup cannot paste into a newly selected sample")
-    sample.index = 1; sample.selectionStart.stringValue = "300"; sample.selectionEnd.stringValue = "310"; sample.setRange()
-    sample.clipboardAction("cut")
-    sampleReplies.removeFirst()(["result": ["revision": "cut", "data": ["removedFrames": 10]]])
-    try require(sample.waveform.selection == 300...300, "Cut leaves an insertion cursor at the removed region")
-    sample.selectionEnd.stringValue = "310"; sample.setRange()
-    var copiedSample = 0
-    sample.onSelect = { copiedSample = $0 }
-    sample.clipboardAction("new")
-    try require(sampleRequests.last?.0 == "sample.copyToNew" && sampleRequests.last?.1["start"] as? Int == 300 && sampleRequests.last?.1["end"] as? Int == 310,
-      "Copy to new sends the selected region through the shared API")
-    sampleReplies.removeFirst()(["result": ["revision": "new-copy", "data": ["sample": 2, "frames": 10]]])
-    try require(sample.index == 2 && copiedSample == 2 && sample.waveform.selection == nil,
-      "Copy to new selects the returned slot and retires the old region")
-    sample.onSelect = nil; sample.index = 1
-    sample.pasteSourceGain.stringValue = "0"; sample.pasteDestinationGain.stringValue = "0"
-    sample.pasteMode.selectItem(at: 0); sample.pasteModeChanged()
+    // Operation completion and failure paths use realistic staged responses in
+    // sampleOperationChecks; this fixture below tests layout and navigation.
     sample.onRequest = nil
     sample.update(["name": "Long sample", "frames": 5_000_000, "channels": 2], samples: samples)
     sample.operationPicker.selectItem(at: 3); sample.curvePicker.selectItem(at: 3); sample.exponent.stringValue = "3"; sample.updateProcessingOptions()
@@ -264,7 +214,13 @@ struct InterfaceFailure: Error { let message: String }
     try require(sampleRequests.last?.1["channels"] as? String == "right", "The latest channel query uses the shared read API after the first completes")
     try require(sample.waveform.peaks == displayPeaks, "Out-of-order channel waveform replies cannot replace the active channel")
     sampleReplies.removeFirst()(["result": ["data": ["peaks": [-0.25, 0.25]]]])
-    try require(sample.waveform.peaks == [-0.25, 0.25], "Active channel waveform response is displayed")
+    try require(sample.waveform.peaks == displayPeaks && sample.waveformRevision == nil, "Incomplete waveform replies cannot become a loaded view")
+    sample.channelPicker.selectItem(at: 2); sample.channelChanged()
+    var currentWave = sampleRequests.last!.1
+    let currentPeaks = Array(repeating: [-0.25, 0.25], count: currentWave["bins"] as! Int).flatMap { $0 }
+    currentWave["peaks"] = currentPeaks
+    sampleReplies.removeFirst()(["result": ["revision": "current", "data": currentWave]])
+    try require(sample.waveform.peaks == currentPeaks.map(Float.init), "Complete active-channel waveform response is displayed")
     try require(sample.automationContext(frames: 5_000_000)["start"] as? Int == 251000 && sample.automationContext(frames: 256)["end"] as? Int == 256, "Agent sample context uses current inventory length and retires invalid stale ranges")
     sample.onRequest = nil; sample.channelPicker.selectItem(at: 0); sample.waveform.peaks = displayPeaks
     sample.processingStatus.stringValue = "Preview: 3,018,000 frames change · peak −0.26 dBFS"
@@ -557,7 +513,7 @@ struct InterfaceFailure: Error { let message: String }
     let labels = OrderEditor(frame: .zero)
     labels.update(annotated, selected: 0)
     var annotation: [String: Any] = [:]
-    labels.onAnnotate = { annotation = $0 }
+    labels.onAnnotate = { params,reply in annotation=params;reply(["result":["revision":"metadata-revision"]]) }
     labels.sectionName.stringValue = "Opening"; labels.saveSection()
     try require(annotation["id"] as? String == "n3" && annotation["expectedRevision"] as? String == "metadata-revision", "Section edits target stable identity and displayed revision")
     labels.navigateSection(1)
@@ -789,12 +745,16 @@ struct InterfaceFailure: Error { let message: String }
     editorDraftGroups + [
       ("automation-tools", automationToolsChecks), ("automation-target", automationTargetChecks),
       ("parameter-activity", parameterActivityChecks), ("mixer-strips", mixerStripsChecks),
-      ("plugin-preset", pluginPresetChecks), ("song-timing", songTimingChecks),
+      ("plugin-preset", pluginPresetChecks), ("song-timing", songTimingChecks), ("song-settings", songSettingsChecks), ("plugin-location", pluginLocationChecks),
       ("plugin-programs", pluginProgramsChecks), ("precise-notes", preciseNotesChecks),
-      ("workspace", workspaceChecks), ("signal-graph", signalGraphChecks),
+      ("keyboard-settings", keyboardSettingsChecks), ("mac-parity", macParityChecks), ("workspace", workspaceChecks), ("signal-graph", signalGraphChecks),
       ("graph-actions", graphActionCatalogChecks), ("graph-ports", graphPortActionChecks),
       ("graph-preview", graphConnectionPreviewChecks), ("sample-browser", sampleBrowserChecks),
       ("sample-recording", sampleRecordingChecks), ("plugin-recording", pluginRecordingChecks),
+      ("selection-render", patternSampleRenderChecks),
+      ("instrument-creation", instrumentCreationChecks),
+      ("sample-library-completion", sampleLibraryCompletionChecks),
+      ("sample-operation", sampleOperationChecks), ("sample-loop", sampleLoopChecks),
       ("plugin-control-delivery", pluginControlDeliveryChecks),
       ("parameter-boundary", parameterBoundaryChecks),
       ("pattern-performance", patternPerformanceChecks), ("plugin-instruments", pluginInstrumentsChecks),

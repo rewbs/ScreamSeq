@@ -259,6 +259,21 @@ static void parameterTakeSessionLifecycle(const PluginDescriptor &descriptor,uin
     check([capturedAPI[@"data"][@"accepted"] boolValue],"API original-time native control was not accepted");
     [NSThread sleepForTimeInterval:.03];
   }
+  const auto beforeClose=[session parameterTakeReview];
+  const auto closed=api(@"plugin.editor.close",@{@"slot":@0},true);
+  const auto afterClose=[session parameterTakeReview];
+  check(![closed[@"data"][@"open"] boolValue]&&![closed[@"changed"] boolValue]&&session.playing&&
+    [session.parameterRecordingTakeID isEqual:token]&&beforeClose.token==afterClose.token&&
+    beforeClose.targets.size()==afterClose.targets.size()&&beforeClose.sources.size()==afterClose.sources.size(),
+    "Editor close during capture changed transport, musical history or retained take ownership");
+  for(size_t index=0;index<beforeClose.targets.size();++index)
+    check(std::equal(beforeClose.targets[index].events.begin(),beforeClose.targets[index].events.end(),
+      afterClose.targets[index].events.begin(),afterClose.targets[index].events.end(),
+      [](const auto &a,const auto &b){return a.hostTime==b.hostTime&&a.value==b.value&&a.frame==b.frame;}),
+      "Editor close drained or rewrote retained original input");
+  error=nil;
+  check(![session automationMethod:@"plugin.editor.open" params:@{@"expectedRevision":session.automationRevision,@"slot":@0} error:&error]&&
+    [error.localizedDescription containsString:@"retained parameter take"],"Editor open bypassed retained take admission");
   NSDictionary *stopAPI=api(@"automation.recording.stop",@{@"take":token},true);
   check([stopAPI[@"data"][@"retained"] boolValue]&&![stopAPI[@"data"][@"capturing"] boolValue]&&session.playing,
     "API Stop dropped the take or stopped playback");

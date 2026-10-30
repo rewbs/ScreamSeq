@@ -16,6 +16,8 @@ sys.path.insert(0, str(ROOT / "mac/Tools"))
 from resonance_api import APIError, Client, drum_roll, endpoints
 from test_audio_fanout import audio_fanout
 from test_scratch_gestures import scratch_gestures
+from test_plugin_editor_api import plugin_editor_api
+from test_plugin_paths_api import plugin_paths_api
 sys.path.insert(0, str(ROOT / 'editor/Tests'))
 from parameter_preview_contract import parameter_preview_contract
 from recipe_parameter_contract import recipe_parameter_contract
@@ -1517,6 +1519,23 @@ def mixer_tools(client):
     expect_error(-32001, lambda: client.call("mixer.bus.set", {"expectedRevision": initial["revision"], "bus": first, "gainDB": -3}))
     group = write("mixer.bus.add", {"kind": "group", "name": "Rhythm"})["data"]["bus"]
     space = write("mixer.bus.add", {"kind": "return", "name": "Space"})["data"]["bus"]
+    # Mixer Details submits only changed fields as one chronological edit.
+    # Return identity, untouched fader precision and unrelated routes survive it.
+    write("mixer.bus.set", {"bus": space, "gainDB": -3.2718281828})
+    before_named = client.call("mixer.get")["data"]["buses"]
+    write("mixer.bus.set", {"bus": space, "name": "Texture return", "color": 0x12AB90})
+    named = client.call("mixer.get")["data"]["buses"]
+    expected_named = [dict(bus, name="Texture return", color=0x12AB90) if bus["id"] == space else bus for bus in before_named]
+    assert named == expected_named
+    write("history.undo", {"domain": "all"})
+    assert client.call("mixer.get")["data"]["buses"] == before_named
+    write("history.redo", {"domain": "all"})
+    assert client.call("mixer.get")["data"]["buses"] == named
+    with tempfile.TemporaryDirectory(prefix="screamseq-mixer-fields-") as directory:
+        project = str(Path(directory) / "Mixer-fields.screamseq")
+        write("document.save", {"path": project})
+        assert plistlib.loads(Path(project).read_bytes())["native"]["mixer"]["buses"] == named
+        assert client.call("mixer.get")["data"]["buses"] == named
     write("mixer.bus.set", {"bus": first, "output": group})
     write("mixer.sends.set", {"bus": group, "sends": [{"target": space, "gainDB": -9, "preFader": True}]})
     expect_error(-32602, lambda: write("mixer.bus.set", {"bus": space, "output": group}))
@@ -2267,6 +2286,9 @@ def main():
                 if busy_only:
                     busy_receipts(client)
                     return
+                if "--plugin-paths-only" in sys.argv:
+                    plugin_paths_api(client, directory, BUILD)
+                    return
                 navigation_tools(client)
                 note_track_tools(client)
                 plugin_library_tools(client, directory)
@@ -2383,8 +2405,11 @@ def main():
                 print("PASS command catalog socket: format metadata, extended prefixes, strict read, preview, field-preserving apply, stale rejection and undo")
                 schema = json.loads((ROOT / "mac/Tools/resonance-api.schema.json").read_text())
                 advertised = client.call("api.describe")["data"]
-                methods = {entry["properties"]["method"]["const"] for entry in schema["oneOf"]
-                           if "--app" in sys.argv or not entry.get("x-application-only")}
+                methods = set()
+                for entry in schema["oneOf"]:
+                    if "--app" in sys.argv or not entry.get("x-application-only"):
+                        declaration = entry["properties"]["method"]
+                        methods.update(declaration["enum"] if "enum" in declaration else [declaration["const"]])
                 assert methods == set(advertised["reads"] + advertised["writes"])
                 timeline=client.call("pattern.timeline.get",{"pattern":0})
                 assert not timeline["changed"] and timeline["data"]["positions"][0]["row"]==0
@@ -2425,11 +2450,13 @@ def main():
                 audio_fanout(client, directory)
                 scratch_gestures(client, directory)
                 parameter_preview_contract(client, directory, expect_error)
+                plugin_editor_api(client, expect_error)
                 recipe_parameter_contract(client, directory, expect_error)
                 recipe_preview_contract(client, directory, expect_error)
                 rack_dry_run_contract(client, directory, expect_error)
                 integer_api_contract(client, directory, expect_error)
                 request_replay_contract(client, directory, APIError)
+                plugin_paths_api(client, directory, BUILD)
 
                 pattern_gates(client, directory)
                 print("PASS local API socket: private discovery/permissions, JSON framing, real crescendo-roll client, dry run, one-step undo, preserved cells/effects, retry deduplication, competing writers and method schema; no windows or audio output")

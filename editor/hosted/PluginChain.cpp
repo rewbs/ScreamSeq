@@ -785,6 +785,10 @@ void PluginChain::showEditor(size_t slot) {
     throw std::runtime_error("Select a plugin");
   rack_[slot]->plugin->showEditor();
 }
+void PluginChain::closeEditor(size_t slot) {
+  if(slot>=rack_.size())throw std::runtime_error("Select a plugin");
+  rack_[slot]->plugin->closeEditor();
+}
 bool PluginChain::popEdit(size_t slot, uint32_t &id, float &value) noexcept {
   PluginEdit event;if(!popEdit(slot,event))return false;id=event.id;value=event.value;return true;
 }

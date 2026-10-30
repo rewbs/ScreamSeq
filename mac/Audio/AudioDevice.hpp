@@ -10,6 +10,8 @@ namespace Tracker {
 struct DeviceInfo {
   uint32_t id;
   std::string name;
+  std::string uid;
+  bool isDefault=false;
 };
 class AudioDevice {
   AudioUnit unit_ = nullptr;
@@ -45,7 +47,7 @@ class AudioDevice {
   static OSStatus propertyChanged(AudioObjectID, UInt32, const AudioObjectPropertyAddress *, void *);
   void removeListeners();
   void addListeners();
-  void configureUnit(uint32_t deviceID); // Throws; configure() disposes the unit.
+  void configureUnit(AudioUnit unit, uint32_t deviceID, double sampleRate);
   static constexpr uint32_t maximumBlockFrames = 4096; // Prepared plugin/mixer block size.
   static OSStatus callback(void *, AudioUnitRenderActionFlags *, const AudioTimeStamp *, UInt32, UInt32,
                            AudioBufferList *);
@@ -175,8 +177,21 @@ public:
     pluginStates_[slot].bypass=value;return true;
   }
   void showPluginEditor(size_t slot) {
-    if (plugins_)
-      plugins_->showEditor(slot);
+    const auto owner=plugins_;
+    if(!owner)throw std::runtime_error("Resolve unavailable plugins before opening an editor");
+    owner->showEditor(slot);
+  }
+  void closePluginEditor(size_t slot,bool flushStoppedControls) {
+    const auto owner=plugins_;
+    if(!owner)throw std::runtime_error("Resolve unavailable plugins before closing an editor");
+    owner->closeEditor(slot);
+    // A stopped VST3 still has its editor-to-processor mailbox. Drain that
+    // accepted prefix before a subsequent Undo queues its newer value, or a
+    // later state capture can replay the old editor value over the Undo.
+    // Native state capture flushes without starting audio; discard its opaque
+    // snapshot so effective automation never becomes the saved baseline.
+    // Retained recording input has a separate owner and must bypass this step.
+    if(flushStoppedControls&&plugins_==owner&&joinStoppedProcessing())(void)owner->state(slot);
   }
   std::vector<size_t> openPluginEditors() const {return plugins_?plugins_->openEditors():std::vector<size_t>{};}
   bool popPluginEdit(size_t slot, uint32_t &id, float &value) { return plugins_ && plugins_->popEdit(slot, id, value); }
@@ -220,6 +235,15 @@ public:
   }
   bool publishScratchUpdate(std::unique_ptr<ScratchGestureLibrary> &plan) noexcept {
     return renderer_&&renderer_->publishScratchUpdate(plan);
+  }
+  std::unique_ptr<PreciseNoteUpdate> preparePreciseUpdate(const NativeSong &native,const std::vector<Edit> &cells) const {
+    if(!playing())return {};
+    if(!renderer_ || cells.size()>512)
+      throw std::runtime_error("This precise-note edit exceeds the live cell capacity; stop playback before applying it");
+    return std::make_unique<PreciseNoteUpdate>(native,cells);
+  }
+  bool publishPreciseUpdate(std::unique_ptr<PreciseNoteUpdate> &plan) noexcept {
+    return renderer_&&renderer_->publishPreciseNoteUpdate(plan);
   }
   void updateMusicalAutomation(const NativeSong &native) {if(active()&&plugins_)plugins_->updateMusicalAutomation(native);}
 

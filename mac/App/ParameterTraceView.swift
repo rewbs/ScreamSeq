@@ -30,6 +30,7 @@ final class ParameterTraceView:NSView {
   private static let axisAttributes:[NSAttributedString.Key:Any]=[.font:NSFont.monospacedDigitSystemFont(ofSize:10,weight:.regular),.foregroundColor:Theme.muted]
   var onSelect:((ParameterTraceSample)->Void)?
   var onHover:((String)->Void)?
+  var onOpen:(()->Void)?
   var plot:NSRect {bounds.insetBy(dx:52,dy:25)}
   override var isFlipped:Bool {true}
   override var acceptsFirstResponder:Bool {true}
@@ -38,7 +39,7 @@ final class ParameterTraceView:NSView {
     for (cursor,color) in [(editCursor,NSColor.systemBlue),(playCursor,NSColor.systemYellow)] {
       cursor.strokeColor=color.withAlphaComponent(0.8).cgColor;cursor.lineWidth=1;cursor.isHidden=true;layer?.addSublayer(cursor)
     }
-    setAccessibilityElement(true);setAccessibilityRole(.group);setAccessibilityLabel("Rendered parameter value trace");setAccessibilityHelp("Click the trace to inspect its source. Pinch or Option-scroll to zoom; scroll to pan. Gaps and faded lines indicate uncaptured or inaudible data.")
+    setAccessibilityElement(true);setAccessibilityRole(.group);setAccessibilityLabel("Rendered parameter value trace");setAccessibilityHelp("Click or use Left, Right, Home and End to inspect a captured value. Return opens its source. Tab leaves the trace. Pinch or Option-scroll to zoom; scroll to pan. Gaps and faded lines indicate uncaptured or inaudible data.")
   }
   required init?(coder:NSCoder){fatalError()}
   override func layout(){super.layout();updateCursors()}
@@ -83,9 +84,23 @@ final class ParameterTraceView:NSView {
       }
     }
     for key in paths.keys.sorted() {let (color,range,path)=paths[key]!;color.setStroke();range.lineWidth=1;range.stroke();path.lineWidth=1.7;path.stroke()}
+    if let sample=samples.first, samples.count==1 {let p=location(x(sample),sample.value);parameterOriginColor(sample.kind).setFill();NSBezierPath(ovalIn:NSRect(x:p.x-3,y:p.y-3,width:6,height:6)).fill()}
     if let sample=samples.first(where:{$0.sequence==selected}) {let point=location(x(sample),sample.value);Theme.text.setFill();NSBezierPath(ovalIn:NSRect(x:point.x-3,y:point.y-3,width:6,height:6)).fill()}
     NSGraphicsContext.restoreGraphicsState()
+    if window?.firstResponder === self {Theme.accent.setStroke();let border=NSBezierPath(rect:plot);border.lineWidth=2;border.stroke()}
     if samples.isEmpty {("Play the song to capture this parameter. Unplayed data is not predicted." as NSString).draw(at:NSPoint(x:plot.minX+10,y:plot.midY),withAttributes:attrs)}
   }
-  override func mouseDown(with event:NSEvent){window?.makeFirstResponder(self);let p=convert(event.locationInWindow,from:nil);let at=viewStart+Double((p.x-plot.minX)/max(1,plot.width))*(end-viewStart);guard let sample=samples.min(by:{abs(x($0)-at)<abs(x($1)-at)})else{return};selected=sample.sequence;needsDisplay=true;onSelect?(sample)}
+  private func select(_ sample:ParameterTraceSample){selected=sample.sequence;needsDisplay=true;setAccessibilityValue(String(format:"%.7g %@, %.7g seconds, ",sample.value,unit,sample.seconds)+parameterOriginName(sample.kind));onSelect?(sample)}
+  override func becomeFirstResponder()->Bool{needsDisplay=true;return true}
+  override func resignFirstResponder()->Bool{needsDisplay=true;return true}
+  override func mouseDown(with event:NSEvent){window?.makeFirstResponder(self);let p=convert(event.locationInWindow,from:nil);guard plot.contains(p) else{return};let at=viewStart+Double((p.x-plot.minX)/max(1,plot.width))*(end-viewStart);guard let sample=samples.filter({x($0)>=viewStart && x($0)<=end}).min(by:{abs(x($0)-at)<abs(x($1)-at)})else{return};select(sample)}
+  override func keyDown(with event:NSEvent){
+    if event.keyCode==48{if event.modifierFlags.contains(.shift){window?.selectPreviousKeyView(self)}else{window?.selectNextKeyView(self)};return}
+    if event.keyCode==36 || event.keyCode==76 {if selected != nil{onOpen?()};return}
+    if [123,124,115,119].contains(event.keyCode),!samples.isEmpty{
+      let current=samples.firstIndex{$0.sequence==selected} ?? (event.keyCode==123 ? samples.count: -1)
+      let next=event.keyCode==115 ? 0:event.keyCode==119 ? samples.count-1:min(samples.count-1,max(0,current+(event.keyCode==123 ? -1:1)))
+      let sample=samples[next],at=x(sample);if at<viewStart || at>end{let width=end-viewStart;viewStart=max(0,at-width/2);viewEnd=viewStart+width};select(sample);return
+    };super.keyDown(with:event)
+  }
 }

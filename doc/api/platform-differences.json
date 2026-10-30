@@ -3,13 +3,16 @@
   "policy": "Evidence ratchet only. Baseline matches are not parity passes, loss waivers, or permission to skip release gates. Intentional changes require reviewing exact vectors, inventory and native behavior on both platforms.",
   "schema": {
     "path": "mac/Tools/resonance-api.schema.json",
-    "sha256": "c97c151be78ebb5b9f37d547eb18e08ee98e45aa58bb213053ef183d023a74bd",
+    "sha256": "b57ac0021a27d16fc9bbf4b081713dded20f324f710c92fe59c343ac5542fc27",
     "review20261023": "Source review f4d0fb7a4/a33b7dca9: seven native-take descriptions now describe guarded Mac VST3 processing verification; Commit adds strict optional boolean restoreSavedState with completed/stopped/closed-editor guards. Method inventory and expected vector outcomes are unchanged. New behavior awaits native qualification; see doc/windows-parity-plan-2026-10-09/LIVE-PARAMETER-RELEASE-2026-10-23.md.",
     "methods": [
       "api.describe",
       "arrangement.copyBlock",
       "arrangement.get",
       "arrangement.matrix",
+      "audio.devices.get",
+      "audio.settings.get",
+      "audio.settings.set",
       "automation.formula.preview",
       "automation.formula.reference",
       "automation.get",
@@ -84,6 +87,9 @@
       "graph.plugin.editor.commit",
       "graph.plugin.editor.open",
       "graph.plugin.get",
+      "graph.plugin.path.get",
+      "graph.plugin.path.scan",
+      "graph.plugin.path.set",
       "graph.plugin.preset.load",
       "graph.plugin.preset.save",
       "graph.plugin.preview.cancel",
@@ -127,6 +133,9 @@
       "instrument.importMultisample",
       "instrument.patch",
       "instrument.plugin.set",
+      "midi.devices.get",
+      "midi.settings.get",
+      "midi.settings.set",
       "mixer.bus.add",
       "mixer.bus.remove",
       "mixer.bus.set",
@@ -167,6 +176,8 @@
       "plugin.bypass",
       "plugin.discover",
       "plugin.duplicate",
+      "plugin.editor.close",
+      "plugin.editor.open",
       "plugin.instruments.get",
       "plugin.instruments.set",
       "plugin.library.get",
@@ -181,6 +192,9 @@
       "plugin.parameters.preview.get",
       "plugin.parameters.preview.set",
       "plugin.parameters.set",
+      "plugin.path.get",
+      "plugin.path.scan",
+      "plugin.path.set",
       "plugin.preset.inspect",
       "plugin.preset.load",
       "plugin.preset.save",
@@ -253,13 +267,25 @@
       "workspace.commands.get",
       "workspace.get",
       "workspace.input",
+      "workspace.keyboard.set",
       "workspace.layout",
       "workspace.panel",
       "workspace.ruler",
       "workspace.shortcut.set"
     ],
     "review20261024": "Source adds guarded accepted-state document.exportAudio on both platforms, with shared WAV rendering and native atomic publication. Inventory reviewed; runtime qualification pending. See AUDIO-EXPORT-2026-10-24.md. No parity/performance gate is waived.",
-    "review20261028": "Advanced gate PR: the five native-command enumerations and nativePatternCommand definition accept gate/gate-stop, with typed target, range, timing, shape and binding constraints. The method inventory and existing vector expectations are unchanged. Both adapters use the shared command validator and stable parameter-binding rules. Gate session, socket, persistence and rendered-audio tests were added; Windows native runtime qualification remains pending."
+    "review20261028": "Advanced gate PR: the five native-command enumerations and nativePatternCommand definition accept gate/gate-stop, with typed target, range, timing, shape and binding constraints. The method inventory and existing vector expectations are unchanged. Both adapters use the shared command validator and stable parameter-binding rules. Gate session, socket, persistence and rendered-audio tests were added; Windows native runtime qualification remains pending.",
+    "macParityReview20261028": "Adds the existing Windows audio.devices.get, audio.settings.get/set and midi.devices.get, midi.settings.get/set workflows to the shared schema and Mac adapter. Device identifiers remain platform-specific. Separate settings revisions, dry-run/no-op and strict invalid-input guards are tested by mac/Tests/test_mac_parity.py. No broader parity claim.",
+    "macParityReview20261030": "Adds workspace.keyboard.set with expectedKeyboard guarding, lower/upper note mappings and Play/Stop command binding. Source inventory updated; native socket and UI qualification remain pending.",
+    "review20261030Audio": "Mark Core Audio settings and device inventory application-only: the windowless TrackerSession host does not own the audio device.",
+    "review20261030PluginEditors": {
+      "status": "source-reviewed-runtime-pending",
+      "methodsAdded": [
+        "plugin.editor.close",
+        "plugin.editor.open"
+      ],
+      "note": "Mac rack editor presentation uses the existing native host and guarded session API. Historical runtime receipts do not cover these additions."
+    }
   },
   "platforms": {
     "windows": {
@@ -541,23 +567,8 @@
         "plugin.meters"
       ],
       "additionalMethods": [
-        "audio.devices.get",
-        "audio.settings.get",
-        "audio.settings.set",
         "document.new",
-        "document.open",
-        "graph.plugin.path.get",
-        "graph.plugin.path.scan",
-        "graph.plugin.path.set",
-        "midi.devices.get",
-        "midi.settings.get",
-        "midi.settings.set",
-        "plugin.editor.close",
-        "plugin.editor.open",
-        "plugin.path.get",
-        "plugin.path.scan",
-        "plugin.path.set",
-        "workspace.keyboard.set"
+        "document.open"
       ],
       "inventoryReview20261019": {
         "sourceCommit": "07424c0c675c57caf7828ea23b6c7a4a13a5cf4b",
@@ -652,6 +663,8 @@
         "api.describe",
         "arrangement.get",
         "arrangement.matrix",
+        "audio.devices.get",
+        "audio.settings.get",
         "automation.formula.preview",
         "automation.formula.reference",
         "automation.get",
@@ -674,6 +687,7 @@
         "graph.listen.get",
         "graph.note.activity",
         "graph.plugin.get",
+        "graph.plugin.path.get",
         "graph.plugin.preview.get",
         "graph.provenance.get",
         "graph.scope.get",
@@ -683,6 +697,8 @@
         "instrument.envelope.copy",
         "instrument.envelope.get",
         "instrument.get",
+        "midi.devices.get",
+        "midi.settings.get",
         "mixer.get",
         "mixer.meters",
         "parameter.activity.get",
@@ -703,6 +719,7 @@
         "plugin.meters",
         "plugin.parameters.get",
         "plugin.parameters.preview.get",
+        "plugin.path.get",
         "plugin.preset.inspect",
         "plugin.programs.get",
         "plugin.state.get",
@@ -728,6 +745,7 @@
       ],
       "writes": [
         "arrangement.copyBlock",
+        "audio.settings.set",
         "automation.pattern.remove",
         "automation.pattern.set",
         "automation.pattern.transform",
@@ -780,6 +798,8 @@
         "graph.plugin.editor.close",
         "graph.plugin.editor.commit",
         "graph.plugin.editor.open",
+        "graph.plugin.path.scan",
+        "graph.plugin.path.set",
         "graph.plugin.preset.load",
         "graph.plugin.preset.save",
         "graph.plugin.preview.cancel",
@@ -814,6 +834,7 @@
         "instrument.importMultisample",
         "instrument.patch",
         "instrument.plugin.set",
+        "midi.settings.set",
         "mixer.bus.add",
         "mixer.bus.remove",
         "mixer.bus.set",
@@ -840,6 +861,8 @@
         "plugin.buses.set",
         "plugin.bypass",
         "plugin.duplicate",
+        "plugin.editor.close",
+        "plugin.editor.open",
         "plugin.instruments.set",
         "plugin.library.set",
         "plugin.locations.trust",
@@ -848,6 +871,8 @@
         "plugin.parameters.preview.commit",
         "plugin.parameters.preview.set",
         "plugin.parameters.set",
+        "plugin.path.scan",
+        "plugin.path.set",
         "plugin.preset.load",
         "plugin.preset.save",
         "plugin.programs.load",
@@ -898,6 +923,7 @@
         "transport.play",
         "transport.stop",
         "workspace.input",
+        "workspace.keyboard.set",
         "workspace.layout",
         "workspace.panel",
         "workspace.ruler",
@@ -968,7 +994,24 @@
         "removed": [],
         "evidence": "doc/windows-parity-plan-2026-10-09/MAC-GESTURE-INTAKE-2026-10-22.md",
         "note": "Expected source contract only. Both Mac jobs stopped on inventory preflight before compilation; no native lifecycle qualification. Stopped native release, native UI delivery and new-provider cleanup review remain open."
-      }
+      },
+      "macParityReview20261028": {
+        "status": "source-reviewed-macos-inventory-and-settings-runtime-checked",
+        "readsAdded": [
+          "audio.devices.get",
+          "audio.settings.get",
+          "midi.devices.get",
+          "midi.settings.get"
+        ],
+        "writesAdded": [
+          "audio.settings.set",
+          "midi.settings.set"
+        ],
+        "removed": [],
+        "evidence": "doc/SCREAMSEQ_MAC_PARITY_CURRENT_MAIN_2026-10-28.md",
+        "note": "Final rebased Mac app advertised exactly the reviewed read/write inventory. App socket and focused audio/MIDI settings tests passed; see the parity report for source fingerprint and scope. Earlier receipts remain historical; this is not complete cross-platform qualification."
+      },
+      "pluginLocationReview20261030": "Six rack/graph plugin.path methods added to Mac source with isolated explicit scans, executable hashes, saved path hints and chronological history. Current native/socket/UI qualification recorded in the parity report; historical binary receipts above are unchanged."
     }
   },
   "pairedContractReview20261020": {

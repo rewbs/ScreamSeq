@@ -20,6 +20,7 @@ struct PreciseNote {
 // in integer native positions; the beat display never changes stored timing.
 final class PreciseNoteTimeline:NSView {
   var events=[PreciseNote](),selected:Int?,row=0,rowsPerBeat=4,snapBeats=0.0,enabled=true
+  var playbackOffset: Double? { didSet { if oldValue != playbackOffset { needsDisplay=true } } }
   var onSelect:((Int)->Bool)?,onMove:((Int,Int,Int,Bool)->Void)?,onInsert:((Int)->Void)?,onDelete:(()->Void)?,onDuplicate:(()->Void)?
   private var dragging:Int?,dragVolume=127
   override var isFlipped:Bool {true}
@@ -68,16 +69,25 @@ final class PreciseNoteTimeline:NSView {
       color.setFill();NSBezierPath(ovalIn:NSRect(x:point.x-5,y:point.y-5,width:10,height:10)).fill()
       if index==selected {text("\(event.name) · \(event.velocity)",max(plot.minX,min(point.x+8,plot.maxX-98)),max(plot.minY,point.y-16),color,11)}
     }
+    if let offset=playbackOffset {
+      let x=plot.minX+CGFloat(offset)*plot.width,line=NSBezierPath()
+      line.move(to:NSPoint(x:x,y:plot.minY));line.line(to:NSPoint(x:x,y:plot.maxY))
+      NSColor.white.setStroke();line.lineWidth=1.5;line.stroke()
+    }
     if events.isEmpty {text("Double-click to add a hit",plot.minX+12,plot.midY,Theme.muted,12)}
     setAccessibilityValue("Row \(row), \(events.count) events, \(1.0/Double(beat)) beats long")
   }
   override func mouseDown(with event:NSEvent) {
     guard enabled else{return};window?.makeFirstResponder(self)
-    let p=convert(event.locationInWindow,from:nil);guard p.y>=plot.minY-10 else{return}
-    let hit=events.indices.min {hypot(point(events[$0]).x-p.x,point(events[$0]).y-p.y)<hypot(point(events[$1]).x-p.x,point(events[$1]).y-p.y)}
-    if let hit,hypot(point(events[hit]).x-p.x,point(events[hit]).y-p.y)<16 {
+    let p=convert(event.locationInWindow,from:nil);guard plot.insetBy(dx:-6,dy:-6).contains(p) else{return}
+    func distance(_ index:Int)->CGFloat {
+      let hit=point(events[index]),y=max(hit.y,min(plot.maxY,p.y))
+      return hypot(hit.x-p.x,y-p.y)
+    }
+    let hit=events.indices.min {distance($0)<distance($1)}
+    if let hit,distance(hit)<12 {
       guard onSelect?(hit) != false else{return};selected=hit;dragging=hit;dragVolume=events[hit].velocity;needsDisplay=true
-    } else if event.clickCount==2 {onInsert?(offset(at:p.x,free:event.modifierFlags.contains(.option)))}
+    } else if event.clickCount==2,plot.contains(p) {onInsert?(offset(at:p.x,free:event.modifierFlags.contains(.option)))}
   }
   override func mouseDragged(with event:NSEvent) {
     guard enabled,let dragging,events.indices.contains(dragging) else{return}
@@ -97,7 +107,7 @@ final class PreciseNoteTimeline:NSView {
     let e=events[selected],step=event.modifierFlags.contains(.option) ? 1 : max(1,snapBeats>0 ? Int((snapBeats*Double(rowsPerBeat)*65536).rounded()):256)
     switch event.keyCode {
     case 123,124:onMove?(selected,max(0,min(65535,e.position%65536+(event.keyCode==123 ? -step:step))),e.velocity,true)
-    case 125,126:onMove?(selected,e.position%65536,max(1,min(127,e.velocity+(event.keyCode==125 ? -1:1))),true)
+    case 125,126:onMove?(selected,e.position%65536,max(1,min(127,e.velocity+(event.keyCode==125 ? -1:1)*(event.modifierFlags.contains(.shift) ? 8:1))),true)
     default:super.keyDown(with:event)
     }
   }
@@ -164,7 +174,9 @@ final class PreciseNotesEditor:NSView,NSTableViewDataSource,NSTableViewDelegate,
   private var originalDraft = [[String:Any]](), originalFields = [String]()
   private var fieldValues:[String] { [offset.stringValue,String(note.selectedTag()),instrument.stringValue,velocity.stringValue,String(effect.indexOfSelectedItem),parameter.stringValue] }
   private var autoSave:DispatchWorkItem?,inlineInvalid=false
-  private var canEdit:Bool {revision != nil}
+  private var saveRefused=false,boundaryWaiters=[(Bool)->Void]()
+  private var reading = false, capturedIdentity = ""
+  private var canEdit:Bool {revision != nil && !reading}
   var hasDraft:Bool { inlineInvalid || !NSArray(array:draft).isEqual(to:originalDraft) || (!originalFields.isEmpty && fieldValues != originalFields) }
 
   override init(frame:NSRect) {
@@ -316,10 +328,32 @@ final class PreciseNotesEditor:NSView,NSTableViewDataSource,NSTableViewDelegate,
   }
   private func scheduleSave() {
     autoSave?.cancel();guard canEdit,!inlineInvalid else{return}
+    saveRefused=false
     guard hasDraft || pending else{status.stringValue="Saved · Undo restores the previous notes.";return}
     status.stringValue="Saving…"
     let work=DispatchWorkItem{[weak self] in guard let self,!self.pending,!self.inlineInvalid,self.hasDraft else{return};self.apply(dryRun:false)}
     autoSave=work;DispatchQueue.main.asyncAfter(deadline:.now()+0.18,execute:work)
+  }
+  // Native Save/history includes a valid queued edit. Failed or incomplete
+  // drafts remain local and never get replayed as a side effect of Save.
+  func finishAutomaticEdit(_ completion:@escaping (Bool)->Void) {
+    guard !reading,!inlineInvalid,!saveRefused else {completion(false);return}
+    if !pending && !hasDraft {completion(true);return}
+    guard saveSelectedFields() else {completion(false);return}
+    boundaryWaiters.append(completion)
+    if !pending {apply(dryRun:false)}
+  }
+  private func finishBoundaries(_ accepted:Bool) {
+    let waiting=boundaryWaiters;boundaryWaiters.removeAll();waiting.forEach{$0(accepted)}
+  }
+  func showPlayback(document:String,pattern:Int?,position:Double?) {
+    var offset:Double?
+    if let pattern,let position,position.isFinite,pattern==capturedPattern,
+      revision?.split(separator:":").first.map(String.init)==document,
+      position>=Double(capturedRow)*256,position<Double(capturedRow+1)*256 {
+      offset=position/256-Double(capturedRow)
+    }
+    timeline.playbackOffset=offset
   }
   @objc func changeEffect() {
     if effects.indices.contains(effect.indexOfSelectedItem) {let e=effects[effect.indexOfSelectedItem];parameter.stringValue=String(format:"%02X",e.suggested);effectHint.stringValue=e.hint}
@@ -343,15 +377,26 @@ final class PreciseNotesEditor:NSView,NSTableViewDataSource,NSTableViewDelegate,
   }
   func capture() {
     guard !pending,let context=onContext?(),let request=onRequest else{return}
-    let sameTarget=revision != nil && capturedPattern==context.0.pattern && capturedRow==context.1 && capturedChannel==context.2
+    let document = String(context.0.revisionToken.split(separator: ":").first ?? "")
+    let patternID = context.0.patterns.first { $0["index"] as? Int == context.0.pattern }?["id"] as? String ?? String(context.0.pattern)
+    let trackID = context.0.tracks.first { $0["index"] as? Int == context.2 }?["id"] as? String ?? String(context.2)
+    let identity = "\(document):\(patternID):\(trackID):\(context.1)"
+    let sameTarget=revision != nil && capturedIdentity == identity
     let previousSelection=sameTarget ? editingRow.flatMap{draft.indices.contains($0) ? PreciseNote(draft[$0]):nil}:nil
-    autoSave?.cancel();inlineInvalid=false
-    capturedPattern=context.0.pattern;capturedRow=context.1;capturedChannel=context.2;rowsPerBeat=max(1,context.0.rowsPerBeat);setText(instrument,String(context.3));moveLegacyEffect=false
-    setText(location,"Pattern \(capturedPattern) · Row \(capturedRow) · Channel \(capturedChannel+1) · \(rowsPerBeat) rows/beat")
-    pending=true;revision=nil
-    request("pattern.notes.get",["pattern":capturedPattern]){[weak self] reply in
-      guard let self else{return};self.pending=false
-      guard let result=reply["result"] as? [String:Any],let revision=result["revision"] as? String,let data=result["data"] as? [String:Any],data["pattern"] as? Int==self.capturedPattern else{self.failure(reply);return}
+    autoSave?.cancel()
+    let scrollOrigin = table.enclosingScrollView?.contentView.bounds.origin
+    pending=true;reading=true
+    request("pattern.notes.get",["pattern":context.0.pattern]){[weak self] reply in
+      guard let self else{return};self.pending=false;self.reading=false
+      guard let result=reply["result"] as? [String:Any],let revision=result["revision"] as? String,let data=result["data"] as? [String:Any],data["pattern"] as? Int==context.0.pattern else{self.failure(reply);return}
+      if !document.isEmpty, let current = self.onContext?(), String(current.0.revisionToken.split(separator: ":").first ?? "") != document {
+        self.failure(["error": ["message": "Document changed while reading notes."]]); return
+      }
+      self.inlineInvalid=false;self.saveRefused=false;self.capturedIdentity=identity
+      if !sameTarget {self.timeline.playbackOffset=nil}
+      self.capturedPattern=context.0.pattern;self.capturedRow=context.1;self.capturedChannel=context.2
+      self.rowsPerBeat=max(1,context.0.rowsPerBeat);self.setText(self.instrument,String(context.3));self.moveLegacyEffect=false
+      self.setText(self.location,"Pattern \(self.capturedPattern) · Row \(self.capturedRow) · Channel \(self.capturedChannel+1) · \(self.rowsPerBeat) rows/beat")
       self.revision=nil;self.rowsPerBeat=max(1,data["rowsPerBeat"] as? Int ?? self.rowsPerBeat);self.setEffects(data["effects"] as? [[String:Any]] ?? context.0.preciseNoteEffects)
       self.revision=revision;self.events=data["events"] as? [[String:Any]] ?? [];self.draft=self.events.filter{self.belongs($0)}
       if self.draft.isEmpty {
@@ -370,6 +415,9 @@ final class PreciseNotesEditor:NSView,NSTableViewDataSource,NSTableViewDelegate,
         // selected hit's effect before immediately selecting it again.
         self.select(self.effect,index:0);self.setText(self.parameter,"00")
         self.setText(self.effectHint,self.effects.first?.hint ?? "");self.showOffsetHint()
+      }
+      if sameTarget, let scrollOrigin, let scroll=self.table.enclosingScrollView {
+        scroll.contentView.scroll(to:scrollOrigin);scroll.reflectScrolledClipView(scroll.contentView)
       }
       if !sameTarget {self.setText(self.endVolume,self.velocity.stringValue)};self.originalDraft=self.draft;self.originalFields=self.fieldValues
       self.setText(self.status,self.moveLegacyEffect ? "Editing will move the ordinary note and its effect together." : "\(self.draft.count) hits · changes save automatically · Undo restores each edit.");self.controls()
@@ -500,7 +548,10 @@ final class PreciseNotesEditor:NSView,NSTableViewDataSource,NSTableViewDelegate,
       guard let result=reply["result"] as? [String:Any],let next=result["revision"] as? String else{self.failure(reply);return}
       self.revision=next;if !dryRun {self.events=replacement;self.originalDraft=submittedDraft;if self.fieldValues==submittedFields {self.originalFields=submittedFields};self.moveLegacyEffect=false}
       self.status.stringValue=dryRun ? "Edit is valid.":"Saved · Undo restores the previous notes.";self.controls()
-      if !dryRun,self.hasDraft,!self.inlineInvalid {self.scheduleSave()}
+      if self.hasDraft {
+        guard !self.inlineInvalid,self.saveSelectedFields() else{self.finishBoundaries(false);return}
+        if !self.boundaryWaiters.isEmpty {self.apply(dryRun:false)}else{self.scheduleSave()}
+      } else {self.finishBoundaries(true)}
     }
   }
   func numberOfRows(in tableView:NSTableView)->Int {draft.count}
@@ -551,7 +602,7 @@ final class PreciseNotesEditor:NSView,NSTableViewDataSource,NSTableViewDelegate,
   private func showOffsetHint() {
     if let value=rowOffset() {setText(offsetHint,displayBeats ? String(format:"= %.6g row",value):String(format:"= %.6g beat",value/Double(rowsPerBeat)))}
   }
-  private func failure(_ reply:[String:Any]) {autoSave?.cancel();status.stringValue=((reply["error"] as? [String:Any])?["message"] as? String ?? "The song changed.")+" Edits retained; use current cursor to reload.";controls()}
+  private func failure(_ reply:[String:Any]) {autoSave?.cancel();saveRefused=true;status.stringValue=((reply["error"] as? [String:Any])?["message"] as? String ?? "The song changed.")+" Edits retained; use current cursor to reload.";controls();finishBoundaries(false)}
   private func controls() {
     table.isEnabled = canEdit;timeline.enabled = canEdit
     func enable(_ control:NSControl?,_ value:Bool) {if let control,control.isEnabled != value{control.isEnabled=value}}

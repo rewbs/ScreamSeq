@@ -6,8 +6,14 @@ final class WorkspaceCommandPalette: NSObject, NSTableViewDataSource, NSTableVie
   var entries = [Entry](), filtered = [Entry](), window: NSPanel?
   var onShortcutsChanged:(()->Void)?
   var shortcutAllowed:((String)->Bool)?
+  var persistPreferences = true
+  private var preferencesLoaded = false
+  var transportBinding: [String]?
+  var sessionBindings = [String:[String:Any]]()
+  static func isTransport(_ entry: Entry) -> Bool { entry.item.action.map(NSStringFromSelector) == "playOrStop" }
   var additionalMenus: (() -> [NSMenu])?
   private var additionalIDs = Set<String>()
+  func isContextCommand(_ id:String)->Bool {additionalIDs.contains(id)}
   var recording = false
   var capturingSequence=false,recordedSequence=[String]()
   let sequences=WorkspaceSequences()
@@ -30,10 +36,22 @@ final class WorkspaceCommandPalette: NSObject, NSTableViewDataSource, NSTableVie
     for menu in additionalMenus?() ?? [] { visit(menu, menu.title) }
     additionalIDs = Set(entries.dropFirst(globalCount).map(\.id))
     for entry in entries where defaults[entry.id] == nil { defaults[entry.id] = ["key":entry.item.keyEquivalent,"modifiers":entry.item.keyEquivalentModifierMask.rawValue] }
-    sequences.load();sequences.isAvailable = {[weak self] id in self?.shortcutAllowed?(id) ?? true}
+    if persistPreferences || !preferencesLoaded { sequences.load();transportBinding=nil }
+    sequences.isAvailable = {[weak self] id in self?.shortcutAllowed?(id) ?? true}
     sequences.onRun = {[weak self] id in guard let self else{return};self.collect();guard let entry=self.entries.first(where:{$0.id==id}),let action=entry.item.action else{return};guard self.isAvailable(entry.item,from:NSApp.keyWindow?.firstResponder ?? NSApp.keyWindow) else{NSSound.beep();return};NSApp.sendAction(action,to:entry.item.target,from:entry.item)}
     let bindings = UserDefaults.standard.dictionary(forKey:"workspaceShortcuts") as? [String:[String:Any]] ?? [:]
-    for entry in entries { if let binding = bindings[entry.id],let key = binding["key"] as? String,let mods = binding["modifiers"] as? UInt { entry.item.keyEquivalent = key; entry.item.keyEquivalentModifierMask = .init(rawValue:mods) };if sequences.bindings[entry.id] != nil{entry.item.keyEquivalent=""} }
+    if !preferencesLoaded {sessionBindings=bindings}
+    for entry in entries {
+      if let binding=(persistPreferences ? bindings:sessionBindings)[entry.id],let key=binding["key"] as? String,let mods=binding["modifiers"] as? UInt {
+        entry.item.keyEquivalent=key;entry.item.keyEquivalentModifierMask = .init(rawValue:mods)
+        if Self.isTransport(entry) {transportBinding=key.isEmpty ? []:[WorkspaceStrokeString(key,.init(rawValue:mods))]}
+      }
+      if let sequence=sequences.bindings[entry.id] {entry.item.keyEquivalent="";if Self.isTransport(entry){transportBinding=sequence.map(\.encoded)}}
+      // Transport is dispatched after local input ownership checks, never by
+      // AppKit's menu key-equivalent path ahead of editable text and Formula.
+      if Self.isTransport(entry) {entry.item.keyEquivalent=""}
+    }
+    preferencesLoaded=true
   }
   func show() {
     previousWindow = NSApp.keyWindow; previousResponder = previousWindow?.firstResponder; collect()
@@ -41,7 +59,9 @@ final class WorkspaceCommandPalette: NSObject, NSTableViewDataSource, NSTableVie
       let win = NSPanel(contentRect:NSRect(x:0,y:0,width:780,height:510),styleMask:[.titled,.closable,.resizable],backing:.buffered,defer:false)
       win.title = "Commands"; win.isReleasedWhenClosed = false; win.delegate = self; window = win
       search.placeholderString = "Search commands, panels, layouts…"; search.delegate = self; search.setAccessibilityLabel("Search all commands")
-      let column = NSTableColumn(identifier:.init("command")); column.width = 720; table.addTableColumn(column); table.headerView = nil
+      for (id,title,width) in [("command","Command",390.0),("category","Category",190.0),("shortcut","Shortcut",155.0)] {
+        let column=NSTableColumn(identifier:.init(id));column.title=title;column.width=width;table.addTableColumn(column)
+      }
       table.dataSource = self; table.delegate = self; table.rowHeight = 28; table.target = self; table.doubleAction = #selector(run)
       table.setAccessibilityLabel("Commands and keyboard shortcuts")
       let scroll = NSScrollView(); scroll.documentView = table; scroll.hasVerticalScroller = true
@@ -51,7 +71,7 @@ final class WorkspaceCommandPalette: NSObject, NSTableViewDataSource, NSTableVie
         guard let self,self.window?.isKeyWindow == true else{return event}
         if event.keyCode == 53 { if self.recording {self.recording=false;self.status.stringValue="Shortcut unchanged"} else {self.close()};return nil }
         if self.recording {if self.capturingSequence{self.recordSequence(event)}else{self.bind(event)};return nil}
-        if event.keyCode == 125 || event.keyCode == 126 {guard !self.filtered.isEmpty else{return nil};let row=max(0,min(self.filtered.count-1,self.table.selectedRow+(event.keyCode==125 ? 1 : -1)));self.table.selectRowIndexes(IndexSet(integer:row),byExtendingSelection:false);self.table.scrollRowToVisible(row);return nil}
+        if [125,126,116,121,115,119].contains(event.keyCode) {self.moveSelection(event.keyCode);return nil}
         if event.keyCode == 36 {self.run();return nil};return event
       }
     }
@@ -66,13 +86,38 @@ final class WorkspaceCommandPalette: NSObject, NSTableViewDataSource, NSTableVie
     NSApp.sendAction(action,to:fresh.item.target,from:fresh.item); return true
   }
   func controlTextDidChange(_ obj: Notification) {filter()}
-  func filter() {let words=search.stringValue.lowercased().split(separator:" ");filtered=entries.filter{entry in words.allSatisfy{entry.path.lowercased().contains($0)}};table.reloadData();if !filtered.isEmpty {table.selectRowIndexes(IndexSet(integer:0),byExtendingSelection:false)}}
+  func shortcutText(_ entry:Entry)->String {
+    if Self.isTransport(entry) {return shortcutKeys(entry).joined(separator:" → ")}
+    if let sequence=sequences.bindings[entry.id] {return sequence.map(\.encoded).joined(separator:" → ")}
+    guard !entry.item.keyEquivalent.isEmpty else{return ""}
+    let mask=entry.item.keyEquivalentModifierMask
+    return (mask.contains(.control) ? "⌃" : "")+(mask.contains(.option) ? "⌥" : "")+(mask.contains(.shift) ? "⇧" : "")+(mask.contains(.command) ? "⌘" : "")+entry.item.keyEquivalent.uppercased()
+  }
+  func filter() {
+    let selected=filtered.indices.contains(table.selectedRow) ? filtered[table.selectedRow].id : nil
+    let query=search.stringValue.lowercased().trimmingCharacters(in:.whitespacesAndNewlines),words=query.split(whereSeparator:{$0.isWhitespace})
+    filtered=entries.filter{entry in let text=(entry.path+" "+shortcutText(entry)).lowercased();return words.allSatisfy{text.contains($0)}}.sorted { a,b in
+      func rank(_ entry:Entry)->Int {let title=entry.item.title.lowercased();return title==query ? 0 : title.hasPrefix(query) ? 1 : title.contains(query) ? 2 : 3}
+      let x=rank(a),y=rank(b);return x==y ? a.path.localizedStandardCompare(b.path) == .orderedAscending : x<y
+    }
+    table.reloadData()
+    if !filtered.isEmpty {table.selectRowIndexes(IndexSet(integer:selected.flatMap{id in filtered.firstIndex{$0.id==id}} ?? 0),byExtendingSelection:false);table.scrollRowToVisible(table.selectedRow)}
+    else {table.deselectAll(nil)}
+    status.stringValue=filtered.isEmpty ? "No matching commands" : "\(filtered.count) commands · Return runs · ↑/↓ or Page Up/Down choose · Escape closes"
+  }
+  func moveSelection(_ code:UInt16) {
+    guard !filtered.isEmpty else{return}
+    let page=max(1,Int(table.visibleRect.height/max(1,table.rowHeight))),current=max(0,table.selectedRow)
+    let target=code==115 ? 0 : code==119 ? filtered.count-1 : current+(code==125 ? 1 : code==126 ? -1 : code==121 ? page : -page)
+    let row=max(0,min(filtered.count-1,target));table.selectRowIndexes(IndexSet(integer:row),byExtendingSelection:false);table.scrollRowToVisible(row)
+  }
   func numberOfRows(in tableView:NSTableView)->Int{filtered.count}
   func tableView(_ tableView:NSTableView,viewFor tableColumn:NSTableColumn?,row:Int)->NSView? {
-    guard filtered.indices.contains(row) else{return nil};let entry=filtered[row],mask=entry.item.keyEquivalentModifierMask
-    let shortcut=(mask.contains(.control) ? "⌃" : "")+(mask.contains(.option) ? "⌥" : "")+(mask.contains(.shift) ? "⇧" : "")+(mask.contains(.command) ? "⌘" : "")+entry.item.keyEquivalent.uppercased()
-    let label=tableView.makeView(withIdentifier:.init("command"),owner:self) as? NSTextField ?? Theme.label("",size:12)
-    let sequence=sequences.bindings[entry.id]?.map(\.encoded).joined(separator:" → ");label.identifier = .init("command");label.stringValue=entry.path+(sequence.map{"     "+$0} ?? (entry.item.keyEquivalent.isEmpty ? "" : "     "+shortcut));label.textColor=entry.item.isEnabled ? Theme.text:Theme.muted;label.toolTip=entry.item.toolTip;return label
+    guard filtered.indices.contains(row) else{return nil};let entry=filtered[row],id=tableColumn?.identifier ?? .init("command")
+    let label=tableView.makeView(withIdentifier:id,owner:self) as? NSTextField ?? Theme.label("",size:12)
+    label.identifier=id
+    label.stringValue=id.rawValue=="shortcut" ? shortcutText(entry) : id.rawValue=="category" ? entry.path.components(separatedBy:" / ").dropLast().joined(separator:" / ") : entry.item.title
+    label.textColor=entry.item.isEnabled ? Theme.text:Theme.muted;label.toolTip=entry.item.toolTip ?? entry.path;return label
   }
   // Menu items are only validated when their menu opens, so isEnabled can be
   // stale. Ask the object that would receive the action, as the menu would.
@@ -111,9 +156,11 @@ final class WorkspaceCommandPalette: NSObject, NSTableViewDataSource, NSTableVie
     if !key.isEmpty,entries.contains(where:{$0.id != id && $0.item.keyEquivalent==key && $0.item.keyEquivalentModifierMask.intersection(WorkspaceStroke.mask)==flags.intersection(WorkspaceStroke.mask)}) {return "The default key is assigned to another command"}
     // Restoring the shipped local M/Q/F bindings is valid even though new
     // user bindings require a modifier to protect tracker note entry.
-    sequences.cancel();sequences.bindings.removeValue(forKey:id);sequences.save()
+    sequences.cancel();sequences.bindings.removeValue(forKey:id);if persistPreferences{sequences.save()}
     var bindings=UserDefaults.standard.dictionary(forKey:"workspaceShortcuts") as? [String:[String:Any]] ?? [:]
-    bindings.removeValue(forKey:id);UserDefaults.standard.set(bindings,forKey:"workspaceShortcuts")
+    bindings.removeValue(forKey:id);if persistPreferences{UserDefaults.standard.set(bindings,forKey:"workspaceShortcuts")}
+    sessionBindings.removeValue(forKey:id)
+    if Self.isTransport(entry){transportBinding=nil}
     entry.item.keyEquivalent=key;entry.item.keyEquivalentModifierMask=flags
     table.reloadData();onShortcutsChanged?();return nil
   }

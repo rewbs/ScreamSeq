@@ -24,11 +24,82 @@ extension InterfaceTests {
   private static func wait(_ seconds: Double) { pumpMainRunLoop(seconds) }
 
   static var editorDraftGroups: [(String, () throws -> Void)] {
-    [("draft-assets", assetCatalogueChecks), ("draft-text-history", textHistoryChecks),
+    [("draft-assets", assetCatalogueChecks), ("draft-sample", sampleSettingsChecks), ("draft-text-history", textHistoryChecks),
      ("draft-popups", popupIdentityChecks), ("draft-mixer", mixerDraftChecks),
      ("draft-graph", graphDraftChecks), ("draft-song-envelope", songGraphEnvelopeChecks),
      ("draft-automation", automationDraftChecks), ("draft-plugin", pluginDraftChecks),
      ("draft-envelope-bank", envelopeBankDraftChecks)]
+  }
+  static func sampleSettingsChecks() throws {
+    let editor = SampleEditor(frame: NSRect(x: 0, y: 0, width: 1000, height: 1800))
+    let inventory: [[String: Any]] = [["index": 1, "id": "s1", "name": "Kick"], ["index": 2, "id": "s2", "name": "Snare"]]
+    var info: [String: Any] = ["index": 1, "name": "Kick", "frames": 1000, "channels": 2, "rate": 44100, "volume": 64, "pan": 128,
+      "loop": false, "loopStart": 0, "loopEnd": 0, "pingpong": false, "reverseLoop": false,
+      "sustainLoop": false, "sustainStart": 0, "sustainEnd": 0, "sustainPingpong": false, "sustainReverse": false]
+    editor.update(info, samples: inventory, revision: "sample:0"); editor.settingsDelay = 0.01
+    var calls = [(String, [String: Any], String)](), replies = [([String: Any]) -> Void](), boundaries = [Bool]()
+    editor.onSettingsRequest = { method, params, identity, reply in calls.append((method, params, identity)); replies.append(reply) }
+    editor.onRequest = { method, params, reply in calls.append((method, params, "s1")); replies.append(reply) }
+    var currentRevision = "sample:0"
+    editor.onSampleRevision = { currentRevision }; editor.waveformDocumentID = "song"
+    func answer(_ revision: String, _ data: [String: Any] = [:]) { currentRevision = revision; replies.removeFirst()(["result": ["revision": revision, "documentId": "song", "data": data]]) }
+    editor.name.stringValue = "New kick"; editor.rate.stringValue = "44.1k"
+    editor.finishAutomaticEdit { boundaries.append($0) }; editor.picker.selectItem(withTag: 2); editor.selectSample()
+    try require(calls.isEmpty && boundaries == [false] && editor.index == 1 && editor.name.stringValue == "New kick", "Invalid sample batches block Save and selection without discarding valid fields")
+    editor.rate.stringValue = "48001"; boundaries = []; editor.finishAutomaticEdit { boundaries.append($0) }
+    let values = calls[0].1["values"] as! [String: Any]
+    try require(calls.count == 1 && calls[0].0 == "sample.patch" && calls[0].2 == "s1" && calls[0].1["expectedRevision"] as? String == "sample:0" && Set(values.keys) == ["name", "rate"], "Sample completion captures stable identity/revision and sends only changed fields")
+    answer("sample:1"); try require(boundaries.isEmpty && calls.last?.0 == "sample.get", "Save waits for accepted settings readback")
+    replies.removeFirst()(["error": ["message": "Read failed"]])
+    try require(boundaries == [false] && editor.settingsNeedsReload && editor.settingsRevision == "sample:0" && editor.name.stringValue == "New kick", "Failed readback retains the accepted write's raw fields without rebasing or retrying it")
+    editor.reloadSettings(); editor.name.stringValue = "Newer during reload"; info["name"] = "New kick"; info["rate"] = 48001; answer("sample:1", info)
+    try require(editor.name.stringValue == "Newer during reload" && editor.settingsRevision == "sample:0" && editor.settingsNeedsReload, "Reload cannot replace newer raw fields")
+    editor.reloadSettings(); answer("sample:1", info)
+    try require(!editor.hasDraft && editor.settingsRevision == "sample:1" && editor.rate.stringValue == "48001", "Explicit successful Reload adopts current settings: draft=\(editor.hasDraft), settings=\(editor.settingsDraft.hasDraft), loops=\(editor.hasLoopDraft), revision=\(editor.settingsRevision ?? "nil"), rate=\(editor.rate.stringValue), status=\(editor.settingsStatus.stringValue)")
+
+    func expand(_ view: NSView) { if let section = view as? ToolSection, section.preference == "toolSection.sample.settings" { section.setExpanded(true, persist: false) }; for child in view.subviews { expand(child) } }
+    expand(editor)
+    let window = NSWindow(contentRect: editor.frame, styleMask: [.titled], backing: .buffered, defer: false); window.contentView = editor
+    window.makeFirstResponder(editor.volume)
+    guard let text = editor.volume.currentEditor() as? NSTextView else { throw InterfaceFailure(message: "Sample settings field editor did not attach") }
+    text.insertText("55", replacementRange: NSRange(location: 0, length: text.string.count)); text.setSelectedRange(NSRange(location: 1, length: 1))
+    let deadline = Date(timeIntervalSinceNow: 2)
+    while !editor.settingsPending && Date() < deadline { wait(0.01) }
+    try require(calls.last?.0 == "sample.patch" && (calls.last?.1["values"] as? [String: Any])?["volume"] as? Int == 55, "A native typed sample setting saves automatically: \(calls.last?.0 ?? "none"), raw=\(editor.volume.stringValue), draft=\(editor.settingsDraft.hasDraft), status=\(editor.settingsStatus.stringValue)")
+    editor.update(info, samples: inventory, revision: "sample:2")
+    try require(editor.volume.currentEditor() === text && text.string == "55" && text.selectedRange() == NSRange(location: 1, length: 1), "Refresh preserves active sample text, caret and selection through a write")
+    boundaries = []; editor.finishAutomaticEdit { boundaries.append($0) }; answer("sample:2"); info["volume"] = 55; answer("sample:2", info)
+    try require(boundaries == [true] && !editor.hasDraft && editor.volume.currentEditor() === text && text.selectedRange() == NSRange(location: 1, length: 1), "Confirmed automatic completion preserves native focus and resumes waiting Save")
+    text.setMarkedText("5", selectedRange: NSRange(location: 1, length: 0), replacementRange: NSRange(location: 0, length: text.string.count))
+    boundaries = []; let count = calls.count; editor.finishAutomaticEdit { boundaries.append($0) }; editor.reloadSettings()
+    try require(boundaries == [false] && text.hasMarkedText() && calls.count == count, "Composition blocks Save and Reload without cancelling the input method")
+    text.unmarkText(); window.makeFirstResponder(nil)
+    if editor.settingsPending { answer("sample:3"); info["volume"] = 5; answer("sample:3", info) }
+    editor.reloadSettings(); answer("sample:3", info)
+    editor.name.stringValue = "Before write"; editor.finishAutomaticEdit { _ in }; editor.name.stringValue = "Newer name"; answer("sample:4")
+    try require(editor.settingsNeedsReload && editor.settingsRevision == "sample:3" && editor.name.stringValue == "Newer name" && replies.isEmpty, "Newer text during a successful write retains its older revision without automatic replay")
+    info["name"] = "Before write"; editor.reloadSettings(); answer("sample:4", info)
+    editor.waveformDocumentID = "song"
+    editor.name.stringValue = "Settings and loops"; editor.looping.state = .on; editor.loopStart.stringValue = "10"; editor.loopEnd.stringValue = "100"
+    boundaries = []; editor.finishAutomaticEdit { boundaries.append($0) }; answer("sample:5"); info["name"] = "Settings and loops"; answer("sample:5", info)
+    try require(boundaries.isEmpty && calls.last?.0 == "sample.loops.set" && calls.last?.1["expectedRevision"] as? String == "sample:5", "Only verified settings carry the unchanged loop draft forward to the owned revision")
+    let loopParams = calls.last!.1
+    answer("sample:6", ["sample": 1, "dryRun": false, "loopsChanged": true, "after": ["normal": loopParams["normal"]!, "sustain": loopParams["sustain"]!]])
+    try require(boundaries.isEmpty && calls.last?.0 == "sample.get", "Settings followed by loops still waits for loop metadata")
+    info["loop"] = true; info["loopStart"] = 10; info["loopEnd"] = 100; answer("sample:6", info)
+    var wave = calls.last!.1; wave["peaks"] = Array(repeating: 0.5, count: (wave["bins"] as! Int) * 2); answer("sample:6", wave)
+    try require(boundaries == [true] && !editor.hasDraft && editor.settingsRevision == "sample:6", "Save drains sample settings and loops in order")
+    editor.loopNeedsReload = true; editor.name.stringValue = "Blocked by retained loop result"; let beforeReview = calls.count
+    boundaries = []; editor.finishAutomaticEdit { boundaries.append($0) }
+    try require(boundaries == [false] && calls.count == beforeReview && editor.name.stringValue == "Blocked by retained loop result", "An unresolved loop outcome blocks other sample writes before they are submitted")
+    editor.loopNeedsReload = false; editor.name.stringValue = "Settings and loops"
+    editor.name.stringValue = "Old sample"; editor.finishAutomaticEdit { boundaries.append($0) }
+    editor.index = 2; editor.update(["index": 2, "name": "Snare", "frames": 100], samples: inventory, revision: "other:0"); answer("old:9")
+    try require(editor.name.stringValue == "Snare" && editor.settingsRevision == "other:0" && !editor.settingsPending && boundaries.last == false, "Retired sample replies cannot adopt a new target or release an old waiting Save")
+    editor.name.stringValue = "Removed sample draft"; editor.update([:], samples: [], revision: "other:1")
+    try require(editor.settingsNeedsReload && editor.name.stringValue == "Removed sample draft", "Removing the original sample preserves its pending fields")
+    let beforeDiscard = calls.count; editor.discardSampleDrafts()
+    try require(!editor.hasDraft && calls.count == beforeDiscard, "Explicit Discard releases an unavailable target without submitting or repeating a write")
   }
   static func assetCatalogueChecks() throws {
     var model=PatternModel(["format":"MPTM","samples":[["index":1,"id":"s1","name":"Kick"],["index":2,"id":"s2","name":"Snare"]]])
@@ -270,6 +341,160 @@ extension InterfaceTests {
     mixer.showMeters([])
     try require(mixer.peak.stringValue == "—", "Missing observation is unavailable rather than measured silence")
     try mixerUncertainOutcomeChecks(data)
+    try mixerRawCompletionChecks(data)
+    try mixerOverlappingDraftChecks(data)
+  }
+
+  static func mixerOverlappingDraftChecks(_ data: [String: Any]) throws {
+    let mixer = MixerEditor(frame: NSRect(x: 0, y: 0, width: 1040, height: 650))
+    mixer.revision = "overlap:0"; mixer.update(data); mixer.automaticDelay = 60
+    var calls = [(String, [String: Any])](), replies = [([String: Any]) -> Void]()
+    mixer.onRequest = { method, params, reply in calls.append((method, params)); replies.append(reply) }
+    func answer(_ revision: String) { replies.removeFirst()(["result": ["revision": revision, "data": [:]]]) }
+    mixer.sendGain.stringValue = "-6"; mixer.name.stringValue = "Retained name"; mixer.color.stringValue = "not hex"
+    var completed = true; mixer.finishAutomaticEdit { completed = $0 }
+    try require(!completed && calls.isEmpty, "Save waits for the explicit send draft")
+    try press(mixer, "Set send")
+    try require(calls.count == 1 && calls[0].0 == "mixer.sends.set" && calls[0].1["expectedRevision"] as? String == "overlap:0", "A send can finish independently of retained bus fields")
+    answer("overlap:1")
+    try require(mixer.name.stringValue == "Retained name" && mixer.color.stringValue == "not hex" && mixer.hasRawDraft && mixer.send.indexOfSelectedItem == 1,
+      "Send acknowledgement preserves other raw fields and selects the accepted send")
+    mixer.finishAutomaticEdit { completed = $0 }
+    try require(!completed && calls.count == 1 && mixer.status.stringValue.contains("hexadecimal"), "An invalid other field remains correctable after saving the send")
+    mixer.color.stringValue = "12AB90"; mixer.finishAutomaticEdit { completed = $0 }
+    try require(calls.count == 2 && calls[1].0 == "mixer.bus.set" && calls[1].1["expectedRevision"] as? String == "overlap:1" && calls[1].1["sends"] == nil,
+      "Corrected bus fields use the owned send revision without replacing sends")
+    answer("overlap:2")
+    try require(completed && !mixer.needsCompletion && mixer.table.selectedRow == 0 && (mixer.selected?["sends"] as? [[String: Any]])?.count == 1,
+      "Both forms finish and retain the stable bus selection")
+    mixer.sendGain.stringValue = "-8"; try press(mixer, "Set send"); answer("overlap:3")
+    try require((mixer.selected?["sends"] as? [[String: Any]])?.count == 1 && (mixer.selected?["sends"] as? [[String: Any]])?.first?["gainDB"] as? Double == -8,
+      "Editing the accepted send updates it rather than appending another send")
+    mixer.sendGain.stringValue = "-8.000"; try press(mixer, "Set send"); answer("overlap:3")
+    try require(!mixer.needsCompletion, "A no-change send write also accepts equivalent numeric spelling")
+    mixer.sendGain.stringValue = "-9"; mixer.name.stringValue = "Before send acknowledgement"; try press(mixer, "Set send")
+    mixer.name.stringValue = "Newer name"; answer("overlap:4")
+    try require(mixer.needsReload && mixer.revision == "overlap:3" && mixer.name.stringValue == "Newer name" && mixer.sendGain.stringValue == "-9",
+      "Newer input during a send write retains its original revision and requires readback")
+
+    let editor = MixerEditor(frame: .zero)
+    editor.widthAnchor.constraint(equalToConstant: 1040).isActive = true
+    editor.heightAnchor.constraint(equalToConstant: 650).isActive = true
+    let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1040, height: 650), styleMask: [.titled], backing: .buffered, defer: false)
+    window.contentView = editor; window.setContentSize(NSSize(width: 1040, height: 650))
+    editor.revision = "strip:0"; editor.update(data); editor.layoutSubtreeIfNeeded(); editor.automaticDelay = 60
+    var writes = [[String: Any]]()
+    editor.onRequest = { _, params, reply in writes.append(params); reply(["result": ["revision": "strip:\(writes.count)", "data": [:]]]) }
+    guard let first = editor.strips.visible[0], let second = editor.strips.visible[1] else { throw InterfaceFailure(message: "Missing native Mixer strips") }
+    func type(_ field: NSTextField, _ value: String) throws {
+      window.makeFirstResponder(field)
+      guard let text = field.currentEditor() as? NSTextView else { throw InterfaceFailure(message: "Strip field editor did not attach") }
+      text.insertText(value, replacementRange: NSRange(location: 0, length: (text.string as NSString).length))
+    }
+    try type(first.gain, "-")
+    try require(first.gain.stringValue == "-" && editor.selectedID == "t1", "Native input captures the first strip's stable bus")
+    let originalSecond = second.gain.stringValue
+    try type(second.gain, "-6")
+    try require(second.gain.stringValue == originalSecond && !second.hasDraft && editor.selectedID == "t1" && first.gain.stringValue == "-",
+      "AppKit refuses another bus's input before it becomes a second raw draft")
+    try type(first.gain, "-4.5"); editor.finishAutomaticEdit { completed = $0 }
+    try require(completed && writes.count == 1 && writes[0]["bus"] as? String == "t1" && writes[0]["gainDB"] as? Double == -4.5,
+      "Correcting the first strip completes Save without reverting another strip")
+    try type(second.preGain, "-6"); editor.finishAutomaticEdit { completed = $0 }
+    try require(completed && writes.count == 2 && writes[1]["bus"] as? String == "g1" && writes[1]["preGainDB"] as? Double == -6 && editor.table.selectedRow == 1,
+      "After the first edit completes, native input can capture and save the second bus")
+    window.makeFirstResponder(nil)
+  }
+
+  static func mixerRawCompletionChecks(_ fixture: [String: Any]) throws {
+    var data = fixture, buses = fixture["buses"] as! [[String: Any]]
+    buses[0]["gainDB"] = -3.2718281828; buses[0]["color"] = 0x123456; data["buses"] = buses
+    let mixer = MixerEditor(frame: .zero); mixer.revision = "raw:0"; mixer.update(data)
+    mixer.automaticDelay = 0.01
+    var calls = [(String, [String: Any])](), replies = [([String: Any]) -> Void](), boundaries = [Bool]()
+    mixer.onRequest = { method, params, reply in calls.append((method, params)); replies.append(reply) }
+    func answer(_ revision: String, _ snapshot: [String: Any] = [:]) {
+      replies.removeFirst()(["result": ["revision": revision, "data": snapshot]])
+    }
+    func reload(_ revision: String = "raw:0") {
+      mixer.reload(); answer(revision, data)
+      if !replies.isEmpty { answer(revision) }
+    }
+    mixer.name.stringValue = "Texture return"; mixer.color.stringValue = "12zz90"
+    mixer.finishAutomaticEdit { boundaries.append($0) }
+    mixer.mute.performClick(nil)
+    mixer.mutate("mixer.bus.add", ["kind": "return"])
+    mixer.mutate("mixer.bus.remove", ["bus": "t1"])
+    mixer.mutate("mixer.inserts.move", ["plugins": ["fx2"], "target": "t1"])
+    mixer.synchronize("external:1"); mixer.update(["active": true, "buses": []])
+    try require(calls.isEmpty && boundaries == [false] && mixer.name.stringValue == "Texture return" && mixer.color.stringValue == "12zz90" && mixer.revision == "raw:0" && !mixer.selectBus("g1"),
+      "Invalid name/color batches block Save, structural commands and retargeting without accepting a refreshed revision")
+    mixer.viewMode.selectedSegment = 0; mixer.changeViewMode(); mixer.viewMode.selectedSegment = 1; mixer.changeViewMode()
+    try require(mixer.color.stringValue == "12zz90", "Switching Mixer views preserves raw text")
+    mixer.color.stringValue = "12AB90"; boundaries = []
+    mixer.finishAutomaticEdit { boundaries.append($0) }
+    try require(calls.count == 1 && calls[0].1["name"] as? String == "Texture return" && calls[0].1["color"] as? Int == 0x12ab90 && calls[0].1["mute"] as? Bool == true && calls[0].1["gainDB"] == nil && calls[0].1["preview"] as? Bool == false && boundaries.isEmpty,
+      "One durable name/color batch preserves untouched high-precision fader data and waits for acknowledgement")
+    answer("raw:1")
+    try require(boundaries == [true] && !mixer.needsCompletion && mixer.selected?["gainDB"] as? Double == -3.2718281828,
+      "Save resumes only after the owned batch succeeds")
+    for text in ["-", "NaN", "25", "-97"] {
+      mixer.controls[2].value.stringValue = text; boundaries = []
+      let before = calls.count; mixer.controls[2].entered(); mixer.finishAutomaticEdit { boundaries.append($0) }
+      mixer.synchronize("outside"); mixer.load()
+      try require(calls.count == before && boundaries == [false] && mixer.controls[2].value.stringValue == text && mixer.hasRawDraft,
+        "Invalid fader text survives Return, refresh and Save: \(text)")
+    }
+    reload()
+    mixer.timing.stringValue = "-"; boundaries = []; let beforeTiming = calls.count
+    mixer.finishAutomaticEdit { boundaries.append($0) }
+    try require(calls.count == beforeTiming && boundaries == [false] && mixer.timing.stringValue == "-", "Malformed timing is not interpreted as the baseline zero")
+    mixer.timing.stringValue = "501"; mixer.finishAutomaticEdit { _ in }
+    try require(calls.count == beforeTiming, "Timing uses the shared model's actual ±500 ms bounds")
+    reload()
+    mixer.controls[2].value.stringValue = "-4.25"
+    mixer.controls[2].controlTextDidChange(Notification(name: NSControl.textDidChangeNotification, object: mixer.controls[2].value))
+    wait(0.03)
+    try require(calls.last?.1["gainDB"] as? Double == -4.25 && mixer.loading, "Valid typed gain automatically submits after the idle delay")
+    mixer.name.stringValue = "Typed during write"; boundaries = []; mixer.finishAutomaticEdit { boundaries.append($0) }
+    let count = calls.count; answer("raw:2")
+    try require(boundaries == [false] && calls.count == count && mixer.needsReload && mixer.revision == "raw:0" && mixer.name.stringValue == "Typed during write",
+      "A delayed successful result retains newer raw input and its captured revision without automatic replay")
+    reload("raw:2")
+    mixer.load(); mixer.name.stringValue = "Typed during read"; boundaries = []; mixer.finishAutomaticEdit { boundaries.append($0) }
+    answer("raw:3", data)
+    try require(boundaries == [false] && mixer.needsReload && mixer.revision == "raw:2" && mixer.name.stringValue == "Typed during read", "A pending read cannot replace or rebase a new raw draft")
+    reload("raw:3")
+    mixer.control("pan", value: 0.25, final: false); boundaries = []; mixer.finishAutomaticEdit { boundaries.append($0) }
+    answer("raw:3")
+    try require(boundaries.isEmpty && calls.last?.1["preview"] as? Bool == false && calls.last?.1["pan"] as? Double == 0.25, "Save drains an outstanding preview into one durable gesture")
+    answer("raw:4"); try require(boundaries == [true] && !mixer.needsCompletion, "A committed gesture releases waiting Save exactly once")
+    mixer.name.stringValue = "Refused name"; boundaries = []; mixer.finishAutomaticEdit { boundaries.append($0) }
+    replies.removeFirst()(["error": ["code": -32000, "message": "Captured refusal"]])
+    try require(boundaries == [false] && mixer.name.stringValue == "Refused name" && mixer.needsReload, "Refused raw writes retain the text and settle completion")
+    let beforeReload = calls.count; reload("raw:4")
+    try require(calls.count == beforeReload + 1 && !mixer.needsCompletion, "Raw name failure reconciles without issuing an unsupported name preview")
+    mixer.name.stringValue = "Old document name"; boundaries = []; mixer.finishAutomaticEdit { boundaries.append($0) }
+    mixer.invalidateDocumentContext(); answer("old-document:9")
+    try require(boundaries == [false] && mixer.needsReload && mixer.revision == "raw:4" && mixer.name.stringValue == "Old document name", "Old-document completion cannot release a waiting action or retarget retained text")
+    reload("new-document:0")
+    mixer.sendGain.stringValue = "unfinished send"; boundaries = []; mixer.finishAutomaticEdit { boundaries.append($0) }
+    mixer.update(data); mixer.synchronize("unrelated")
+    try require(boundaries == [false] && mixer.sendGain.stringValue == "unfinished send" && mixer.hasPendingControls, "An explicit send draft blocks departure and survives refresh")
+    reload("new-document:0")
+    mixer.load(); boundaries = []; mixer.finishAutomaticEdit { boundaries.append($0) }
+    replies.removeFirst()(["error": ["code": -32000, "message": "Read failed"]])
+    try require(boundaries == [false] && !mixer.loading, "Read failures settle waiting actions rather than stranding Save")
+    let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1040, height: 650), styleMask: [.titled], backing: .buffered, defer: false)
+    window.contentView = mixer; mixer.viewMode.selectedSegment = 1; mixer.changeViewMode()
+    window.makeFirstResponder(mixer.name)
+    guard let text = mixer.name.currentEditor() as? NSTextView else { throw InterfaceFailure(message: "Mixer field editor did not attach") }
+    text.setMarkedText("x", selectedRange: NSRange(location: 1, length: 0), replacementRange: NSRange(location: 0, length: 1))
+    boundaries = []; let beforeComposition = calls.count
+    mixer.finishAutomaticEdit { boundaries.append($0) }; mixer.reload(); mixer.load()
+    try require(boundaries == [false] && text.hasMarkedText() && calls.count == beforeComposition, "Composition blocks Save and Reload without cancelling the input method")
+    text.unmarkText(); window.makeFirstResponder(nil)
+
   }
 
   static func mixerUncertainOutcomeChecks(_ data: [String:Any]) throws {
@@ -304,8 +529,8 @@ extension InterfaceTests {
       mixer.reload();replies.removeFirst()(["result":["revision":"accepted","data":accepted]])
       mixer.name.stringValue="Newer text during release"
       replies.removeFirst()(["result":["revision":"accepted","data":[:]]])
-      try require(mixer.needsReload && mixer.name.stringValue=="Newer text during release" && mixer.hasPendingControls,
-        "A late Reload completion cannot erase fields typed while it was in flight")
+      try require(mixer.needsReload && mixer.name.stringValue=="Newer text during release" && mixer.hasPendingControls && mixer.revision=="original",
+        "A late Reload completion cannot erase or rebase fields typed during its preview release")
       mixer.reload();replies.removeFirst()(["result":["revision":"accepted","data":accepted]])
       replies.removeFirst()(["result":["revision":"accepted","data":[:]]])
       try require(!mixer.needsReload && !mixer.hasPendingControls && mixer.selected?["gainDB"] as? Double == -6.5,

@@ -2,7 +2,7 @@ import AppKit
 extension AppController {
   @objc func showGateInspector(){
     guard !busy,model.editable else{return}
-    if workspaceReturnPoints["gate"] == nil {workspaceReturnPoints["gate"]=patternView.navigation}
+    capturePanelReturn("gate")
     workspace?.show("gate");if !gateInspector.hasDraft && !gateInspector.pending {followWorkspacePanel("gate",force:true)}
   }
   func installGateInspector(){

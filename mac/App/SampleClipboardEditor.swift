@@ -25,7 +25,6 @@ extension SampleEditor {
   @objc func pasteModeChanged() { pasteDestinationGroup.isHidden = pasteMode.indexOfSelectedItem != 2 }
   func clipboardAction(_ action: String) {
     if action == "paste" { pasteClipboard(dryRun: false); return }
-    guard !clipboardBusy, let onRequest else { return }
     guard let first = Int(selectionStart.stringValue), let last = Int(selectionEnd.stringValue),
       first >= 0, first < last, last <= waveform.frames else {
       clipboardStatus.stringValue = "Select a nonempty region to copy, cut or delete."; return
@@ -36,24 +35,8 @@ extension SampleEditor {
     var params: [String: Any] = ["sample": index, "start": first, "end": last]
     if ["copy", "new"].contains(action) { params["channels"] = selectedChannels }
     let method = action == "new" ? "sample.copyToNew" : action == "copy" ? "sample.clipboard.copy" : action == "cut" ? "sample.cut" : "sample.delete"
-    clipboardBusy = true
-    let sample = index, generation = sampleGeneration
-    onRequest(method, params) { [weak self] response in
-      guard let self else { return }; self.clipboardBusy = false
-      guard self.index == sample, self.sampleGeneration == generation else { return }
-      guard let result = response["result"] as? [String: Any], let data = result["data"] as? [String: Any] else {
-        self.clipboardStatus.stringValue = (response["error"] as? [String: Any])?["message"] as? String ?? "Sample edit failed."; return
-      }
-      self.resetPastePreview()
-      if action == "new", let index = data["sample"] as? Int {
-        self.clipboardStatus.stringValue = "Copied \(data["frames"] ?? 0) frames to sample \(index)."
-        self.index = index; self.onSelect?(index)
-      } else if action == "copy" { self.clipboardStatus.stringValue = "Copied \(data["frames"] ?? 0) frames · \(data["channels"] ?? 0) channel(s) · \(data["rate"] ?? 0) Hz" }
-      else {
-        self.clipboardStatus.stringValue = "\(action == "cut" ? "Cut" : "Deleted") \(data["removedFrames"] ?? 0) frames. Undo restores the audio and loops."
-        self.waveform.selection = first...first
-      }
-    }
+    guard let operation = beginOperation(method, params: params) else { return }
+    submitOperation(operation)
   }
   func pasteParams() -> [String: Any]? {
     guard let first = Int(selectionStart.stringValue), first >= 0, first <= waveform.frames,
@@ -79,39 +62,20 @@ extension SampleEditor {
     return p
   }
   func pasteClipboard(dryRun: Bool) {
-    guard !clipboardBusy, let onRequest, let base = pasteParams() else { return }
-    clipboardBusy = true
-    let sample = index, generation = sampleGeneration, signature = base as NSDictionary
-    let send: (String, String?) -> Void = { [weak self] clipboardID, revision in
-      guard let self else { return }
-      var p = base; p["clipboardId"] = clipboardID; p["dryRun"] = dryRun
-      if let revision { p["expectedRevision"] = revision }
-      onRequest("sample.paste", p) { [weak self] response in
-        guard let self else { return }; self.clipboardBusy = false
-        guard self.index == sample, self.sampleGeneration == generation else { return }
-        guard let result = response["result"] as? [String: Any], let data = result["data"] as? [String: Any] else {
-          self.clipboardStatus.stringValue = (response["error"] as? [String: Any])?["message"] as? String ?? "Paste failed."
-          self.resetPastePreview(); return
-        }
-        let clipped = data["clippedSamples"] as? Int ?? 0
-        self.clipboardStatus.stringValue = "\(dryRun ? "Preview" : "Pasted"): \(data["insertedFrames"] ?? 0) frames · result \(data["resultFrames"] ?? 0) frames" + (clipped > 0 ? " · \(clipped) clipped values" : "")
-        self.pastePreviewSignature = dryRun ? signature : nil
-        self.pastePreviewRevision = dryRun ? result["revision"] as? String : nil
-        self.pastePreviewID = dryRun ? clipboardID : nil
-        if !dryRun, let first = data["start"] as? Int, let frames = data["insertedFrames"] as? Int { self.waveform.selection = first...(first + frames) }
-      }
+    guard let base = pasteParams() else { return }
+    let matching = !dryRun && pastePreviewSignature?.isEqual(base as NSDictionary) == true
+    guard let operation = beginOperation("sample.paste", params: base, dryRun: dryRun, previewRevision: matching ? pastePreviewRevision : nil) else { return }
+    if matching, let id = pastePreviewID {
+      operation.params["clipboardId"] = id; submitOperation(operation); return
     }
-    if !dryRun, pastePreviewSignature?.isEqual(signature) == true, let id = pastePreviewID, let revision = pastePreviewRevision {
-      send(id, revision)
-    } else {
-      onRequest("sample.clipboard.get", [:]) { [weak self] response in
-        guard let self else { return }
-        guard self.index == sample, self.sampleGeneration == generation else { self.clipboardBusy = false; return }
-        guard let result = response["result"] as? [String: Any], let data = result["data"] as? [String: Any], let id = data["clipboardId"] as? String else {
-          self.clipboardBusy = false; self.clipboardStatus.stringValue = "Sample clipboard is empty. Copy a region first."; return
-        }
-        send(id, result["revision"] as? String)
+    requestOperation(operation, "sample.clipboard.get", [:]) { [weak self] response in
+      guard let self else { return }
+      guard self.operationFieldsUnchanged(operation), (self.onSampleRevision?() ?? operation.revision) == operation.revision,
+        let result = self.operationResult(response, operation, revision: operation.revision), let data = result["data"] as? [String: Any],
+        self.validOperationClipboard(data), data["available"] as? Bool == true, let id = data["clipboardId"] as? String else {
+        self.retainOperation(operation, "Clipboard lookup failed, is empty or the captured input changed. Prepare the paste again."); return
       }
+      operation.params["clipboardId"] = id; self.submitOperation(operation)
     }
   }
 }

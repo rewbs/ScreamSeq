@@ -39,6 +39,21 @@ struct EditorNavigation: Equatable {
   }
 }
 
+struct EditorReturnPoint {
+  let navigation: EditorNavigation, document: String, patternID: String, trackID: String
+  init?(navigation: EditorNavigation, revision: String, patterns: [[String: Any]], tracks: [[String: Any]]) {
+    guard let pattern=patterns.first(where:{$0["index"] as? Int==navigation.pattern})?["id"] as? String,
+      let track=tracks.first(where:{$0["index"] as? Int==navigation.channel})?["id"] as? String else{return nil}
+    self.navigation=navigation;document=String(revision.split(separator:":").first ?? "");patternID=pattern;trackID=track
+  }
+  func resolve(revision:String,patterns:[[String:Any]],tracks:[[String:Any]])->EditorNavigation? {
+    guard String(revision.split(separator:":").first ?? "")==document,
+      let pattern=patterns.first(where:{$0["id"] as? String==patternID})?["index"] as? Int,
+      let channel=tracks.first(where:{$0["id"] as? String==trackID})?["index"] as? Int else{return nil}
+    var result=navigation;result.pattern=pattern;result.channel=channel;result.following=false;return result
+  }
+}
+
 // Option values are not document arguments, even when they name existing bundles.
 enum AppLaunchArguments {
   static let valueOptions:Set<String>=["--ui-test-seconds","--ui-test-vst3","--ui-test-device","--ui-test-screen"]

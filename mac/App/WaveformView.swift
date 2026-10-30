@@ -10,6 +10,7 @@ final class WaveformView: NSView {
   var peaks: [Float] = [] { didSet { needsDisplay = true } }
   var peaksRange: Range<Int>?
   var frames = 0 { didSet {
+    if retainsStroke, frames != oldValue { frames = oldValue; return }
     if frames != oldValue { cancelStroke(); clampViewport() }
     needsDisplay = true
   } }
@@ -17,10 +18,13 @@ final class WaveformView: NSView {
   enum LoopMarker: Int, CaseIterable {case start, end, sustainStart, sustainEnd}
   var selectedLoopMarker: LoopMarker?, draggingLoop = false
   var onLoopMarker: ((LoopMarker, Int, Bool) -> Void)?
+  var canEditLoops: (() -> Bool)?
+  var canNudgeLoops: (() -> Bool)?
   func markerFrame(_ marker:LoopMarker)->Int { [loopStart,loopEnd,sustainStart,sustainEnd][marker.rawValue] }
   var loopMarkers:[LoopMarker] {LoopMarker.allCases.filter{$0.rawValue<2 ? loopEnd>loopStart : sustainEnd>sustainStart}}
   func markerLocation(_ marker:LoopMarker)->NSPoint {NSPoint(x:max(5,min(bounds.width-5,x(Double(markerFrame(marker))))),y:marker.rawValue<2 ? bounds.height-7 : 7)}
   func moveLoopMarker(_ marker:LoopMarker,to frame:Int,finished:Bool) {
+    guard stroke.isEmpty, canEditLoops?() ?? true else { return }
     let start=marker.rawValue<2 ? loopStart:sustainStart,end=marker.rawValue<2 ? loopEnd:sustainEnd
     let value=marker.rawValue%2==0 ? max(0,min(end-1,frame)):max(start+1,min(frames,frame))
     switch marker {case .start:loopStart=value;case .end:loopEnd=value;case .sustainStart:sustainStart=value;case .sustainEnd:sustainEnd=value}
@@ -28,11 +32,17 @@ final class WaveformView: NSView {
   }
   private(set) var viewport: Range<Int>?
   var visibleRange: Range<Int> { viewport ?? 0..<max(0, frames) }
-  var selection: ClosedRange<Int>? { didSet { needsDisplay = true; onSelection?(selection) } }
-  var drawing = false { didSet { if !drawing { cancelStroke() }; needsDisplay = true } }
+  var requestedRange: Range<Int>?
+  var navigationRange: Range<Int> { requestedRange ?? visibleRange }
+  var selection: ClosedRange<Int>? { didSet { if retainsStroke { selection = oldValue; return }; needsDisplay = true; onSelection?(selection) } }
+  var drawing = false { didSet { if retainsStroke { drawing = oldValue; return }; if !drawing { cancelStroke() }; needsDisplay = true } }
+  // A submitted stroke belongs to its completion owner until verified or
+  // explicitly discarded. Navigation and Escape cannot erase that evidence.
+  var retainsStroke = false
   var onSelection: ((ClosedRange<Int>?) -> Void)?
   var onClipboard: ((String) -> Void)?
   var onViewport: (() -> Void)?
+  var onRequestViewport: ((Range<Int>?) -> Void)?
   var onFinishSelection: (() -> Void)?
   var onBeginStroke: (() -> Bool)?
   var onStroke: (([SampleStrokePoint]) -> Void)?
@@ -40,25 +50,34 @@ final class WaveformView: NSView {
   private var anchor = 0, strokeActive = false
   private var previousPoint: SampleStrokePoint?
   private(set) var stroke = [Int: Double]()
+  var strokeInterpolation = "linear" { didSet { needsDisplay = true } }
+  func stagePoints(_ points: [SampleStrokePoint], interpolation: String) {
+    strokeActive = false; previousPoint = nil
+    stroke = Dictionary(uniqueKeysWithValues: points.map { ($0.frame, $0.value) })
+    strokeInterpolation = interpolation; needsDisplay = true
+  }
   var precise: Bool {
     let range = visibleRange
     return !range.isEmpty && Double(range.count) <= min(4096, max(1, Double(bounds.width))) &&
       (peaksRange ?? 0..<max(0, frames)) == range && peaks.count == range.count * 2
   }
   override var acceptsFirstResponder: Bool { true }
-  private func clampViewport() {
-    guard let view = viewport else { return }
-    if frames <= 0 { viewport = nil; return }
+  private func boundedViewport(_ view: Range<Int>?) -> Range<Int>? {
+    guard let view, frames > 0 else { return nil }
     let size = min(frames, max(1, view.count)), first = max(0, min(view.lowerBound, frames-size))
-    viewport = first == 0 && size == frames ? nil : first..<(first+size)
+    return first == 0 && size == frames ? nil : first..<(first+size)
   }
+  private func clampViewport() { viewport = boundedViewport(viewport) }
   func setViewport(_ range: Range<Int>?, notify: Bool = true) {
-    cancelStroke(); viewport = range; clampViewport(); needsDisplay = true
+    guard stroke.isEmpty else { return }
+    let next = boundedViewport(range)
+    if notify, let onRequestViewport { onRequestViewport(next); return }
+    cancelStroke(); viewport = next; needsDisplay = true
     if notify { onViewport?() }
   }
   func zoom(_ factor: Double, center: Double? = nil) {
     guard frames > 0, factor.isFinite, factor > 0 else { return }
-    let range = visibleRange
+    let range = navigationRange
     let anchor = center ?? selection.flatMap { range.contains($0.lowerBound) ? Double($0.lowerBound) : nil } ?? Double(range.lowerBound + range.count/2)
     guard anchor.isFinite else { return }
     let middle = max(0, min(Double(frames), anchor))
@@ -73,7 +92,7 @@ final class WaveformView: NSView {
     else { let size=min(frames,128), start=max(0,min(frames-size,selection.lowerBound-size/2)); setViewport(start..<(start+size)) }
   }
   func panFrames(_ delta: Int) {
-    let range=visibleRange
+    let range=navigationRange
     // Bound the displacement before adding: clamping an overflowed sum is too late.
     let last=max(0,frames-range.count)
     let start=range.lowerBound+max(-range.lowerBound,min(last-range.lowerBound,delta))
@@ -92,8 +111,8 @@ final class WaveformView: NSView {
     return SampleStrokePoint(frame:frameAt(x:point.x,insertion:false),value:max(-1,min(1,Double((point.y-bounds.midY)/max(1,bounds.height*0.44)))))
   }
   func beginStroke(_ point: SampleStrokePoint) -> Bool {
-    guard drawing, precise, visibleRange.contains(point.frame), point.value.isFinite, onBeginStroke?() == true else { return false }
-    stroke.removeAll(keepingCapacity:true); previousPoint=nil; strokeActive=true; extendStroke(point); return true
+    guard stroke.isEmpty, drawing, precise, visibleRange.contains(point.frame), point.value.isFinite, onBeginStroke?() == true else { return false }
+    stroke.removeAll(keepingCapacity:true); strokeInterpolation = "linear"; previousPoint=nil; strokeActive=true; extendStroke(point); return true
   }
   func extendStroke(_ point: SampleStrokePoint) {
     guard strokeActive, visibleRange.contains(point.frame), point.value.isFinite else { return }
@@ -110,7 +129,8 @@ final class WaveformView: NSView {
     guard strokeActive else { return }; strokeActive=false; previousPoint=nil
     onStroke?(stroke.keys.sorted().map { SampleStrokePoint(frame:$0,value:stroke[$0]!) })
   }
-  func cancelStroke() {
+  func cancelStroke(force: Bool = false) {
+    guard force || !retainsStroke else { return }
     let hadStroke=strokeActive || !stroke.isEmpty
     strokeActive=false; previousPoint=nil; stroke.removeAll(keepingCapacity:true); needsDisplay=true
     if hadStroke { onCancelStroke?() }
@@ -143,9 +163,14 @@ final class WaveformView: NSView {
     }
     if !stroke.isEmpty {
       Theme.gold.setStroke();let path=NSBezierPath();path.lineWidth=2
+      var previous: NSPoint?
       for (i,frame) in stroke.keys.sorted().enumerated() {
         let point=NSPoint(x:x(Double(frame)+0.5),y:mid+CGFloat(stroke[frame]!)*height)
-        if i==0 { path.move(to:point) } else { path.line(to:point) }
+        if i==0 { path.move(to:point) } else {
+          if strokeInterpolation == "step", let previous { path.line(to: NSPoint(x: point.x, y: previous.y)) }
+          path.line(to:point)
+        }
+        previous = point
         Theme.gold.setFill();NSBezierPath(ovalIn:NSRect(x:point.x-2,y:point.y-2,width:4,height:4)).fill()
       };path.stroke()
     }
@@ -198,11 +223,14 @@ final class WaveformView: NSView {
   @objc func cut(_ sender:Any?){onClipboard?("cut")}
   @objc func paste(_ sender:Any?){onClipboard?("paste")}
   override func keyDown(with event:NSEvent) {
-    if event.keyCode==48,!loopMarkers.isEmpty {
-      let list=loopMarkers,step=event.modifierFlags.contains(.shift) ? list.count-1:1
-      selectedLoopMarker=list[((selectedLoopMarker.flatMap{list.firstIndex(of:$0)} ?? (list.count-1))+step)%list.count];needsDisplay=true;return
+    let loopNavigation = event.modifierFlags.intersection([.command, .control, .option]).isEmpty
+    if loopNavigation,event.keyCode==48,!loopMarkers.isEmpty {
+      let list=loopMarkers,backward=event.modifierFlags.contains(.shift)
+      let at=selectedLoopMarker.flatMap{list.firstIndex(of:$0)} ?? (backward ? 0:list.count-1)
+      selectedLoopMarker=list[(at+(backward ? list.count-1:1))%list.count];needsDisplay=true;return
     }
-    if let marker=selectedLoopMarker,[123,124].contains(event.keyCode) {
+    if loopNavigation,let marker=selectedLoopMarker,[123,124].contains(event.keyCode) {
+      guard loopMarkers.contains(marker), canNudgeLoops?() ?? true else { return }
       moveLoopMarker(marker,to:markerFrame(marker)+(event.keyCode==123 ? -1:1)*(event.modifierFlags.contains(.shift) ? 64:1),finished:true);return
     }
     if event.keyCode==53 { cancelStroke();selectedLoopMarker=nil;needsDisplay=true }
@@ -216,6 +244,6 @@ final class WaveformView: NSView {
     let region="Visible frames \(visibleRange.lowerBound) to \(visibleRange.upperBound)\(marker)"
     if let selection { return "\(region). Selected frames \(selection.lowerBound) to \(selection.upperBound)" };return region
   }
-  override init(frame:NSRect){super.init(frame:frame);setAccessibilityElement(true);setAccessibilityRole(.image);setAccessibilityLabel("Sample waveform");setAccessibilityHelp("Drag gold normal-loop or green sustain-loop handles to edit immediately. Tab selects handles; arrows move one frame, Shift-arrows move 64. Drag elsewhere to select audio. Zoom to draw.")}
+  override init(frame:NSRect){super.init(frame:frame);setAccessibilityElement(true);setAccessibilityRole(.image);setAccessibilityLabel("Sample waveform");setAccessibilityHelp("Drag gold normal-loop or green sustain-loop handles to edit immediately. Tab selects handles; arrows move one frame, Shift-arrows move 64. F6 switches to the loop boundary field; Command-Return saves both loops. Drag elsewhere to select audio. Zoom to draw.")}
   required init?(coder:NSCoder){fatalError()}
 }

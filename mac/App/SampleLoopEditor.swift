@@ -1,22 +1,75 @@
 import AppKit
 
 extension SampleEditor {
+  // The workspace monitor also calls this: unmodified F6 in a native field
+  // editor does not reliably travel through performKeyEquivalent.
+  func handleLoopKey(_ event: NSEvent) -> Bool {
+    guard event.type == .keyDown, let window, let responder = window.firstResponder,
+      event.windowNumber == window.windowNumber, NSApp.modalWindow == nil,
+      window.attachedSheet == nil, window.sheetParent == nil,
+      !KeyboardSettings.menuFocus.ownsUnmodifiedKey(event) else { return false }
+    let fields = [loopStart, loopEnd, sustainStart, sustainEnd]
+    let fieldIndex = fields.firstIndex { $0 === responder || $0.currentEditor() === responder }
+    let inLoops = fieldIndex != nil || (responder as? NSView)?.isDescendant(of: loopSection) == true
+    let onWaveform = responder === waveform
+    let modifiers = event.modifierFlags.intersection([.command, .control, .option, .shift])
+    if [36, 76].contains(event.keyCode), modifiers == .command,
+      inLoops || (onWaveform && waveform.selectedLoopMarker != nil) {
+      if onWaveform && protectsDrawingInput { return false }
+      if !event.isARepeat { setLoops(dryRun: false) }
+      return true
+    }
+    guard event.keyCode == 97, modifiers.isEmpty, inLoops || onWaveform else { return false }
+    // Moving focus would commit marked text, or invalidate an operation that
+    // still owns its native input. Keep that input and focus until it finishes.
+    guard !event.isARepeat, !hasSampleComposition, !protectsSampleOperation,
+      !protectsDrawingInput, waveform.stroke.isEmpty, !waveform.draggingLoop,
+      loopReloadQuery == nil, sampleSelectionQuery == nil, waveformQuery == nil, !waveformInFlight else { return true }
+    if onWaveform {
+      let marker = waveform.selectedLoopMarker ?? loopFocusMarker
+      let field = fields[marker.rawValue]
+      loopSection.setExpanded(true); window.layoutIfNeeded()
+      field.scrollToVisible(field.bounds)
+      if window.makeFirstResponder(field), let editor = field.currentEditor() as? NSTextView,
+        let selection = loopFieldSelections[marker] {
+        let location = min(selection.location, editor.string.utf16.count)
+        editor.setSelectedRange(NSRange(location: location, length: min(selection.length, editor.string.utf16.count - location)))
+      }
+    } else {
+      if let fieldIndex, let marker = WaveformView.LoopMarker(rawValue: fieldIndex) {
+        loopFocusMarker = marker
+        if let editor = fields[fieldIndex].currentEditor() as? NSTextView { loopFieldSelections[marker] = editor.selectedRange() }
+      }
+      if window.makeFirstResponder(waveform) {
+        waveform.selectedLoopMarker = waveform.loopMarkers.contains(loopFocusMarker) ? loopFocusMarker : nil
+        waveform.scrollToVisible(waveform.bounds); waveform.needsDisplay = true
+      }
+    }
+    return true
+  }
   func makeLoopRow(sustain: Bool) -> NSView {
     let first = sustain ? sustainStart : loopStart, last = sustain ? sustainEnd : loopEnd
     let enabled = sustain ? sustaining : looping, ping = sustain ? sustainPingpong : pingpong
     let reverse = sustain ? sustainReverse : loopReverse
     enabled.fixed(width: 78); ping.fixed(width: 92)
     reverse.fixed(width: 78)
-    for field in [first,last] {field.delegate=self;field.target=self;field.action=#selector(loopFieldChanged)}
+    for field in [first,last] {
+      field.delegate=self;field.target=self;field.action=#selector(loopFieldChanged)
+      // Typing already schedules autosave; navigation must not commit a preview.
+      field.cell?.sendsActionOnEndEditing = false
+      field.toolTip = "F6 switches to the waveform handle · ⌘Return saves both loops"
+    }
     for control in [enabled,ping, reverse] { control.target = self; control.action = #selector(loopModeChanged) }
     return stack(.horizontal, [enabled, ping, reverse, labeled("START FRAME", first), labeled("END FRAME", last), NSView(),
       ActionButton("Use selection") { [weak self] in
         guard let self, let range = self.waveform.selection else { return }
+        guard self.drawingDraft?.numeric != true, !self.hasNumericDrawingInput else { self.drawingStatus.stringValue = "Save or discard drawing input before changing loops."; return }
         first.stringValue = String(range.lowerBound); last.stringValue = String(range.upperBound); enabled.state = .on
-        self.syncLoopMarkers();self.saveLoopsSoon(immediate:true)
+        self.loopEditGeneration += 1; self.syncLoopMarkers();self.saveLoopsSoon(immediate:true)
       }], spacing: 10)
   }
   @objc func loopModeChanged(_ sender: NSButton) {
+    loopEditGeneration += 1
     if sender === looping || sender === sustaining {
       let first=sender === looping ? loopStart:sustainStart,last=sender === looping ? loopEnd:sustainEnd
       if sender.state == .on && last.integerValue<=first.integerValue {first.stringValue="0";last.stringValue=String(waveform.frames)}
@@ -31,8 +84,9 @@ extension SampleEditor {
   }
   func makeLoopActions() -> NSView {
     loopsStatus.maximumNumberOfLines = 3; loopsStatus.lineBreakMode = .byWordWrapping
-    return stack(.horizontal, [Theme.label("Drag waveform handles · changes save immediately",size:11,color:Theme.muted), NSView(),
-      ActionButton("Reload loops") { [weak self] in self?.reloadLoops() }], spacing: 10)
+    loopApplyButton.toolTip = "Save both loops · ⌘Return from a loop control or selected waveform handle"
+    return stack(.horizontal, [loopPreviewButton, loopApplyButton,
+      ActionButton("Reload loops") { [weak self] in self?.reloadLoops() }, NSView()], spacing: 10)
   }
   func syncLoopMarkers() {
     waveform.loopStart=looping.state == .on ? loopStart.integerValue:0;waveform.loopEnd=looping.state == .on ? loopEnd.integerValue:0
@@ -40,8 +94,16 @@ extension SampleEditor {
     waveform.needsDisplay=true
   }
   @objc func loopFieldChanged() {syncLoopMarkers();saveLoopsSoon(immediate:true)}
-  func controlTextDidChange(_ notification:Notification) {syncLoopMarkers();saveLoopsSoon()}
+  func controlTextDidChange(_ notification:Notification) {
+    if let field = notification.object as? NSTextField, field === drawingFrame || field === drawingValue { numericDrawingInputChanged(); return }
+    if let field = notification.object as? NSTextField, [name, rate, volume, pan].contains(where: { $0 === field }) { scheduleSettings(); return }
+    loopEditGeneration += 1; syncLoopMarkers();saveLoopsSoon()
+  }
   func saveLoopsSoon(immediate:Bool=false) {
+    if let snapQuery { snapQuery.resumeAutomaticEdit = true; return }
+    // An in-flight write owns any queued retry. New gestures/Return must not
+    // cancel that work while leaving loopsBusy waiting for its completion.
+    guard !loopNeedsReload, !loopsBusy else { return }
     guard loopDraftBaseline?.isEqual(rawLoopDraft) != true else{return}
     if immediate {loopSaveWork?.cancel();loopSaveWork=nil;setLoops(dryRun:false);return}
     guard loopSaveWork == nil else { return }
@@ -56,11 +118,11 @@ extension SampleEditor {
   }
   func updateLoopSettings(_ info: [AnyHashable: Any], revision: String?) {
     savedLoopInfo = info
-    if loopDraftBaseline == nil || (!loopsBusy && loopPreviewSignature == nil && loopDraftBaseline?.isEqual(rawLoopDraft) == true) {
+    if loopDraftBaseline == nil || (!loopsBusy && !loopNeedsReload && loopPreviewSignature == nil && loopDraftBaseline?.isEqual(rawLoopDraft) == true) {
       loadLoopFields(info); loopDraftRevision = revision; loopDraftBaseline = rawLoopDraft
     }
   }
-  private func loadLoopFields(_ info: [AnyHashable: Any]) {
+  func loadLoopFields(_ info: [AnyHashable: Any]) {
     loopStart.stringValue = String(info["loopStart"] as? Int ?? 0); loopEnd.stringValue = String(info["loopEnd"] as? Int ?? 0)
     sustainStart.stringValue = String(info["sustainStart"] as? Int ?? 0); sustainEnd.stringValue = String(info["sustainEnd"] as? Int ?? 0)
     looping.state = info["loop"] as? Bool == true ? .on : .off
@@ -70,71 +132,39 @@ extension SampleEditor {
     loopReverse.state = info["reverseLoop"] as? Bool == true ? .on : .off
     sustainReverse.state = info["sustainReverse"] as? Bool == true ? .on : .off
   }
-  func reloadLoops() {
+  func setLoops(dryRun: Bool) {
     guard !loopsBusy else { return }
-    loopSaveWork?.cancel();loopSaveWork=nil
-    loadLoopFields(savedLoopInfo); loopDraftBaseline = rawLoopDraft; loopDraftRevision = sampleRevision
-    loopPreviewSignature = nil; loopPreviewRevision = nil
-    syncLoopMarkers();loopsStatus.stringValue = "Loaded saved loop settings."
-  }
-  func setLoops(dryRun: Bool, attempt: Int = 0) {
-    guard !loopsBusy, !drawingBusy, let onRequest, let revision = loopDraftRevision else { return }
+    loopSaveWork?.cancel(); loopSaveWork = nil
+    guard !protectsSampleOperation else { operationStatus.stringValue = "Review the retained sample operation before changing loops."; finishLoopWaiters(false); return }
+    guard !protectsDrawingInput else { drawingStatus.stringValue = "Save or discard drawing input before changing loops."; finishLoopWaiters(false); return }
+    guard !loopNeedsReload, !drawingBusy, !processing, !crossfadeBusy, !clipboardBusy, !snapBusy, !waveformInFlight, !sampleSelectionInFlight,
+      waveformQuery == nil, sampleSelectionQuery == nil, waveform.stroke.isEmpty, !hasSampleComposition,
+      onSettingsRequest != nil || onRequest != nil, let revision = loopDraftRevision else { finishLoopWaiters(false); return }
+    if settingsPending || settingsDraft.hasDraft || settingsNeedsReload {
+      if dryRun { loopsStatus.stringValue = "Finish sample settings before previewing loops."; finishLoopWaiters(false); return }
+      finishAutomaticEdit { [weak self] accepted in if !accepted { self?.finishLoopWaiters(false) } }; return
+    }
+    guard !settingsIdentity.isEmpty, catalogue.contains(where: { $0.index == index && $0.identity == settingsIdentity }),
+      (onSampleRevision?() ?? sampleRevision) == revision, waveformDocumentID?.isEmpty == false else {
+      loopNeedsReload = true; loopsStatus.stringValue = "The captured sample changed. Reload loops before continuing."; finishLoopWaiters(false); return
+    }
     var values: [String: Any] = [:]
     for (key, first, last, enabled, ping, reverse) in [("normal", loopStart, loopEnd, looping, pingpong, loopReverse),
       ("sustain", sustainStart, sustainEnd, sustaining, sustainPingpong, sustainReverse)] {
       guard let start = Int(first.stringValue), let end = Int(last.stringValue), start >= 0,
         start <= end, end <= waveform.frames, enabled.state != .on || start < end else {
-        loopsStatus.stringValue = "Enter loop boundaries inside the sample; enabled loops must be nonempty."; return
+        loopsStatus.stringValue = "Enter loop boundaries inside the sample; enabled loops must be nonempty."; finishLoopWaiters(false); return
       }
       guard enabled.state != .on || ping.state != .on || reverse.state != .on else {
-        loopsStatus.stringValue = "Choose either reverse or ping-pong for each loop."; return
+        loopsStatus.stringValue = "Choose either reverse or ping-pong for each loop."; finishLoopWaiters(false); return
       }
       values[key] = ["start": start, "end": end, "enabled": enabled.state == .on,
         "pingpong": enabled.state == .on && ping.state == .on, "reverse": enabled.state == .on && reverse.state == .on]
     }
-    let signature = rawLoopDraft, sample = index, generation = sampleGeneration
-    var params = values; params["sample"] = sample; params["dryRun"] = dryRun
+    let signature = rawLoopDraft
+    var params = values; params["sample"] = index; params["dryRun"] = dryRun
     params["expectedRevision"] = !dryRun && loopPreviewSignature?.isEqual(signature) == true ? loopPreviewRevision ?? revision : revision
-    loopsBusy = true
-    loopsStatus.stringValue = dryRun ? "Checking loop settings…" : "Applying loop settings…"
-    onRequest("sample.loops.set", params) { [weak self] response in
-      guard let self else { return }
-      self.loopsBusy = false
-      guard sample == self.index, generation == self.sampleGeneration else { self.saveLoopsSoon();return }
-      guard let result = response["result"] as? [String: Any], let data = result["data"] as? [String: Any],
-        let updatedRevision = result["revision"] as? String else {
-        self.loopPreviewSignature = nil; self.loopPreviewRevision = nil
-        let error=response["error"] as? [String:Any]
-        if NativeRequestOutcome.canRetryWrite(response) && !dryRun && attempt < 5 {
-          self.loopsStatus.stringValue="Waiting to save loop changes…"
-          self.loopSaveWork?.cancel()
-          let work=DispatchWorkItem{[weak self] in
-            guard let self,self.index==sample,self.sampleGeneration==generation else{return}
-            self.loopSaveWork=nil;self.setLoops(dryRun:false,attempt:attempt+1)
-          }
-          self.loopSaveWork=work;DispatchQueue.main.asyncAfter(deadline:.now()+0.035,execute:work)
-        } else {
-          self.loopSaveWork?.cancel();self.loopSaveWork=nil
-          self.loopsStatus.stringValue = (error?["message"] as? String ?? "Loop edit failed.") + " Reload loops to use the latest settings."
-        }
-        return
-      }
-      if dryRun {
-        guard self.rawLoopDraft.isEqual(signature) else {
-          self.loopPreviewSignature = nil; self.loopPreviewRevision = nil
-          self.loopsStatus.stringValue = "Loop settings changed; preview discarded."; return
-        }
-        self.loopPreviewSignature = signature; self.loopPreviewRevision = updatedRevision
-        self.loopsStatus.stringValue = data["loopsChanged"] as? Bool == true
-          ? "Preview: both loop settings will be saved together in one Undo step. Audio is unchanged."
-          : "Preview: loop settings are already saved."
-      } else {
-        self.loopPreviewSignature = nil; self.loopPreviewRevision = nil
-        self.loopDraftBaseline = signature; self.loopDraftRevision = updatedRevision
-        self.loopsStatus.stringValue = data["loopsChanged"] as? Bool == true ? "Loop settings saved in one Undo step." : "Loop settings are already saved."
-        self.syncLoopMarkers()
-        if !self.rawLoopDraft.isEqual(signature) {self.saveLoopsSoon()}
-      }
-    }
+    let write = SampleLoopWrite(self, params: params, signature: signature, dryRun: dryRun)
+    loopWrite = write; loopsBusy = true; sendLoops(write)
   }
 }

@@ -30,7 +30,7 @@ final class SignalGraphEditor: NSView, NSSearchFieldDelegate {
   }
   func reload(){operationFailure=nil;shownFields=[:];pendingMoves=[:];hasDraft=false;load()}
 
-  var hasDraft:Bool {get{fieldDraft || trimControls.hasDraft || rackControls.rangeEditing || pluginControls.parametersView.rangeEditing || envelopeEditor.hasDraft || canvas.isEditing || canvas.hasPendingNudge || busControls.editing || visualControls.dirty} set{fieldDraft=newValue}}
+  var hasDraft:Bool {get{fieldDraft || trimControls.hasDraft || rackControls.rangeEditing || pluginControls.parametersView.rangeEditing || (!envelopeEditor.independent && envelopeEditor.hasDraft) || canvas.isEditing || canvas.hasPendingNudge || busControls.editing || visualControls.dirty} set{fieldDraft=newValue}}
   func controlTextDidChange(_ notification:Notification){if notification.object as AnyObject? === nodeSearch {changeNodeFilter()}else{hasDraft=true}}
   let canvas=SignalCanvas(frame:NSRect(x:0,y:0,width:1000,height:600)), scroll=NSScrollView()
   let library=NSPopUpButton(),filter=NSPopUpButton(),source=NSPopUpButton(),destination=NSPopUpButton(),connection=NSPopUpButton()

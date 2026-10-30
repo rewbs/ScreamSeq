@@ -4,7 +4,7 @@ extension AppController {
     guard !busy,model.editable else{return}
     let identity=slot.flatMap{model.nativePlugins.indices.contains($0) ? model.nativePlugins[$0]["instanceID"] as? String : nil}
     let editor=InstrumentPluginEditor(instrument:0,model:model,selectedPlugin:identity)
-    editor.onRequest = {[weak self] method,params,reply in self?.handleAutomation(method,params:params,reply:reply)}
+    editor.onRequest = {[weak self] method,params,reply in self?.submitInstrumentPluginRequest(method,params:params,reply:reply)}
     configureInstrumentPluginBridge(editor)
     editor.onSaved = {[weak self,weak editor] index in
       guard let self else{return}
@@ -26,7 +26,7 @@ extension AppController {
       statusLabel.stringValue="Create a tracker instrument with New in the instrument inspector first.";return
     }
     let editor=InstrumentPluginEditor(instrument:instrumentEditor.index,model:model)
-    editor.onRequest = {[weak self] method,params,reply in self?.handleAutomation(method,params:params,reply:reply)}
+    editor.onRequest = {[weak self] method,params,reply in self?.submitInstrumentPluginRequest(method,params:params,reply:reply)}
     configureInstrumentPluginBridge(editor)
     editor.onSaved = {[weak self] _ in self?.refreshAll()}
     let win=NSWindow(contentRect:editor.frame,styleMask:[.titled,.closable],backing:.buffered,defer:false)
@@ -48,6 +48,13 @@ extension AppController {
         if !editor.isCreating { editor.apply() }
       })
     }
+  }
+
+  func submitInstrumentPluginRequest(_ method: String, params: [String: Any], reply: @escaping ([String: Any]) -> Void) {
+    guard method.hasSuffix(".get") || (!instrumentEditor.creation.needsCompletion && sampleBrowser?.imports.needsCompletion != true) else {
+      reply(AutomationServer.notAdmittedBusy("Review the retained instrument creation before creating or assigning another instrument.")); return
+    }
+    handleAutomation(method, params: params, reply: reply)
   }
 
   func showPluginInstruments(_ slot:Int) {

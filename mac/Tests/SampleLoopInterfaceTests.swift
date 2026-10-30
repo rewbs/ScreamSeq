@@ -1,73 +1,346 @@
 import AppKit
+
+extension SampleOperationFixture {
+  func waitForLoopDispatch() {
+    let deadline = Date(timeIntervalSinceNow: 2)
+    while editor.loopSaveWork != nil && Date() < deadline { InterfaceTests.pumpMainRunLoop(0.01) }
+  }
+  var loopCalls: [(String, [String: Any], String?)] { calls.filter { $0.0 == "sample.loops.set" } }
+  func loopResult() -> [String: Any] {
+    let params = pending.first!.1
+    return ["sample": params["sample"]!, "dryRun": params["dryRun"]!, "loopsChanged": true,
+      "after": ["normal": params["normal"]!, "sustain": params["sustain"]!]]
+  }
+  func answerLoops(_ revision: String = "accepted") throws {
+    try InterfaceTests.require(pending.first?.0 == "sample.loops.set", "Expected a loop write or preview")
+    let params = pending.first!.1, report = loopResult()
+    if params["dryRun"] as? Bool == false {
+      for (kind, keys) in [("normal", ["loopStart", "loopEnd", "loop", "pingpong", "reverseLoop"]),
+        ("sustain", ["sustainStart", "sustainEnd", "sustainLoop", "sustainPingpong", "sustainReverse"])] {
+        let row = params[kind] as! [String: Any]
+        for (input, saved) in zip(["start", "end", "enabled", "pingpong", "reverse"], keys) { info[saved] = row[input] }
+      }
+    }
+    try answer(report, revision: revision)
+  }
+}
+
 extension InterfaceTests {
   static func sampleLoopChecks() throws {
-    let editor=SampleEditor(frame:NSRect(x:0,y:0,width:729,height:1400))
-    let info:[String:Any]=["frames":2048,"loop":true,"loopStart":64,"loopEnd":1024,"sustainLoop":false,"sustainStart":0,"sustainEnd":0]
-    let inventory:[[String:Any]]=[["index":1,"name":"Loops"]]
-    editor.update(info,samples:inventory,revision:"source")
-    var calls=[(String,[String:Any])](),replies=[([String:Any])->Void]()
-    editor.onRequest={method,params,reply in calls.append((method,params));replies.append(reply)}
-    func answer(_ revision:String) throws {try require(!replies.isEmpty,"Expected loop save before reply \(revision): \(editor.loopsStatus.stringValue)");replies.removeFirst()(["result":["revision":revision,"data":["loopsChanged":true]]])}
-    func waitForSave(){let deadline=Date(timeIntervalSinceNow:2);while editor.loopSaveWork != nil && Date()<deadline {_ = RunLoop.main.run(mode:.default,before:Date(timeIntervalSinceNow:0.01))}}
-    editor.waveform.moveLoopMarker(.start,to:100,finished:false)
-    waitForSave()
-    try require(calls.count==1 && calls[0].0=="sample.loops.set" && calls[0].1["dryRun"] as? Bool==false &&
-      (calls[0].1["normal"] as? [String:Any])?["start"] as? Int==100 && calls[0].1["expectedRevision"] as? String=="source",
-      "Dragging a loop handle commits during the gesture with the source revision: \(calls) \(editor.loopsStatus.stringValue)")
-    editor.waveform.moveLoopMarker(.start,to:200,finished:true)
-    try require(calls.count==1,"In-flight loop saves cannot duplicate")
-    try answer("first");waitForSave()
-    try require(calls.count==2 && calls[1].1["expectedRevision"] as? String=="first" &&
-      (calls[1].1["normal"] as? [String:Any])?["start"] as? Int==200,"A later drag survives the first save and uses its new revision")
-    replies.removeFirst()(["error":["code":-32002,"message":"Busy","data":["writeOutcome":"notCommitted"]]]);waitForSave()
-    try require(calls.count==3 && editor.loopsBusy,"A transient busy response retries the loop edit")
-    try answer("second")
-    editor.waveform.moveLoopMarker(.start,to:3000,finished:true)
-    try require(editor.loopStart.integerValue==1023,"Loop start clamps before the exclusive end")
-    try answer("third")
-    editor.sustaining.state = .on;editor.loopModeChanged(editor.sustaining)
-    try require(editor.sustainEnd.integerValue==2048 && calls.last?.1["dryRun"] as? Bool==false,"Enabling an empty sustain loop immediately saves the sample span")
-    try answer("fourth")
-    editor.waveform.moveLoopMarker(.sustainEnd,to:900,finished:true);try answer("fifth")
-    try require(editor.sustainEnd.integerValue==900 && editor.waveform.sustainEnd==900,"Sustain handles edit the independent sustain loop")
-    editor.loopReverse.state = .on;editor.loopModeChanged(editor.loopReverse)
-    try require(editor.pingpong.state == .off && (calls.last?.1["normal"] as? [String:Any])?["reverse"] as? Bool==true,"Reverse mode saves immediately")
-    try answer("sixth")
-    editor.pingpong.state = .on;editor.loopModeChanged(editor.pingpong)
-    try require(editor.loopReverse.state == .off,"Ping-pong excludes reverse")
-    try answer("seventh")
-    editor.loopStart.stringValue="-1";let count=calls.count;editor.loopFieldChanged()
-    try require(calls.count==count,"Invalid loop text cannot modify the song")
-    editor.loopStart.stringValue="72";editor.loopFieldChanged()
-    editor.update(info,samples:inventory,revision:"external")
-    replies.removeFirst()(["error":["message":"Song changed"]])
-    try require(editor.loopDraftRevision=="seventh" && editor.loopStart.integerValue==72 && editor.loopsStatus.stringValue.contains("Reload loops"),"External conflicts keep the local intent and require explicit reload")
-    editor.reloadLoops();try require(editor.loopDraftRevision=="external" && editor.loopStart.integerValue==64,"Reload retires conflicting edits")
-    editor.waveform.moveLoopMarker(.end,to:1200,finished:true)
-    editor.index=2
-    try require(editor.loopDraftRevision==nil,"Changing sample retires the previous loop draft")
-    editor.update(info,samples:inventory,revision:"new-sample")
-    editor.waveform.moveLoopMarker(.start,to:150,finished:true)
-    try answer("retired");waitForSave()
-    try require(editor.loopsBusy && calls.last?.1["sample"] as? Int==2 && calls.last?.1["expectedRevision"] as? String=="new-sample",
-      "Retiring a previous sample's reply resumes a new sample's pending gesture without adopting the old revision")
-    try answer("new-saved")
-    editor.waveform.moveLoopMarker(.start,to:160,finished:true)
-    let uncertainCount=calls.count
-    replies.removeFirst()(["error":["code":-32002,"message":"Unknown outcome","data":["writeOutcome":"unknown"]]])
-    pumpMainRunLoop(0.2)
-    try require(calls.count==uncertainCount && !editor.loopsBusy && editor.loopSaveWork==nil && editor.loopStart.integerValue==160 && editor.loopDraftRevision=="new-saved" && editor.loopsStatus.stringValue.contains("Unknown outcome"),
-      "An uncertain sample loop write keeps its original draft/revision and cancels automatic replay")
-    editor.setLoops(dryRun:false)
-    let firstRetryCount=calls.count
-    for _ in 0..<6 {
-      try require(!replies.isEmpty,"Expected one bounded loop request")
-      replies.removeFirst()(["error":["code":-32002,"message":"Still busy","data":["writeOutcome":"notCommitted"]]])
-      waitForSave()
+    let f = SampleOperationFixture(), e = f.editor
+    var finished = [Bool]()
+    e.waveform.moveLoopMarker(.start, to: 100, finished: false); f.waitForLoopDispatch()
+    try require(f.loopCalls.count == 1 && f.loopCalls[0].2 == "sample-one" && f.loopCalls[0].1["expectedRevision"] as? String == "original", "Native loop drags capture stable identity and original revision: calls=\(f.calls), status=\(e.loopsStatus.stringValue), drawing=\(e.drawingStatus.stringValue), queued=\(e.loopSaveWork != nil), busy=\(e.loopsBusy), fields=\(e.rawLoopDraft)")
+    e.waveform.moveLoopMarker(.start, to: 200, finished: true); e.finishAutomaticEdit { finished.append($0) }
+    let peaks = e.waveform.peaks
+    try f.answerLoops("first")
+    try require(f.pending.first?.0 == "sample.get" && e.loopsBusy && finished.isEmpty && e.waveform.peaks == peaks && e.loopDraftRevision == "original", "A write receipt cannot advance loop drafts or release Save")
+    try f.answer(f.info)
+    try require(f.pending.first?.0 == "sample.waveform.get" && e.loopDraftRevision == "original" && e.waveformRevision == "original", "Metadata alone cannot advance the accepted loop presentation")
+    e.waveform.moveLoopMarker(.start, to: 250, finished: true); try f.finishRead(); f.waitForLoopDispatch()
+    try require(f.loopCalls.count == 2 && f.loopCalls[1].1["expectedRevision"] as? String == "first" && (f.loopCalls[1].1["normal"] as? [String: Any])?["start"] as? Int == 250 && finished.isEmpty,
+      "A gesture continued during both read stages survives and follows only the verified revision")
+    try f.answerLoops("second"); try f.finishRead()
+    try require(finished == [true] && !e.hasDraft && e.loopDraftRevision == "second" && e.sampleRevision == "second" && e.waveformRevision == "second" && e.settingsRevision == "second", "Complete loop readback advances all sample revisions and releases Save")
+    e.waveform.moveLoopMarker(.start, to: 3000, finished: true)
+    try require(e.loopStart.integerValue == 511, "Loop start clamps before the exclusive end")
+    try f.answerLoops("third"); try f.finishRead()
+    e.sustaining.state = .off; e.sustainStart.stringValue = "0"; e.sustainEnd.stringValue = "0"
+    e.sustaining.state = .on; e.loopModeChanged(e.sustaining)
+    try require(e.sustainEnd.integerValue == 1024, "Enabling an empty sustain loop selects the full sample")
+    try f.answerLoops("fourth"); try f.finishRead()
+    e.waveform.moveLoopMarker(.sustainEnd, to: 900, finished: true); try f.answerLoops("fifth"); try f.finishRead()
+    try require(e.sustainEnd.integerValue == 900 && e.waveform.sustainEnd == 900, "Sustain handles edit the independent sustain loop")
+    e.loopReverse.state = .on; e.loopModeChanged(e.loopReverse)
+    try require(e.pingpong.state == .off && (f.loopCalls.last?.1["normal"] as? [String: Any])?["reverse"] as? Bool == true, "Reverse saves immediately and excludes ping-pong")
+    try f.answerLoops("sixth"); try f.finishRead()
+    e.pingpong.state = .on; e.loopModeChanged(e.pingpong); try require(e.loopReverse.state == .off, "Ping-pong excludes reverse")
+    try f.answerLoops("seventh"); try f.finishRead()
+    let count = f.calls.count
+    for raw in ["-1", "1.5", "999999999999999999999", "-"] { e.loopStart.stringValue = raw; e.loopFieldChanged() }
+    try require(f.calls.count == count, "Invalid loop fields cannot modify the song")
+    // A loop completion must not require a redundant full sample reload before processing.
+    e.loopStart.stringValue = "511"; e.process(dryRun: false)
+    try require(f.calls.last?.0 == "sample.process" && f.calls.last?.1["expectedRevision"] as? String == "seventh", "Verified loop completion authorizes the next sample operation at its accepted revision")
+    try f.answer(f.processResult(), revision: "processed"); try f.finishRead()
+    try sampleLoopRetryCompletionChecks()
+    try sampleLoopWriteFailureChecks()
+    try sampleLoopPreviewChecks()
+    try sampleLoopWriteFocusChecks()
+    try sampleLoopWriteFocusMovementChecks()
+    try sampleLoopKeyboardChecks()
+    try sampleLoopReloadChecks()
+  }
+  static func sampleLoopRetryCompletionChecks() throws {
+    for action in ["Return", "checkbox", "handle release"] {
+      let f = SampleOperationFixture(), e = f.editor
+      var finished = [Bool]()
+      e.waveform.moveLoopMarker(.start, to: 100, finished: true)
+      let original = f.loopCalls[0].1 as NSDictionary
+      try f.fail("notCommitted"); e.finishAutomaticEdit { finished.append($0) }
+      switch action {
+      case "Return": e.loopStart.stringValue = "120"; e.controlTextDidChange(Notification(name: NSControl.textDidChangeNotification, object: e.loopStart)); e.loopFieldChanged()
+      case "checkbox": e.sustaining.state = .off; e.loopModeChanged(e.sustaining)
+      default: e.waveform.moveLoopMarker(.start, to: 120, finished: true)
+      }
+      f.waitForLoopDispatch()
+      try require(f.loopCalls.count == 2 && original.isEqual(to: f.loopCalls[1].1) && e.loopsBusy && finished.isEmpty, "\(action) cannot cancel or alter an owned exact-payload retry")
+      try f.answerLoops("retry:1")
+      if action == "handle release" {
+        try f.finishRead(); f.waitForLoopDispatch()
+        try require(f.loopCalls.count == 3 && f.loopCalls[2].1["expectedRevision"] as? String == "retry:1", "Continued handles follow verified readback after retry")
+        try f.answerLoops("retry:2"); try f.finishRead()
+        try require(finished == [true] && !e.hasDraft, "A completed handle retry releases Save")
+      } else {
+        try require(finished == [false] && e.loopNeedsReload && !e.loopsBusy && e.loopDraftRevision == "original" && f.pending.isEmpty, "Newer typed fields or modes retain their original revision and settle waiting Save")
+      }
     }
-    pumpMainRunLoop(0.2)
-    try require(calls.count==firstRetryCount+5 && replies.isEmpty && !editor.loopsBusy && editor.loopSaveWork==nil && editor.loopStart.integerValue==160 && editor.loopsStatus.stringValue.contains("Still busy"),
-      "Loop retry exhaustion is bounded and keeps the editable draft without another automatic write")
-    editor.loopSaveWork?.cancel();editor.onRequest=nil
+    let bounded = SampleOperationFixture(), b = bounded.editor
+    b.waveform.moveLoopMarker(.start, to: 100, finished: true)
+    for _ in 0..<6 { try bounded.fail("notCommitted"); bounded.waitForLoopDispatch() }
+    try require(bounded.loopCalls.count == 6 && bounded.pending.isEmpty && !b.loopsBusy && b.loopSaveWork == nil && b.loopNeedsReload, "Automatic retries stop after six definitely-not-committed attempts")
+    let stale = SampleOperationFixture(), s = stale.editor
+    s.waveform.moveLoopMarker(.start, to: 100, finished: true); try stale.fail("notCommitted"); stale.revision = "external"; stale.waitForLoopDispatch()
+    try require(stale.loopCalls.count == 1 && !s.loopsBusy && s.loopNeedsReload, "External revisions stop a queued retry without rebasing it")
+  }
+  static func sampleLoopWriteFailureChecks() throws {
+    for stage in ["unknown", "receipt", "metadata", "geometry", "loops", "identity", "waveform", "revision", "document", "fields", "options", "selection", "transport"] {
+      let f = SampleOperationFixture(), e = f.editor
+      var done = [Bool]()
+      e.waveform.moveLoopMarker(.start, to: 100, finished: true); e.finishAutomaticEdit { done.append($0) }
+      let baseline = e.loopDraftBaseline!, peaks = e.waveform.peaks
+      if stage == "unknown" { try f.fail() }
+      else if stage == "receipt" { try f.answer(["loopsChanged": true], revision: "accepted") }
+      else {
+        try f.answerLoops()
+        if stage == "fields" { e.gain.stringValue = "-7" }
+        if stage == "options" { e.pasteMode.selectItem(at: 2) }
+        if stage == "selection" { e.waveform.selection = 20...30 }
+        if stage == "transport" { e.onRequest = nil; e.onSettingsRequest = nil }
+        var info = f.info
+        if stage == "metadata" { info.removeValue(forKey: "rate") }
+        if stage == "geometry" { info["frames"] = 2048 }
+        if stage == "loops" { info["loopStart"] = 101 }
+        if stage == "identity" { info["id"] = "different" }
+        try f.answer(info)
+        if !f.pending.isEmpty {
+          var wave = f.pending[0].1; wave["peaks"] = Array(repeating: 0.5, count: (wave["bins"] as! Int) * 2)
+          if stage == "waveform" { wave["peaks"] = [0.5] }
+          try f.answer(wave, revision: stage == "revision" ? "later" : nil, document: stage == "document" ? "different-song" : "song")
+        }
+      }
+      try require(done == [false] && !e.loopsBusy && e.loopNeedsReload && e.loopDraftRevision == "original" && e.loopDraftBaseline!.isEqual(baseline) && e.waveformRevision == "original" && e.waveform.peaks == peaks && e.loopStart.stringValue == "100", "\(stage) retains raw loops and the previous complete presentation and settles Save")
+      e.setLoops(dryRun: false); pumpMainRunLoop(0.05)
+      try require(f.loopCalls.count == 1, "Accepted or uncertain loop writes are never replayed after \(stage)")
+    }
+    let empty = SampleOperationFixture(), z = empty.editor
+    z.resetDocumentContext(); empty.info["frames"] = 0
+    for key in ["loopStart", "loopEnd", "sustainStart", "sustainEnd"] { empty.info[key] = 0 }
+    for key in ["loop", "sustainLoop"] { empty.info[key] = false }
+    empty.load(); empty.connect(); z.waveform.selection = 0...0
+    z.setLoops(dryRun: false); try empty.answerLoops(); try empty.finishRead(frames: 0)
+    try require(!z.loopsBusy && !z.hasDraft && z.waveform.peaks.isEmpty && z.waveformRevision == "accepted" && !empty.calls.contains { $0.0 == "sample.waveform.get" }, "Empty samples complete with validated empty waveform data without a zero-bin request")
+    for stage in ["write", "metadata", "waveform", "preview"] {
+      let f = SampleOperationFixture(), e = f.editor
+      var old = [Bool](), next = [Bool]()
+      e.loopStart.stringValue = "100"; e.setLoops(dryRun: stage == "preview"); e.finishAutomaticEdit { old.append($0) }
+      if ["metadata", "waveform"].contains(stage) { try f.answerLoops() }
+      if stage == "waveform" { try f.answer(f.info) }
+      let retired = f.pending.removeFirst().2
+      e.resetDocumentContext(); f.revision = "next"; f.load(); f.connect()
+      e.waveform.moveLoopMarker(.start, to: 150, finished: true); e.finishAutomaticEdit { next.append($0) }
+      retired(["error": ["message": "Retired request"]])
+      try require(old == [false] && next.isEmpty && e.loopsBusy && f.pending.count == 1, "Retired \(stage) callbacks cannot release the current owner or its waiters")
+      try f.answerLoops("next:1"); try f.finishRead(); try require(next == [true], "Only the current loop owner completes Save")
+    }
+  }
+  static func sampleLoopPreviewChecks() throws {
+    for waiting in [false, true] {
+      let f = SampleOperationFixture(), e = f.editor
+      var done = [Bool]()
+      e.loopStart.stringValue = "100"; e.saveLoopsSoon(); e.loopPreviewButton.handler?(); pumpMainRunLoop(0.08)
+      try require(f.loopCalls.count == 1 && f.loopCalls[0].1["dryRun"] as? Bool == true && e.loopSaveWork == nil, "Native Preview cancels queued autosave and sends one dry run")
+      if waiting { e.finishAutomaticEdit { done.append($0) } }
+      try f.answerLoops("original")
+      if !waiting {
+        try require(f.pending.isEmpty && e.loopPreviewRevision == "original" && e.hasLoopDraft && !e.loopsBusy && e.loopsStatus.stringValue.contains("Audio and history are unchanged"), "A successful preview keeps its original draft and makes no write")
+        e.loopApplyButton.handler?()
+      }
+      try require(f.loopCalls.count == 2 && f.loopCalls[1].1["dryRun"] as? Bool == false && f.loopCalls[1].1["expectedRevision"] as? String == "original" && done.isEmpty, "Save loops or a waiting document Save applies the captured preview revision")
+      try f.answerLoops(); try f.finishRead()
+      try require(!e.hasDraft && (!waiting || done == [true]), "Preview completion cannot strand waiting document actions")
+    }
+    for change in ["text", "gesture", "failed", "revision"] {
+      let f = SampleOperationFixture(), e = f.editor
+      var done = [Bool]()
+      e.loopStart.stringValue = "100"; e.loopPreviewButton.handler?(); e.finishAutomaticEdit { done.append($0) }
+      if change == "text" { e.loopStart.stringValue = "120" }
+      if change == "gesture" { e.waveform.moveLoopMarker(.start, to: 120, finished: true) }
+      if change == "failed" { try f.fail() } else { try f.answerLoops(change == "revision" ? "other" : "original") }
+      try require(done == [false] && e.loopPreviewSignature == nil && !e.loopsBusy && f.loopCalls.count == 1 && e.hasLoopDraft, "Changed or refused \(change) preview settles Save without submitting music")
+    }
+    let settings = SampleOperationFixture(), e = settings.editor
+    e.name.stringValue = "Unsubmitted settings"; e.loopStart.stringValue = "100"; e.loopPreviewButton.handler?()
+    try require(settings.calls.isEmpty && e.settingsDraft.hasDraft && e.hasLoopDraft, "Loop Preview cannot silently commit unrelated settings and loops")
+  }
+  static func sampleLoopWriteFocusChecks() throws {
+    for change in [false, true] {
+      let f = SampleOperationFixture(), e = f.editor
+      let window = NSWindow(contentRect: e.frame, styleMask: [.titled], backing: .buffered, defer: false)
+      window.isReleasedWhenClosed = false; window.contentView = e
+      defer { e.settingsWork?.cancel(); e.loopSaveWork?.cancel(); window.orderOut(nil); window.contentView = nil }
+      func expand(_ view: NSView) { if let section = view as? ToolSection { section.setExpanded(true, persist: false) }; view.subviews.forEach(expand) }
+      expand(e); window.layoutIfNeeded()
+      e.loopStart.stringValue = "100"; window.makeFirstResponder(e.loopPreviewButton); e.loopPreviewButton.handler?()
+      try f.answerLoops("original")
+      try require(window.firstResponder === e.loopPreviewButton && e.loopPreviewRevision == "original", "Keyboard Preview preserves its native button focus")
+      window.makeFirstResponder(e.loopApplyButton); e.loopApplyButton.handler?()
+      var done = [Bool](); e.finishAutomaticEdit { done.append($0) }; try f.answerLoops(); try f.answer(f.info)
+      if change {
+        window.makeFirstResponder(e.name)
+        guard let field = e.name.currentEditor() as? NSTextView else { throw InterfaceFailure(message: "Missing loop write field editor") }
+        field.setMarkedText("New", selectedRange: NSRange(location: 2, length: 0), replacementRange: NSRange(location: 0, length: field.string.utf16.count))
+        let text = field.string, caret = field.selectedRange(); try f.finishRead()
+        try require(done == [false] && e.loopDraftRevision == "original" && field.hasMarkedText() && field.string == text && field.selectedRange() == caret && e.name.currentEditor() === field, "Late loop write readback preserves newer native composition, caret and focus")
+        field.unmarkText()
+      } else {
+        try f.finishRead()
+        try require(done == [true] && window.firstResponder === e.loopApplyButton && !e.hasDraft, "Keyboard Save loops retains button focus through complete readback and releases Save")
+      }
+    }
+  }
+  static func sampleLoopWriteFocusMovementChecks() throws {
+    for stage in ["write", "metadata", "waveform", "preview"] {
+      for move in ["caret", "next field"] {
+        let f = SampleOperationFixture(), e = f.editor
+        let window = NSWindow(contentRect: e.frame, styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false; window.contentView = e
+        defer { e.settingsWork?.cancel(); e.loopSaveWork?.cancel(); window.orderOut(nil); window.contentView = nil }
+        func expand(_ view: NSView) { if let section = view as? ToolSection { section.setExpanded(true, persist: false) }; view.subviews.forEach(expand) }
+        expand(e); window.layoutIfNeeded(); window.makeFirstResponder(e.loopStart)
+        guard let initial = e.loopStart.currentEditor() as? NSTextView else { throw InterfaceFailure(message: "Missing loop boundary field editor") }
+        initial.insertText("100", replacementRange: NSRange(location: 0, length: initial.string.utf16.count))
+        if stage == "preview" { e.setLoops(dryRun: true) } else { f.waitForLoopDispatch() }
+        try require(f.loopCalls.count == 1, "A typed loop boundary starts autosave or explicit preview")
+        var done = [Bool](); e.finishAutomaticEdit { done.append($0) }
+        if ["metadata", "waveform"].contains(stage) { try f.answerLoops() }
+        if stage == "waveform" { try f.answer(f.info) }
+        // An unordered test window has no navigable AppKit key-view loop.
+        // Move its real field editor explicitly and verify the focus change.
+        if move == "next field" { window.makeFirstResponder(e.loopEnd) }
+        try require(move != "next field" || (e.loopStart.currentEditor() == nil && e.loopEnd.currentEditor() != nil), "Native focus actually leaves the submitted loop field")
+        let responder = window.firstResponder
+        guard let current = responder as? NSTextView else { throw InterfaceFailure(message: "Navigation should reach the next native field") }
+        current.setSelectedRange(NSRange(location: 1, length: 0))
+        let text = current.string, caret = current.selectedRange()
+        if stage == "write" { try f.answerLoops() }
+        if stage == "preview" {
+          try f.answerLoops("original")
+          try require(f.pending.first?.0 == "sample.loops.set" && done.isEmpty, "Focus movement does not prevent Preview from servicing waiting Save")
+          try f.answerLoops()
+        }
+        try f.finishRead()
+        try require(done == [true] && !e.hasDraft && e.loopDraftRevision == "accepted" && window.firstResponder === responder && current.string == text && current.selectedRange() == caret,
+          "\(move) during \(stage) preserves current focus/caret and releases Save without Reload")
+      }
+    }
+  }
+  static func sampleLoopKeyboardChecks() throws {
+    let f = SampleOperationFixture(), e = f.editor
+    let window = NSWindow(contentRect: e.frame, styleMask: [.titled], backing: .buffered, defer: false)
+    window.isReleasedWhenClosed = false; window.contentView = e
+    let priorExpanded = UserDefaults.standard.object(forKey: e.loopSection.preference)
+    defer {
+      e.settingsWork?.cancel(); e.loopSaveWork?.cancel(); window.orderOut(nil); window.contentView = nil
+      UserDefaults.standard.set(priorExpanded, forKey: e.loopSection.preference)
+    }
+    func key(_ code: UInt16, _ modifiers: NSEvent.ModifierFlags = [], repeatKey: Bool = false, windowNumber: Int? = nil, type: NSEvent.EventType = .keyDown) -> NSEvent {
+      NSEvent.keyEvent(with: type, location: .zero, modifierFlags: modifiers, timestamp: 0,
+        windowNumber: windowNumber ?? window.windowNumber, context: nil, characters: code == 97 ? "\u{F709}" : "\r",
+        charactersIgnoringModifiers: code == 97 ? "\u{F709}" : "\r", isARepeat: repeatKey, keyCode: code)!
+    }
+    func expand(_ view: NSView) { if let section = view as? ToolSection { section.setExpanded(true, persist: false) }; view.subviews.forEach(expand) }
+    expand(e); window.layoutIfNeeded()
+    window.makeFirstResponder(e.waveform); e.waveform.selectedLoopMarker = .sustainEnd
+    e.loopSection.setExpanded(false, persist: false)
+    try require(e.handleLoopKey(key(97)) && e.sustainEnd.currentEditor() === window.firstResponder,
+      "F6 reveals the loop tools and focuses the selected sustain endpoint")
+    guard let editor = e.sustainEnd.currentEditor() as? NSTextView else { throw InterfaceFailure(message: "Missing F6 boundary editor") }
+    editor.insertText("850", replacementRange: NSRange(location: 0, length: editor.string.utf16.count))
+    editor.setSelectedRange(NSRange(location: 1, length: 1))
+    e.setLoops(dryRun: true); try f.answerLoops("original")
+    let calls = f.calls.count, generation = e.loopEditGeneration
+    try require(e.handleLoopKey(key(97)) && window.firstResponder === e.waveform && e.waveform.selectedLoopMarker == .sustainEnd,
+      "F6 returns to the corresponding sustain handle")
+    try require(f.calls.count == calls && e.sustainEnd.stringValue == "850" && e.loopPreviewRevision == "original" && e.loopEditGeneration == generation,
+      "Leaving a loop field does not apply its preview or rewrite raw input")
+    try require(e.handleLoopKey(key(97)) && e.sustainEnd.currentEditor() === window.firstResponder,
+      "F6 returns from the waveform to the same boundary")
+    try require((window.firstResponder as? NSTextView)?.selectedRange() == NSRange(location: 1, length: 1),
+      "The selected digit survives the field/handle round trip")
+    try require(e.performKeyEquivalent(with: key(36, .command)) && f.loopCalls.count == 2 && f.loopCalls.last?.1["expectedRevision"] as? String == "original",
+      "Command-Return saves both loops through the original guarded revision")
+    let owner = e.loopWrite
+    try require(e.handleLoopKey(key(97)) && e.loopWrite === owner && e.loopsBusy,
+      "F6 navigation preserves the pending loop completion owner")
+    try require(e.handleLoopKey(key(36, .command, repeatKey: true)) && f.loopCalls.count == 2,
+      "Key repeats cannot duplicate loop writes")
+    var done: Bool?; e.finishAutomaticEdit { done = $0 }
+    try f.answerLoops(); try f.finishRead()
+    try require(done == true && !e.hasDraft && window.firstResponder === e.waveform,
+      "The owned write completes after keyboard focus movement without Reload")
+    e.reloadLoops()
+    try require(e.loopReloadQuery != nil && e.handleLoopKey(key(97)) && window.firstResponder === e.waveform,
+      "F6 leaves an in-flight reload's native focus intact")
+    try f.finishRead()
+    try require(!e.loopNeedsReload && !e.loopsBusy, "Guarded F6 lets the reload complete normally")
+
+    _ = e.handleLoopKey(key(97)); guard let current = e.sustainEnd.currentEditor() as? NSTextView else { throw InterfaceFailure(message: "Missing restored boundary editor") }
+    current.setMarkedText("-", selectedRange: NSRange(location: 1, length: 0), replacementRange: NSRange(location: 0, length: current.string.utf16.count))
+    let text = current.string, caret = current.selectedRange(), beforeComposition = f.calls.count
+    try require(e.handleLoopKey(key(97)) && e.handleLoopKey(key(36, .command)) && current.hasMarkedText() &&
+      current.string == text && current.selectedRange() == caret && window.firstResponder === current && f.calls.count == beforeComposition,
+      "Loop shortcuts keep native composition and its caret without dispatching a write")
+    current.unmarkText(); e.loopSaveWork?.cancel(); e.loopSaveWork = nil
+    try require(e.handleLoopKey(key(97)) && e.sustainEnd.stringValue == "-" && f.calls.count == beforeComposition,
+      "F6 retains invalid raw loop text without saving it")
+    let invalid = e.rawLoopDraft
+    e.waveform.keyDown(with: key(123))
+    try require(e.rawLoopDraft.isEqual(invalid) && f.calls.count == beforeComposition, "Keyboard nudges cannot overwrite unfinished loop fields")
+    try require(e.handleLoopKey(key(97)) && (window.firstResponder as? NSTextView)?.string == "-",
+      "F6 brings invalid text back for correction")
+    let focus = window.firstResponder
+    try require(!e.handleLoopKey(key(97, .command)) && !e.handleLoopKey(key(97, windowNumber: window.windowNumber + 1)) &&
+      !e.handleLoopKey(key(97, type: .keyUp)) && window.firstResponder === focus,
+      "Modified F6, other windows and key releases keep their existing routes")
+
+    // A disabled loop has no waveform handle, but its boundary remains reachable.
+    e.sustaining.state = .off; e.syncLoopMarkers()
+    try require(e.handleLoopKey(key(97)) && e.waveform.selectedLoopMarker == nil && e.handleLoopKey(key(97)) &&
+      e.sustainEnd.currentEditor() === window.firstResponder,
+      "Disabled loops retain their field destination without exposing an editable handle")
+    window.makeFirstResponder(e.name)
+    try require(!e.handleLoopKey(key(97)) && !e.handleLoopKey(key(36, .command)), "Loop shortcuts do not claim unrelated native fields")
+    e.loadLoopFields(f.info); e.loopDraftBaseline = e.rawLoopDraft; e.syncLoopMarkers()
+    window.makeFirstResponder(e.waveform); e.waveform.selectedLoopMarker = nil
+    e.waveform.keyDown(with: key(48, .shift))
+    try require(e.waveform.selectedLoopMarker == .sustainEnd, "Reverse Tab initially selects the last enabled handle")
+    e.waveform.keyDown(with: key(48))
+    try require(e.waveform.selectedLoopMarker == .start, "Forward Tab wraps to the first enabled handle")
+    let beforeNudge = f.loopCalls.count
+    e.waveform.keyDown(with: key(124, .command))
+    try require(f.loopCalls.count == beforeNudge && e.loopStart.stringValue == "0", "Modified arrows do not change loop boundaries")
+    e.waveform.keyDown(with: key(124, .shift))
+    try require(f.loopCalls.count == beforeNudge + 1 && e.loopStart.stringValue == "64", "Shift-arrow saves a 64-frame nudge through the owned loop writer")
+    let payload = f.loopCalls.last!.1 as NSDictionary
+    e.waveform.keyDown(with: key(124))
+    try require(f.loopCalls.count == beforeNudge + 1 && e.loopStart.stringValue == "64" && payload.isEqual(to: f.loopCalls.last!.1),
+      "Pending keyboard nudges retain their exact payload")
+    try f.answerLoops("nudged"); try f.finishRead()
+    e.drawingFrame.stringValue = "20"; e.drawingValue.stringValue = "0.5"; e.stageDrawingPoint()
+    try require(e.drawingDraft?.numeric == true && !e.handleLoopKey(key(36, .command)),
+      "A numeric drawing batch retains its waveform Command-Return shortcut")
+    try require(e.handleLoopKey(key(97)) && window.firstResponder === e.waveform && !e.waveform.stroke.isEmpty,
+      "F6 cannot move focus away from retained drawing input")
   }
 }

@@ -506,6 +506,7 @@ static NSDictionary *dictionary(const PluginDescriptor &d) {
   };
 }
 #include "ParameterTakeSessionTests.inc"
+#include "PluginEditorAPITests.inc"
 static void closedInputProtection(const PluginState &state){
   NativePlugin plugin(state,48000),other(state,48000);
   const auto lease=plugin.beginEditorInputBarrier();
@@ -815,6 +816,59 @@ int main(int argc, char **argv) { trustFixtureArguments(argc, argv);
         [NSApplication sharedApplication];
         [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
         [NSApp activateIgnoringOtherApps:YES];
+        {
+          TrackerSession *editorSession=[TrackerSession new];NSError *editorError=nil;
+          check([editorSession addPlugin:dictionary(gain.descriptor) error:&editorError],"Add native editor API fixture");
+          pluginEditorAPIAdmission(editorSession);
+          NSString *revision=editorSession.automationRevision;
+          NSData *baseline=editorSession.serializedData;
+          NSString *identity=[editorSession snapshot:0][@"nativePlugins"][0][@"instanceID"];
+          const auto call=[&](NSString *method)->NSDictionary * {
+            editorError=nil;auto reply=[editorSession automationMethod:method params:@{@"slot":@0,@"expectedRevision":revision} error:&editorError];
+            check(reply&&!editorError,editorError.localizedDescription.UTF8String ?: "Native editor API request");return reply;
+          };
+          NSDictionary *previewRequest=@{@"expectedRevision":revision,@"plugin":identity,@"parameter":@7,@"gesture":@"native-editor-preview",@"value":@0.4};
+          NSDictionary *preview=[editorSession automationMethod:@"plugin.parameters.preview.set" params:previewRequest error:&editorError][@"data"];
+          check([preview[@"active"] boolValue],"Prepare preview before native presentation");
+          NSWindow *first=nil;
+          for(int attempt=0;attempt<2;++attempt) {
+            const auto opened=call(@"plugin.editor.open");NSWindow *visible=nil;int count=0;
+            for(NSWindow *candidate in NSApp.windows)
+              if(candidate.visible&&[candidate.title isEqual:@(gain.descriptor.name.c_str())]){visible=candidate;++count;}
+            check(count==1&&visible&&(!first||first==visible),"Repeated editor open must raise the same native window");first=visible;
+            check([opened[@"data"] isEqual:@{@"open":@YES,@"plugin":identity}]&&![opened[@"changed"] boolValue]&&![opened[@"playbackStopped"] boolValue],
+              "Native editor presentation changed musical history or returned the wrong identity");
+          }
+          const auto closed=call(@"plugin.editor.close");
+          check([[editorSession automationMethod:@"plugin.parameters.preview.get" params:@{} error:&editorError][@"data"] isEqual:preview],
+            "Opening and closing a native editor must preserve an unrelated preview");
+          check(!first.visible&&![closed[@"data"][@"open"] boolValue]&&![closed[@"changed"] boolValue]&&
+            [editorSession.serializedData isEqual:baseline]&&[editorSession.automationRevision isEqual:revision],
+            "Native editor close must hide its window without changing saved music/history");
+          NSMutableDictionary *cancel=[previewRequest mutableCopy];[cancel removeObjectForKey:@"value"];
+          check([editorSession automationMethod:@"plugin.parameters.preview.cancel" params:cancel error:&editorError]!=nil,"Cancel presentation-test preview");
+          call(@"plugin.editor.open");NSSlider *control=nil;
+          for(NSWindow *candidate in NSApp.windows)if(candidate.visible&&[candidate.title isEqual:@(gain.descriptor.name.c_str())])
+            for(NSView *child in candidate.contentView.subviews)for(NSView *item in child.subviews)
+              if([item isKindOfClass:NSSlider.class])control=(NSSlider *)item;
+          check(control!=nil,"Native editor API exposes the fixture's own control");
+          control.doubleValue=.37;[control sendAction:control.action to:control.target];
+          const auto edited=call(@"plugin.editor.close");
+          check([edited[@"changed"] boolValue]&&![edited[@"playbackStopped"] boolValue]&&
+            std::abs([[editorSession pluginParameters:0][0][@"value"] doubleValue]-.37)<1e-5,
+            "Editor close must flush accepted native input into musical history");
+          const bool undone=[editorSession historyUndo:NO error:&editorError];NSData *afterUndo=editorSession.serializedData;
+          if(!undone||![afterUndo isEqual:baseline]) {
+            [baseline writeToFile:[NSTemporaryDirectory() stringByAppendingPathComponent:@"screamseq-editor-baseline.plist"] atomically:YES];
+            [afterUndo writeToFile:[NSTemporaryDirectory() stringByAppendingPathComponent:@"screamseq-editor-undo.plist"] atomically:YES];
+            std::cerr<<"EDITOR_UNDO_DIAGNOSTIC undone="<<undone<<" value="<<[[editorSession pluginParameters:0][0][@"value"] doubleValue]
+              <<" error="<<(editorError.localizedDescription.UTF8String ?: "none")<<'\n';
+          }
+          check(undone&&[afterUndo isEqual:baseline],
+            "Undo after editor close must restore the saved manual baseline");
+          [editorSession shutdown];
+          std::cout<<"PASS rack editor API presentation, guarded admission, preview preservation and repeated open/close\n";
+        }
         NSBundle *fixtureBundle=[NSBundle bundleWithPath:@(argv[1])];
         void *fixtureModule=dlopen(fixtureBundle.executablePath.fileSystemRepresentation,RTLD_NOW|RTLD_LOCAL);
         auto editorMode=reinterpret_cast<void(*)(bool)>(dlsym(fixtureModule,"ResonanceFixtureEditorResizeMode"));

@@ -1,4 +1,5 @@
 #import "TrackerSession.h"
+#include "DocumentDeparture.hpp"
 #include "../Audio/AudioDevice.hpp"
 #include "../Audio/AudioExport.hpp"
 #include "../Audio/SampleRecorder.hpp"
@@ -71,6 +72,10 @@ namespace {
 #include "EnvelopeCatalogue.inc"
 #include "PluginPrograms.inc"
 void failure(NSError **e, const std::exception &ex) {
+  if(e && dynamic_cast<const ScreamSeq::NativeDepartureRefused *>(&ex)) {
+    *e=[NSError errorWithDomain:@"Tracker" code:-32002 userInfo:@{NSLocalizedDescriptionKey:@(ex.what()),@"writeOutcome":@"notCommitted"}];
+    return;
+  }
   if (e)
     *e = [NSError errorWithDomain:@"Tracker" code:1 userInfo:@{NSLocalizedDescriptionKey : @(ex.what())}];
 }
@@ -277,6 +282,13 @@ struct PluginPathHints {
   std::map<std::pair<uint64_t, uint64_t>, PluginPathHint> graph;     // By subgraph and node ID.
   void clear() { rack.clear(); graph.clear(); }
 };
+GraphPluginRecipe &locationRecipe(NativeSong &native,uint64_t graph,uint64_t node) {
+  auto definition=std::find_if(native.signal.library.begin(),native.signal.library.end(),[&](const auto &d){return d.id==graph;});
+  if(definition==native.signal.library.end())throw std::invalid_argument("Subgraph no longer exists");
+  auto found=std::find_if(definition->nodes.begin(),definition->nodes.end(),[&](const auto &n){return n.id==node;});
+  if(found==definition->nodes.end() || found->kind!=SignalNodeKind::Plugin)throw std::invalid_argument("Select a graph plugin node");
+  return found->plugin;
+}
 std::string missingPlugin(const std::string &name, const std::string &path) {
   return "Plugin \"" + name + "\" is unavailable: its VST3 bundle " +
          (path.empty() ? std::string("has no known location")
@@ -376,10 +388,20 @@ struct EffectSnapshot {
   uint64_t sequence = 0;
   std::string bypassTarget; // A delta, so save/state capture cannot turn Undo into a rack rebuild.
   std::vector<ParameterChange> parameterValues; // Historical manual scalars, never effective modulation output.
+  struct Location {
+    std::string plugin,path;
+    uint64_t graph=0,node=0;
+    std::optional<PluginPathHint> hint;
+  };
+  // Explicit location repair also changes which original path is saved. Keep
+  // that small delta in chronological history, including an auto-resolved path
+  // whose runtime location was already equal to the newly accepted location.
+  std::optional<Location> location;
   size_t bytes() const {
     size_t result = (automation.size() + manual.size() + parameterValues.size()) * sizeof(ParameterChange) + bypassTarget.size();
     for (const auto &plugin : plugins)
       result += plugin.state.size() + plugin.audioLayout.size() + plugin.descriptor.name.size() + sizeof(PluginState) + plugin.aliases.size() * sizeof(PluginInstrumentAlias);
+    if(location){result+=sizeof(Location)+location->plugin.size()+location->path.size();if(location->hint)result+=location->hint->path.size()+location->hint->loaded.size()+location->hint->classID.size();}
     return result;
   }
 };
@@ -407,7 +429,9 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
   std::vector<PluginParameter> _recipePreviewCatalog;
   BOOL _parameterPreviewCommitting;
   std::unique_ptr<MidiInput> _midi;
+  uint32_t _recordingMidiDrops;
   std::unique_ptr<PluginInventory> _pluginInventory;
+  std::unique_ptr<PluginLocations> _pluginLocations;
   std::unique_ptr<PluginLibrary> _pluginLibrary;
   std::vector<PluginState> _plugins;
   std::vector<ParameterChange> _automation;
@@ -454,6 +478,7 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
     _audio = std::make_unique<AudioDevice>();
     _midi = std::make_unique<MidiInput>();
     _pluginInventory = std::make_unique<PluginInventory>();
+    _pluginLocations = std::make_unique<PluginLocations>();
     _pluginLibrary = std::make_unique<PluginLibrary>();
   }
   return self;
@@ -510,6 +535,7 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
   [self requireNoParameterTake];
   auto next=demo?Document::demo():std::make_unique<Document>();
   NSString *identity=NSUUID.UUID.UUIDString;
+  ScreamSeq::NativeDocumentDeparture departure(self.documentDepartureDelegate,self.automationRevision);
   _audio->setPlugins({});
   _sampleRecorder.reset();
   _sampleRecordingID = nil; _sampleRecordingDocument = nil; _sampleRecordingRevision = nil;
@@ -533,6 +559,7 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
   _loadRecovery={};_loadSourcePath=nil;_projectMetadata={};
   _graphEditorPlugin.reset();_graphEditorID=nil;
   _lastTouchedPlugin.clear(); _touchSequence = 0; _lastTouchedSource = nil;
+  departure.adopted();
   return YES;
   } catch(const std::exception &e){failure(error,e);return NO;}
 }
@@ -631,6 +658,7 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
     } else
       next = Document::open(path.UTF8String);
     validatePluginCapacity(plugins, next->native().mixer.buses.size());
+    ScreamSeq::NativeDocumentDeparture departure(self.documentDepartureDelegate,self.automationRevision);
     _audio->stop();
     _pluginError.clear();
     _pluginWarning.clear();
@@ -657,8 +685,10 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
     _automationDocumentID = NSUUID.UUID.UUIDString;
     _recording = std::move(recoveredTake);
     _recordingID = _recording ? NSUUID.UUID.UUIDString : nil;
+    _midi->discardPending();
     _recordingRevision = _recording ? (recoveredTakeCompatible ? self.automationRevision : @"unmatched-recovered-take") : nil;
     _lastTouchedPlugin.clear(); _touchSequence = 0; _lastTouchedSource = nil;
+    departure.adopted();
     return YES;
   } catch (const std::exception &e) {
     failure(error, e);
@@ -1019,10 +1049,13 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
   auto result = [NSMutableArray array];
   try {
     for (auto &d : AudioDevice::devices())
-      [result addObject:@{@"id" : @(d.id), @"name" : @(d.name.c_str())}];
+      [result addObject:@{@"id" : @(d.id), @"name" : @(d.name.c_str()), @"uid":@(d.uid.c_str()), @"default":@(d.isDefault)}];
   } catch (...) {
   }
   return result;
+}
+- (NSDictionary *)audioOutputInformation {
+  return @{@"device":@(_audio->deviceID()),@"sampleRate":@(_audio->sampleRate()),@"periodFrames":@(_audio->bufferSize()),@"bufferFrames":@(_audio->bufferSize()),@"active":@(_audio->active())};
 }
 - (NSDictionary *)listenTelemetry {
   NSDictionary *listen=@{@"port":NSNull.null,@"gainDB":@0,@"available":@YES,@"pending":@NO,@"transitionFrames":@0};
@@ -1260,6 +1293,12 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
 - (void)undoDocument {
   if (!_document->canUndo()) return;
   const auto &next = _document->historyNative(false);
+  auto notesOnly=_document->native();notesOnly.preciseNotes=next.preciseNotes;
+  if(!_document->undoChangesStructure() && notesOnly==next && next.preciseNotes!=_document->native().preciseNotes) {
+    auto prepared=_audio->preparePreciseUpdate(next,_document->historyCells(false));
+    _document->undo([&]{if(prepared&&!_audio->publishPreciseUpdate(prepared))throw std::runtime_error("Precise-note publication is busy; retry Undo");},true);
+    return;
+  }
   std::unique_ptr<MixerTransition::Plan> routing;
   std::unique_ptr<GraphControlPlan> parameters;
   if (_document->undoChangesStructure() ||
@@ -1293,6 +1332,12 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
 - (void)redoDocument {
   if (!_document->canRedo()) return;
   const auto &next = _document->historyNative(true);
+  auto notesOnly=_document->native();notesOnly.preciseNotes=next.preciseNotes;
+  if(!_document->redoChangesStructure() && notesOnly==next && next.preciseNotes!=_document->native().preciseNotes) {
+    auto prepared=_audio->preparePreciseUpdate(next,_document->historyCells(true));
+    _document->redo([&]{if(prepared&&!_audio->publishPreciseUpdate(prepared))throw std::runtime_error("Precise-note publication is busy; retry Redo");},true);
+    return;
+  }
   std::unique_ptr<MixerTransition::Plan> routing;
   std::unique_ptr<GraphControlPlan> parameters;
   if (_document->redoChangesStructure() ||
@@ -1645,11 +1690,11 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
 - (BOOL)instrumentSettings:(NSInteger)index values:(NSDictionary *)v error:(NSError **)error {
   try {
     [self requireNoParameterTake];
-    _audio->stop();
-    _document->transaction([&](CSoundFile &s) {
+    const auto &s=_document->song();
       if (index < 1 || index > s.GetNumInstruments() || !s.Instruments[index])
         throw std::runtime_error("Select an instrument.");
-      auto &ins = *s.Instruments[index];
+      const auto &before=*s.Instruments[index];
+      auto ins=before;
       const int envelopeKind = [v[@"envelope"] intValue];
       if (envelopeKind < 0 || envelopeKind > 2)
         throw std::runtime_error("Invalid envelope type");
@@ -1722,7 +1767,11 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
         envelope.nReleaseNode = uint8_t(release);
       }
       envelope.Sanitize();
-    });
+      if(ins.GetName()==before.GetName()&&ins.nGlobalVol==before.nGlobalVol&&ins.nPan==before.nPan&&ins.dwFlags==before.dwFlags&&
+        ins.nFadeOut==before.nFadeOut&&ins.nNNA==before.nNNA&&ins.nDCT==before.nDCT&&ins.nDNA==before.nDNA&&ins.Keyboard==before.Keyboard&&
+        sameInstrumentEnvelope(ins.VolEnv,before.VolEnv)&&sameInstrumentEnvelope(ins.PanEnv,before.PanEnv)&&sameInstrumentEnvelope(ins.PitchEnv,before.PitchEnv))return YES;
+      _audio->stop();
+      _document->transaction([&](CSoundFile &song){*song.Instruments[index]=ins;});
     return YES;
   } catch (const std::exception &e) {
     failure(error, e);
@@ -1894,6 +1943,28 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
     EffectSnapshot current{_plugins, _automation, _manualParameters, source.back().sequence, source.back().bypassTarget};
     destination.reserve(destination.size() + 1);
     const auto &saved=source.back();
+    std::optional<PluginPathHints> locationHints;
+    if(saved.location) {
+      const auto &location=*saved.location;locationHints=_pluginPathHints;current.location=location;
+      if(location.graph) {
+        const auto key=std::pair(location.graph,location.node);
+        auto next=_document->native();auto &recipe=locationRecipe(next,location.graph,location.node);
+        current.location->path=recipe.path;
+        const auto old=_pluginPathHints.graph.find(key);
+        current.location->hint=old==_pluginPathHints.graph.end()?std::nullopt:std::optional(old->second);
+        if(location.hint)locationHints->graph[key]=*location.hint;else locationHints->graph.erase(key);
+        recipe.path=location.path;next.validate(_document->song());
+        _audio->stop();_document->restoreNative(std::move(next));std::swap(_pluginPathHints,*locationHints);++_pluginRevision;
+        if(_graphEditorGraph==location.graph&&_graphEditorNode==location.node){_graphEditorPlugin.reset();_graphEditorID=nil;}
+        destination.push_back(std::move(current));source.pop_back();trimEffectHistory(destination);return YES;
+      }
+      const auto old=_pluginPathHints.rack.find(location.plugin);
+      current.location->hint=old==_pluginPathHints.rack.end()?std::nullopt:std::optional(old->second);
+      if(location.hint)locationHints->rack[location.plugin]=*location.hint;else locationHints->rack.erase(location.plugin);
+      // Restoring an old missing path is permitted, but never while a renderer
+      // continues using the repaired incarnation.
+      _audio->stop();
+    }
     if(_pluginError.empty()&&saved.plugins==_plugins&&saved.manual==_manualParameters&&saved.automation!=_automation) {
       [self restorePluginGraph:saved.plugins automation:saved.automation];
       destination.push_back(std::move(current));source.pop_back();trimEffectHistory(destination);return YES;
@@ -1956,6 +2027,7 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
       _pluginError = previousError;
       throw;
     }
+    if(locationHints)std::swap(_pluginPathHints,*locationHints);
     destination.push_back(std::move(current));
     source.pop_back();
     trimEffectHistory(destination);
@@ -2413,6 +2485,7 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
     [result addObject:@{@"id" : @(s.id), @"name" : @(s.name.c_str())}];
   return result;
 }
+- (NSUInteger)connectedMIDISource { return _midi->connectedSource(); }
 - (BOOL)connectMIDI:(NSUInteger)source error:(NSError **)error {
   try {
     _midi->connect(uint32_t(source));
@@ -2443,7 +2516,14 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
 }
 - (NSArray<NSDictionary *> *)midiEvents {
   auto result = [NSMutableArray array];
+  const bool disconnected = _midi->connectionLost();
   auto events=_midi->drainSafe();
+  if (_recording && _recording->capturing) {
+    const auto drops = _midi->dropped();
+    _recording->overflow += uint32_t(drops - _recordingMidiDrops); _recordingMidiDrops = drops;
+    if (disconnected) { _recording->inputError = "MIDI input disconnected"; [self stopRecordingCapture]; }
+  }
+  if (disconnected) events.push_back({0, 0xb0, 123, 0});
   std::stable_sort(events.begin(),events.end(),[](const auto &a,const auto &b){return a.timestamp<b.timestamp;});
   for (auto &e : events) {
     if((e.status&0xf0)==0xb0)_audio->graphController(e.note,e.velocity);

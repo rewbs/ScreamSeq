@@ -1,7 +1,9 @@
 #import <Foundation/Foundation.h>
+#import "DocumentDeparture.h"
 #include "../../editor/NativePresentation.h"
 NS_ASSUME_NONNULL_BEGIN
 @interface TrackerSession : NSObject
+@property(nonatomic, weak, nullable) id<TrackerDocumentDepartureDelegate> documentDepartureDelegate;
 @property(nonatomic, readonly) BOOL playing;
 @property(nonatomic, readonly) BOOL canUndo;
 @property(nonatomic, readonly) BOOL canRedo;
@@ -22,6 +24,7 @@ NS_ASSUME_NONNULL_BEGIN
 - (NSDictionary *)listenTelemetry;
 - (NSArray<NSDictionary *> *)mixerMeters;
 - (NSArray<NSDictionary *> *)devices;
+- (NSDictionary<NSString *, id> *)audioOutputInformation;
 - (BOOL)configureDevice:(NSUInteger)device buffer:(NSUInteger)buffer error:(NSError **)error;
 - (BOOL)openPath:(NSString *)path error:(NSError **)error;
 - (void)newSong:(BOOL)demo;
@@ -131,6 +134,7 @@ NS_ASSUME_NONNULL_BEGIN
 - (BOOL)refreshPluginLatencies:(NSError **)error;
 - (BOOL)refreshDevice:(NSError **)error;
 - (NSArray<NSDictionary *> *)midiSources;
+@property(nonatomic, readonly) NSUInteger connectedMIDISource;
 - (BOOL)connectMIDI:(NSUInteger)source error:(NSError **)error;
 - (NSArray<NSDictionary *> *)midiEvents;
 @property(nonatomic, readonly) BOOL recordingActive;

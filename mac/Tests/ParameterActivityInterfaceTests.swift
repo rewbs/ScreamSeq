@@ -9,6 +9,10 @@ extension InterfaceTests {
     editor.inspect(plugin:"a",parameter:71);answer(["engine":1,"targets":targets]);answer(["parameters":[["id":71,"name":"Cutoff","min":20,"max":20000],["id":72,"name":"Gain","min":0,"max":1]]])
     try require(requests.last?.0=="parameter.activity.watch" && requests.last?.1["parameter"] as? Int==71,"Inspect opens the exact stable parameter")
     answer(["token":"1:1"]);answer(["sources":[["kind":"envelope","id":"n9","pattern":2,"plugin":"a","parameter":71,"title":"Pattern 2 envelope","enabled":true]],"rule":"Rule"])
+    let priorRequests=requests.count,priorToken=editor.token
+    editor.search.stringValue="Gain";editor.controlTextDidChange(Notification(name:NSControl.textDidChangeNotification,object:editor.search))
+    try require(editor.parameterID==71 && editor.token==priorToken && requests.count==priorRequests && editor.parameter.itemTitles.first?.contains("outside search")==true,"Search changes presentation without stealing or resetting the observed parameter")
+    editor.search.stringValue="";editor.filterParameters()
     editor.table.selectRowIndexes(IndexSet(integer:0),byExtendingSelection:false)
     var link:[String:Any]?;editor.onOpen={link=$0};editor.openSelected()
     try require(link?["pattern"] as? Int==2 && link?["parameter"] as? Int==71,"Source link retains pattern and parameter identity")
@@ -31,6 +35,9 @@ extension InterfaceTests {
     try require(trace.end-trace.viewStart==32,"Trace zoom changes its visible span")
     if let rep=trace.bitmapImageRepForCachingDisplay(in:trace.bounds){trace.cacheDisplay(in:trace.bounds,to:rep)}
     trace.fit();try require(trace.viewStart==0 && trace.end==64,"Trace fit restores pattern context")
+    var opened=false;trace.onOpen={opened=true}
+    for code:UInt16 in [115,124,36]{trace.keyDown(with:NSEvent.keyEvent(with:.keyDown,location:.zero,modifierFlags:[],timestamp:0,windowNumber:0,context:nil,characters:"",charactersIgnoringModifiers:"",isARepeat:false,keyCode:code)!)}
+    try require(trace.selected==2 && opened,"Trace Home/Right/Return follows a captured value and opens its source")
     editor.poll();answer(["target":["key":"rack/b"],"parameter":71,"token":"1:2","cursor":1000,"points":fixture,"active":false])
     try require(editor.samples.count==1000 && editor.reading.stringValue.contains("Pattern envelope"),"Capture replies populate the visible trace and source reading")
     RunLoop.current.run(until:Date().addingTimeInterval(0.12));editor.poll();answer(["target":["key":"rack/a"],"parameter":72,"token":"1:3","points":[]])
@@ -43,9 +50,41 @@ extension InterfaceTests {
     try require(editor.viewMode.bounds.width>=editor.viewMode.intrinsicContentSize.width-1 && editor.detailMode.bounds.width>=editor.detailMode.intrinsicContentSize.width-1 && editor.reading.bounds.width>=340,"A docked parameter panel keeps its mode labels and effective value readable without competing transport buttons")
     host.setContentSize(NSSize(width:1000,height:740));editor.frame=NSRect(x:0,y:0,width:1000,height:740);editor.layoutSubtreeIfNeeded()
     if let index=CommandLine.arguments.firstIndex(of:"--snapshots"),index+1<CommandLine.arguments.count,let bitmap=editor.bitmapImageRepForCachingDisplay(in:editor.bounds){editor.cacheDisplay(in:editor.bounds,to:bitmap);if let png=bitmap.representation(using:.png,properties:[:]){let folder=URL(fileURLWithPath:CommandLine.arguments[index+1]);try FileManager.default.createDirectory(at:folder,withIntermediateDirectories:true);try png.write(to:folder.appendingPathComponent("ParameterActivityEditor.png"))}}
+    editor.resumeCapture()
     editor.detailMode.selectedSegment=2;editor.changeDetail();answer(["points":[["frame":48000,"value":-40]],"total":1])
     editor.table.selectRowIndexes(IndexSet(integer:0),byExtendingSelection:false)
     try require(editor.status.stringValue.contains("during playback") && !editor.status.stringValue.contains("Stop playback"),"Recorded editor explains its supported live-edit behavior")
+    link=nil;editor.openSelected()
+    try require(link?["kind"] as? String=="recorded" && link?["plugin"] as? String=="b" && link?["parameter"] as? Int==71 && link?["frame"] as? Int==48000,
+      "A recorded point row opens its stable song-automation source")
+    editor.table.deselectAll(nil);link=nil;editor.openSelected()
+    try require(link==nil,"A deselected recorded row cannot keep an earlier source active")
+    let frozenPoint=editor.samples[0]
+    editor.trace.onSelect?(frozenPoint)
+    editor.loadRecorded();answer(["points":[["frame":48000,"value":-40]],"total":1])
+    link=nil;editor.openSelected()
+    try require(link?["kind"] as? String=="envelope" && link?["traceSequence"] as? UInt64==frozenPoint.sequence,
+      "A recorded refresh without a selected row preserves the frozen trace source")
+    editor.table.selectRowIndexes(IndexSet(integer:0),byExtendingSelection:false)
+    editor.loadRecorded();editor.trace.onSelect?(frozenPoint)
+    answer(["points":[["frame":48000,"value":-39]],"total":1])
+    link=nil;editor.openSelected()
+    try require(editor.pointValue.doubleValue == -39 && link?["kind"] as? String=="envelope" && link?["traceSequence"] as? UInt64==frozenPoint.sequence,
+      "A pending recorded refresh updates the row form without replacing a newer trace selection")
+    let recordedTrace=ParameterTraceSample(["sequence":1001,"value":-20,"source":["kind":"recorded"]])!
+    editor.trace.onSelect?(recordedTrace)
+    editor.loadRecorded();answer(["points":[],"total":0])
+    link=nil;editor.openSelected()
+    try require(link?["traceSequence"] as? UInt64==1001,
+      "Removing a recorded table row cannot clear a source selected on the trace")
+    editor.loadRecorded();answer(["points":[["frame":48000,"value":-40]],"total":1])
+    editor.table.selectRowIndexes(IndexSet(integer:0),byExtendingSelection:false)
+    editor.loadRecorded();answer(["points":[],"total":0])
+    link=nil;editor.openSelected()
+    try require(link==nil,"Removing the selected table row retires its own source link")
+    editor.loadRecorded();answer(["points":[["frame":48000,"value":-40]],"total":1])
+    editor.resumeCapture()
+    editor.table.selectRowIndexes(IndexSet(integer:0),byExtendingSelection:false)
     editor.editRecordedCell(row:0,column:1)
     try require(editor.table.editedRow==0 && editor.table.editedColumn==1,"Recorded values must open a real inline field editor")
     (host.firstResponder as? NSTextView)?.string="-30"
@@ -59,6 +98,8 @@ extension InterfaceTests {
     editor.tableView(editor.table,setObjectValue:"3",for:editor.table.tableColumns[0],row:0)
     answer([:]);answer(["points":[["frame":96000,"value":-20],["frame":144000,"value":-30]],"total":2])
     try require(editor.table.selectedRow==1 && editor.pointTime.doubleValue==3 && editor.pointValue.doubleValue == -30,"Editing recorded time follows that exact point through table reordering")
+    link=nil;editor.openSelected()
+    try require(link?["frame"] as? Int==144000,"A table-owned source follows its point when a time edit reorders rows")
     host.makeFirstResponder(editor.pointValue);(host.firstResponder as? NSTextView)?.string="-12.5"
     editor.loadRecorded();answer(["points":[["frame":96000,"value":-20],["frame":144000,"value":-31]],"total":2])
     try require((host.firstResponder as? NSTextView)?.string=="-12.5","Passive recorded refresh preserves an in-progress point-form text draft")

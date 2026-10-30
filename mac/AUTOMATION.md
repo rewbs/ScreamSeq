@@ -264,7 +264,15 @@ The VST3 loader repeats the check itself: immediately before loading it resolves
 
 If a plugin cannot be resolved it is missing: its descriptor reports an empty `path`, `pluginError`/`issues` name the plugin and stored path, playback, export and graph plugin inspection are rejected, and saving writes the original hint, class ID and opaque state unchanged. `graph.node.add {plugin}` and `graph.update` follow the same rule and reject (-32602) a recipe naming an untrusted bundle; add the plugin with `plugin.add` first, or use `slot`. No project field or environment variable grants trust.
 
-`plugin.locations.get {}` returns `unresolved: [{name, classID, storedPath, canonicalPath, kind: "rack"|"graph", isInstrument}]`: the missing plugins of the open document whose stored bundle exists on this Mac outside the trusted locations. It loads and trusts nothing. `plugin.locations.trust {expectedRevision, canonicalPaths: [path]}` is the only way to approve them: every path must be the exact `canonicalPath` of an entry this document is waiting for. Each bundle is validated in the isolated scanner, trusted, remembered, and the waiting rack and graph plugins resolve in place with their saved state and no Undo step; the reply carries the remaining `unresolved` entries and `pluginError`. Call it only after the user has agreed to load code from those locations. The native app asks once per opened project or recovery copy, listing plugin names and canonical paths, with **Don't Load** as the default and **Trust and Load**; automation and inspection test modes never ask and never trust.
+`plugin.locations.get {}` returns `unresolved: [{name, classID, storedPath, canonicalPath, kind: "rack"|"graph", isInstrument}]`: the missing plugins of the open document whose stored bundle exists on this Mac outside the trusted locations. It loads and trusts nothing. `plugin.locations.trust {expectedRevision, canonicalPaths: [path]}` approves these existing hints without rewriting them: every path must be the exact `canonicalPath` of an entry this document is waiting for. Each bundle is validated in the isolated scanner, trusted, remembered, and the waiting rack and graph plugins resolve in place with their saved state and no Undo step; the reply carries the remaining `unresolved` entries and `pluginError`. Call it only after the user has agreed to load code from those locations. The native app asks once per opened project or recovery copy, listing plugin names and canonical paths, with **Don't Load** as the default and **Trust and Load**; automation and inspection test modes never ask and never trust.
+
+`plugin.path.get {plugin}` and `graph.plugin.path.get {graph, node}` inspect one stable target's **saved** location, including its original hint if the runtime has automatically resolved it elsewhere. They return `descriptor`, `moduleVerified`, `reason`, and `candidates: [{descriptor, moduleSHA256}]`. Reads hash the current module executable without scanning or granting trust. Candidates come from the private, architecture-specific verified-scan cache; absent or changed binaries are omitted.
+
+Use the matching `.scan {target, path, expectedRevision}` to explicitly scan a local `.vst3` bundle in the isolated scanner. The bundle must expose the same class ID and instrument/effect role. Its executable must remain unchanged throughout the scan. Scanning returns the same location information, preserves other verified locations, and changes neither song revision nor Undo. It does not grant the main process permission to load the module.
+
+The matching `.set {target, path, expectedModuleSHA256, expectedRevision, dryRun?}` reconnects to one of those verified candidates. Copy its exact hash and canonical path from the read. A changed or unverified executable, wrong class, stale revision, retained parameter preview/take, or malformed request refuses before a path edit. `dryRun:true` verifies the candidate without vendor-state decoding, transport changes, trust, or Undo. An actual change validates the saved vendor state and audio layout, stops playback, changes only the selected path, and creates one chronological Undo step. It preserves opaque state, identity, routing, automation, parameters, and unknown project fields; save/reopen keeps the accepted path. Undo also restores original hints when the old runtime had already resolved to the same local module. Successful no-ops add no history. A pre-commit refusal carries `error.data.writeOutcome: "notCommitted"`; an unavailable outcome without that receipt needs a current-state read before another write.
+
+The native **Plugin location…** action in plugin and graph controls opens a retained editor for the captured document and processor. Choose a bundle, scan, explicitly select a verified match, then Check reconnect or Reconnect. Newer path text survives pending reads/writes and closing the window. Unknown outcomes block resubmission until the musician reads and accepts the observed state. Audio Units continue to use their registered component identity and cannot be converted by changing a path.
 
 Explicit trust persists in `~/Library/Application Support/Resonance/Plugins/trusted-plugins-v1.json` (durable application data, beside `Recovery` and `SampleLibrary`): `{"version": 1, "bundles": [canonical bundle paths]}`, written atomically with mode 0600 into a directory that must be owned by the user and closed to others (it is created, or tightened, to 0700). It is written only after a validated add has succeeded or a location has been approved; opening, saving or exporting a project, recovery file or preset never reads trust from, or writes trust into, that file. An entry counts only while it is an absolute `.vst3` path that is still its own canonical location, so entries with symbolic links or `..` are ignored. A store that is unreadable, a link, multiply linked, not a private regular file owned by the user, larger than 1 MiB, over 1024 entries or malformed is treated as empty and replaced by the next explicit action; it never prevents opening a project. The inventory cache confers trust too, so it is read only from a singly linked regular file owned by the user, opened without following links, in a folder owned by the user, neither writable by anyone else; new caches are written with mode 0600. `+[TrackerSession trustPluginLocation:]` is in-process only and writes nothing. Hosts without a bundle identifier (the command-line test executables) persist nothing; tests select a temporary store through the in-process `PluginTrust::setStorePath`. Removing the store file revokes persisted trust.
 
@@ -475,12 +483,23 @@ The complete machine-readable request definitions are in [resonance-api.schema.j
 | Samples | `sample.get`, `sample.waveform.get`, `sample.snap.get`, `sample.loops.set`, `sample.patch`, `sample.process`, `sample.draw`, `sample.crossfade`, `sample.copyToNew`, `sample.import`, `sample.pcm.get`, `sample.pcm.set` |
 | Sample clipboard | `sample.clipboard.get`, `sample.clipboard.copy`, `sample.clipboard.set`, `sample.cut`, `sample.delete`, `sample.paste` |
 | Instruments | `instrument.get`, `instrument.create`, `instrument.import`, `instrument.patch`, `instrument.envelope.get`, `instrument.envelope.copy`, `instrument.envelope.transform`; metadata, keymaps, volume/pan/pitch envelopes, shared tools and note behavior |
-| Plugins | `plugin.discover`, `plugin.locations.get`, `plugin.locations.trust`, `plugin.add`, `plugin.remove`, `plugin.move`, `plugin.bypass`, `plugin.assign`, `plugin.instruments.get`, `plugin.instruments.set`, `plugin.parameters.get`, `plugin.parameters.set`, `plugin.parameters.preview.get/set/commit/cancel`, `plugin.state.get`, `plugin.state.set`, `plugin.buses.get`, `plugin.buses.set` |
+| Plugins | `plugin.discover`, `plugin.locations.get`, `plugin.locations.trust`, `plugin.path.get/scan/set`, `graph.plugin.path.get/scan/set`, `plugin.add`, `plugin.remove`, `plugin.move`, `plugin.bypass`, `plugin.assign`, `plugin.instruments.get`, `plugin.instruments.set`, `plugin.parameters.get`, `plugin.parameters.set`, `plugin.parameters.preview.get/set/commit/cancel`, `plugin.state.get`, `plugin.state.set`, `plugin.buses.get`, `plugin.buses.set` |
 | Plugin preset files | `plugin.preset.inspect`, `plugin.preset.save`, `plugin.preset.load`; native preset files with stable target identity and separate file/song revision checks |
 | Automation | `automation.target.get`, `automation.get`, `automation.replaceLane`, `automation.pattern.get/set/remove/copy/transform`; stable target learning, absolute lanes and pattern-relative envelopes |
 | History | `history.undo`, `history.redo` use one chronological history; optional legacy domain names are aliases |
 
 `plugin.discover` uses the same persistent inventory as the plugin picker. Pass `{"rescan": true}` to refresh it after installing, removing or updating plugins. A first scan or explicit rescan may take several seconds; cached reads do not launch scanner processes. Discovery does not change the song revision.
+
+`plugin.editor.open` and `plugin.editor.close` take `slot` and `expectedRevision`,
+and return `{open, plugin}` with the stable plugin identity. Repeated opening
+raises the existing native window; closing an already closed editor is harmless.
+Presentation does not stop playback, replace processors, create Undo history or
+cancel a parameter preview. Closing first flushes accepted manual editor changes
+into their existing musical history and saved baseline. A retained recording take
+keeps ownership of its input: close remains available without draining or replaying
+that input, while opening another editor is refused until the take is resolved.
+These methods reject unknown fields and do not accept `dryRun`. Built-in devices
+use host parameter controls and have no native editor to open.
 
 `pattern.get` returns at most 4,096 cells per request and supports row/channel pagination. `pattern.apply` accepts up to 4,096 distinct cell patches, validates the entire batch before changing anything, and supports `dryRun`. A parameter batch or lane replacement likewise forms one plugin-history step. There are no cross-domain transactions or general dry runs yet.
 
@@ -591,7 +610,32 @@ applied = client.call("sample.process", {**request, "dryRun": False})
 
 The Samples editor can zoom to a selection, zoom around the selected position, pan and return to the whole waveform. Option-scroll zooms; horizontal scrolling or Shift-scroll pans; a trackpad pinch zooms. Selection and loop coordinates remain absolute sample frames. At one frame per displayed bin, individual PCM points are shown. Enable **Draw** and zoom to individual frames, then drag; release applies one document-history step and Escape cancels. The displayed waveform revision is captured at the beginning of a stroke, so an intervening edit rejects the stroke instead of silently overwriting newer work. Backtracking overwrites crossed points with the latest segment. Selecting **Both** draws the same shape into both channels.
 
+After release, a stroke remains tied to its captured sample identity, channels,
+viewport and revision until metadata and waveform readback both succeed at the
+accepted revision. Refusal, malformed readback or newer fields retain the overlay
+and settle waiting Save/departure actions without silently continuing. Escape,
+zoom, channel changes and Draw mode cannot discard a submitted stroke. **Retry
+stroke** is available only after an explicit busy/not-committed receipt and sends
+the original payload and revision. No unknown or accepted outcome is replayed.
+**Review stroke** reads current metadata and waveform without writing; **Accept
+reviewed state** checks that revision again before adopting it and clearing only
+the local stroke. Newer settings and loop fields remain at their captured revision
+for explicit reload. **Discard stroke** clears the local draft without undoing or
+repeating an earlier write. Before release, Escape or newer field input cancels
+the unsubmitted gesture. Waveform replies must match the requested sample, range,
+channels and bin count and contain complete finite peaks before becoming loaded.
+
 `context.get.data.sampleViewport` reports `sample`, absolute `start`, exclusive `end`, `channels`, `drawing`, `loaded` and `precise`. `loaded` is false when the displayed waveform has not caught up with the current document revision. `precise` also requires one loaded bin per visible frame. If a hidden editor has an obsolete sample length, the context uses the current whole-sample range and reports it as unloaded. This context is separate from `sampleSelection`; read `sample.waveform.get` or `sample.pcm.get` to inspect exact current data.
+
+Viewport and channel navigation stage their reads before changing the visible
+range, channel menu or peaks. Failed, malformed or stale replies keep the previous
+accepted view. Newer raw input or active composition also prevents adoption;
+navigation never clears those fields or takes focus. Rapid zoom/pan gestures
+accumulate the requested range while only the latest request waits behind one
+in-flight read. Turning on Draw preserves that pending navigation. Agent viewport
+context continues to describe the accepted view while loading, and drawing waits
+until the pending read has settled. These navigation reads do not edit audio or
+history.
 
 `sample.draw` accepts `sample`, `expectedRevision`, `points:[{frame,value}]`, optional `channels` (`both`, `left`, `right`), `interpolation` (`linear`, default, or `step`) and `dryRun`. Supply 1…4096 strictly increasing, unique, in-range integer frame positions and finite amplitudes −1…1. The span from the first through the last point must be at most 1,048,576 frames. A single point edits one frame. The last point is included; the returned exclusive `end` is that point's frame plus one. Linear interpolation fills every intervening frame; step holds the preceding point until the next point's frame. Both writes the same curve to both channels; a single selected channel leaves the other unchanged.
 
@@ -662,7 +706,9 @@ preview = client.call("sample.loops.set", request)
 client.call("sample.loops.set", {**request, "dryRun": False})
 ```
 
-The macOS Samples panel provides draggable normal (top, gold) and sustain (bottom, green) loop handles, both numeric loop rows, **Use selection**, and **Reload loops**. Loop edits save automatically, including while dragging (coalesced at about 35 ms). Click a handle and use Left/Right for one-frame adjustments, Shift for 64 frames, and Tab to cycle handles. Each accepted edit is a compact Undo step. Rejected edits retain their originating revision and show an error; Reload explicitly discards that unsaved intent. General **Apply settings** handles name/rate/volume/pan separately and leaves saved loop settings intact.
+The macOS Samples panel provides draggable normal (top, gold) and sustain (bottom, green) loop handles, both numeric loop rows, **Use selection**, and **Reload loops**. Loop edits save automatically, including while dragging (coalesced at about 35 ms). Click a handle and use Left/Right for one-frame adjustments, Shift for 64 frames, and Tab to cycle handles. Each accepted edit is a compact Undo step. Rejected edits retain their originating revision and show an error; **Reload loops** reads the current sample before discarding loop fields. A failed or incomplete read keeps the draft. Definite busy retries reuse the exact submitted request; uncertain outcomes require readback.
+
+Name/rate/volume/pan fields also save automatically through `sample.patch`, preserving native text focus and submitting only changed fields. **Apply settings** finishes immediately; **Reload settings** explicitly reads and adopts current settings. Save, export, document history and document departure wait for settings readback and pending loops. Invalid fields, composition, newer input during an asynchronous write/read, and failed readback remain retained with their captured sample identity and revision. Settings and loop drafts finish in order, with only a verified owned write carrying an unchanged companion draft to its new revision. **Discard drafts** explicitly abandons local sample drafts without repeating a write, including when the original sample is no longer available.
 
 In `sample.patch`, omitting `pan` preserves whether the sample inherits panning
 from its channel/instrument. Supplying `pan` enables the sample's own panning,
@@ -1349,7 +1395,16 @@ The original preference file is not replaced by this fallback.
 
 The response contains `before`, `after`, `wouldChange` and `dryRun`. A real change stops playback and makes one document Undo entry; previews, no-ops and validation failures preserve transport, revision and Redo. Tempo/speed affect only the selected sequence. Other settings are global. Existing pattern-specific time signatures/grooves take precedence and are reported, not overwritten. Groove phase restarts with each pattern, including when its length is not a whole beat. Source-format tempo/speed effects retain their existing semantics. This is not a new tempo-envelope lane or a change to imported timing until explicitly applied.
 
-Native Pattern → Tempo and Groove uses these commands, including Preview and a two-row swing helper. The ordinary Song settings dialog and `document.patch` also retain fractional BPM. Grid beat/bar shading uses the displayed pattern's effective signature.
+Native Pattern → Tempo and Groove uses these commands, including Preview and a two-row swing helper. Song Settings and `document.patch` also retain fractional BPM. Grid beat/bar shading uses the displayed pattern's effective signature.
+
+File → Song Settings opens a retained native window. Invalid or refused fields,
+newer text entered during a request, and hidden-window drafts remain intact.
+Use current revision keeps the draft; Reload values explicitly reloads stored
+values. Apply sends only changed fields, so a title edit cannot round the tempo.
+Save, export and history wait for pending settings and valid newer drafts; invalid,
+stale or composing fields stop that action. An uncertain write requires a read and
+explicit acceptance of the observed state before another submission. These are
+the existing `document.patch` edits with normal Undo and project persistence.
 
 When a source module format loses these settings, native projects/history/playback use an optional `RSONGS2` timing payload inside project version 4 or 5. Older applications reject it. Source-compatible projects keep the earlier payload. Export Module rejects timing loss; audio export uses the full native settings. See [snapshot representation](SAMPLE_SNAPSHOTS.md). Plugin musical position retains the core's row/tick-based PPQ convention; dedicated tempo automation and broader plugin transport qualification remain separate work.
 
@@ -1578,9 +1633,65 @@ retains the draft for review and manual placement. Closing/replacing the documen
 and saving require finishing or discarding the take first. Uncommitted takes remain
 in memory; automatic recovery copies resume after the take is resolved. Capturing does not itself change
 the document revision. Native UI recording starts with playback when armed and
-commits on stop. MIDI settings select timing grid, adjacent recording columns and
+commits complete takes on stop. Takes with missing timestamps, exhausted voices,
+overflow or disconnected input stay in **MIDI & recording** for explicit Finish
+or Discard. API Stop always retains its take. The review keeps event selection
+and unfinished settings while polling. MIDI settings select timing grid, adjacent recording columns and
 input adjustment. Physical MIDI latency and device behavior still require hardware
 qualification; automated tests inject the same host-clock timestamps silently.
+
+The native application also exposes `midi.devices.get {}`, `midi.settings.get {}`
+and `midi.settings.set`. Settings writes require the independent
+`expectedMidiRevision` from the settings read and the complete fields `source`,
+`armed`, `channelsCount` (1–127), `quantization` (0–65536 row units) and
+`latencyMS` (−500…500), with optional `dryRun`. Source is an opaque ID from the
+device read; the empty string selects virtual input only. IDs are platform local.
+Settings do not change song history. No-op writes keep the settings revision;
+stale or invalid writes reject. Rescan preserves the selected endpoint identity.
+Changing source or disarming stops and retains any active take. Input at a take,
+document or source boundary is quarantined, including delayed old callbacks.
+
+### Retained workspace layouts
+
+`workspace.get` also returns `keyboard` (`revision`, `lower`, `upper`,
+`playStopKeys`) and a read-only `keyboardWindow` draft snapshot.
+`workspace.keyboard.set` requires exactly `expectedKeyboard`, `lower`, `upper`
+and `playStopKeys`. Read the independent keyboard revision first. The lower row
+uses 12 keys; the upper row accepts 12 or 13, including an optional top C. Distinct
+letters, digits and unshifted punctuation are accepted, with canonical uppercase
+readback. Mac note input follows the native keyboard's characters. Play/Stop
+accepts `space`, `return`, an empty array to disable, or a one-to-four-stroke
+command-palette binding whose first stroke has a command/control/option modifier.
+Conflicts reject before changing either part. Settings preserve song data and
+Undo; held notes release their original pitch and target. The native Keyboard
+and Display window keeps invalid or stale drafts until corrected or explicitly
+reloaded, and can retain an existing custom command-palette binding.
+
+On macOS, **Workspace → Show Context Panel** (Command–Option–B) and the toolbar
+toggle the retained left pane. It follows the focused editor and offers relevant
+actions; Pattern also exposes pattern/order/input selectors, and Samples exposes
+the full sample catalogue. Hiding it releases space without changing song data or
+editor drafts. Named and last-used layouts retain `contextPanelVisible`; older
+layouts default to visible. Invalid visibility values reject before layout changes.
+`workspace.get` includes that boolean plus `contextPanel`, with `visible`, `editor`
+and the currently presented actions (`command`, `label`, `visible`, `enabled`).
+
+`workspace.layout` accepts Compose, Pattern focus, Sound design, Connected and
+Graph editing presets. Graph editing exposes routing, the independent
+`graphCurve` panel and pattern automation together. The curve panel supports the
+same placements, pinning and Return as other inspectors. Follow preserves drafts;
+use the editor's explicit reload/discard action to replace unfinished work.
+Panel Return resolves the original document, pattern and track identities and
+rejects a removed target.
+
+Save custom, Restore custom and Delete custom accept optional `savedName`
+(default Custom): 1–64 characters without controls or surrounding whitespace.
+Up to 24 named layouts are available through **Workspace → Layouts…** and
+`workspace.get.data.savedLayouts`. Restore preserves pins, targets and drafts.
+Reload saved refreshes the catalogue after another app session changes it;
+stale saves/deletes reject without replacing the file. Inspection and automation
+test sessions keep layouts in memory. The legacy single Custom layout migrates
+on first use without renaming its preference key.
 
 ### Autosave and crash recovery (native application)
 
@@ -1603,6 +1714,15 @@ are marked `x-application-only`.
 | `recovery.list` | none | `copies`: newest first, each with opaque `id`, session `document`, `savedAt`, `title`, original `source` or null, and `hasRecording` |
 | `recovery.save` | `expectedRevision` | Force a snapshot and return the updated autosave status. Does not change the song revision or mark it saved. |
 | `recovery.restore` | `expectedRevision`, `id` from `recovery.list` | Preserve the current unsaved song in a separate recovery copy, then restore the selected copy as an unsaved document with a new revision. Never overwrites the original project. |
+
+Mac Open, New and recovery restore recheck retained native editor work after
+preparing the replacement song and before stopping/adopting it. A refused
+replacement returns `-32002` with `data.writeOutcome: "notCommitted"`; the error
+names the editors to finish or reload. This check does not apply or discard
+their drafts, including invalid gate text and expanded formula text. Native
+input remains protected through successful adoption and workspace refresh.
+Save, history and departure also require an unfinished gate edit to be applied
+or explicitly reloaded using Follow; they do not implicitly write a gate.
 
 `context.get.data.autosave` also exposes the status. Stale write revisions return
 `-32001`; busy operations return `-32002`; invalid parameters return `-32602`;

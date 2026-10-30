@@ -1,0 +1,630 @@
+# Mac parity checkpoint from current main
+
+This PR is a tested partial parity checkpoint, not a claim that every Windows
+change has been ported. At the user's request, the work is being brought to a
+reviewable stopping point. This checkpoint now includes the dynamic left context
+pane; the separate left-pane session had not produced changes to integrate.
+
+## Base and scope
+
+The task restarted from freshly fetched main `4885bb9997393bcf072639358da3a900a20efb01`.
+The former attempt based on `ffe81aa4b` remains preserved in `0adfbb0db`; its test
+results do not qualify this branch. Before raising this PR, main was fetched again
+and the branch rebased onto `d1b52ade532d2d8fd9308a374ad61dd91ec7968c`, which includes
+PR #8's shared advanced gate implementation and Mac inspector. Both the Gate
+inspector and independent Graph Curve remain registered and tested.
+
+The initial inventory covered 590 commits after the former baseline, including
+384 touching `windows/`. Those counts describe review scope, not completion.
+The primary checkout and other sessions' worktrees were not reset or edited.
+Native AppKit, Core Audio and CoreMIDI behavior remains platform-specific; musical
+editing continues through the existing shared model, APIs, Undo and persistence.
+
+## Implemented in this checkpoint
+
+- A retained context pane following the focused editor, with editor-specific
+  actions, pattern/order/input selectors and the complete sample catalogue. Toolbar,
+  menu and Command–Option–B toggles reclaim width; named/last-used layouts retain
+  visibility. Tracked menus retain captured identities, and malformed visibility
+  rejects before changing panel placements.
+- Named workspace layouts, retained layout management, Connected and Graph editing
+  presets, categorized command search and keyboard traversal.
+- Independent pinned/dockable Graph Curve with staged target capture and draft
+  retention; arrangement event counts, page navigation and captured annotations.
+- Guarded MIDI settings API, retained MIDI capture review, immediate Arm using
+  accepted settings, source/loss handling and retained busy intent.
+- Prepared live precise-note publication and Undo/Redo without restarting transport;
+  bounded refusal, improved hit selection and ordered Save/history completion.
+- Retained song-time parameter automation editor using the shared 48 kHz timeline,
+  exact native values, automatic editing, Undo/Redo, search, zoom and source links.
+- Parameter Activity search that preserves the watched target, frozen trace
+  keyboard navigation, retained recorded-point identity and automatic editing.
+  Navigation, paging and explicit refresh finish pending point writes first.
+- Ordered composing completion across precise notes, pattern/graph curves,
+  instruments and recorded automation before native Save/export/history.
+- Captured instrument edit ownership, newer-text/keymap retention, Carry and
+  Release Node controls, and unchanged instrument edits preserving Redo.
+- Retained Core Audio settings with separate revision guards, stable device UIDs,
+  rescan retention and negotiated rate/buffer readback. A candidate output is
+  prepared before the previous output is stopped. No system default is changed.
+
+## Qualification
+
+All evidence below is local under `bin/mac-parity-current/evidence/`; build products,
+user songs, screenshots and private runtime files are excluded from the PR.
+
+| Checkpoint | Evidence |
+| --- | --- |
+| Full build 1, 2026-10-28 07:17:23 UTC | Build passed; 135/135 CTest tests and 38/38 interface groups passed; complete app socket and parity socket suites passed. |
+| Full build 1 computer use | MIDI raw text retained through Arm; named layouts and independent Graph Curve; precise note edit and Undo during looped playback with zero reported overruns. |
+| Full build 2, 2026-10-28 12:37:21 UTC | Build passed with unchanged frozen source hashes; 135/135 CTest tests, 38/38 interface groups, app socket and parity socket suites passed. Live precise-note publication/history/refusal test passed on explicitly selected BlackHole 2ch. |
+| Full build 2 computer use | Audio refresh retained the selected endpoint and switch reported 48 kHz/128 frames; song automation invalid-input retention, Undo/Redo and Command-S; instrument Carry/Release Node and bank handoff; Activity point relocation, saved-field completion, search, freeze, trace keyboard navigation and source opening. |
+| Full build 3, 2026-10-29 03:56:26 UTC, rebased on current main | Build and signature verification passed with 2,159 frozen source/test files unchanged; 138/138 CTest tests, 39/39 interface groups, 6/6 API inventory checks, app socket and Mac parity socket suites passed. The live precise-note publication/history/refusal test passed on BlackHole 2ch. |
+| Full build 3 computer use | Song automation numeric edit and immediate Command-S updated both the timeline accessibility value and saved project. Recorded-point raw text remained visible after invalid input and refresh; the corrected value was confirmed by API readback. Command search opened the Gate inspector alongside Graph Curve and Parameter Activity. |
+
+Saved-project and API readback confirmed the UI edits, including a recorded point
+at frame 12000 with native value -7. The first build-2 QA process ended during a
+pause in testing, without a crash report; history/persistence tests were repeated
+in a newly launched process with verified inspection flags. All test apps used
+separate bundle identities and disposable songs. No musician process was replaced.
+The GUI observations do not establish sustained 60 fps or physical-device latency.
+
+Build 3 app source fingerprint: `dceb7bea65d6eb4d7a70ca1a1a3d8c6758570a2fb4aee6e1f9388f79ee775cf6`.
+Build 3 executable SHA-256 before assigning the QA bundle identity: `ab20eb6426ff18101328ae4fdd78e28318e837c7ffb0a17dfc7708e40dbf8d40`.
+The complete advertised read/write inventory matched the updated reviewed baseline.
+A computer-use connection timed out during command-palette dismissal; the app
+continued responding to its socket, and reconnecting the tool restored UI access.
+
+Full builds are at least one hour apart, with computer-use validation after each.
+Swift type checks and the interface harness are separate from full app builds.
+
+## Context-pane checkpoint, 2026-10-30
+
+Main was fetched again before this checkpoint; it remains `d1b52ade532d2d8fd9308a374ad61dd91ec7968c`.
+The full build started at 05:19:04 UTC, more than 25 hours after build 3, and
+completed successfully at 05:21:56 UTC. Bundle signature verification passed and
+2,127 frozen source/test files were unchanged through that build.
+
+- All 39 native interface groups passed, including new context-menu identity,
+  retained-control, disabled-action, 80-sample catalogue and atomic layout tests.
+- All six API inventory checks and the complete app socket suite passed.
+  The focused Mac parity socket suite passed,
+  including the new context snapshot and saved-layout visibility checks.
+- CTest passed 137/138 tests in its first run. The real CoreMIDI loopback test
+  reported `Receive all five MIDI events` while the GUI QA process was running.
+  After closing that process, the isolated MIDI rerun passed. The initial failure
+  remains recorded; concurrency is not established as its cause.
+- Computer use in the separate `qa4` inspection bundle confirmed step changes in
+  both selectors; hide/show reclaiming width; retained sample-name text, caret and
+  focus across toggles; restored hidden-layout visibility; retained text after
+  reopening a sample inspector hidden by layout restore; context Add group followed
+  by Undo restoring the bus count; and Mixer-to-song-graph navigation updating the
+  pane and focusing the graph. Readback confirmed presentation changes did not
+  change song data.
+
+Build 4 source fingerprint: `7858155009cd228810c9092f6dcbc5efc03cc765c75ccf0c193f8875f2af61d8`.
+Executable SHA-256 before QA identity signing: `16cf6d00570f07fd7abf7debfc06f5af90acbfef109851380cbd8a42eefa972e`.
+After those desktop checks, one additional line makes the toggle's accessibility
+label follow its current Show/Hide action instead of the image's initial label.
+The complete Swift application type-check passed after that change. It was not
+followed by another full build inside the hour; the build fingerprint above
+identifies the binary actually exercised. Reports and API documentation are also
+updated separately from that binary. This remains bounded functional evidence,
+not sustained presentation or physical-device qualification.
+
+## Greptile review fixes and build 5 — 2026-10-30
+
+The five initial findings are fixed in `b56687e22`: song-automation reads and
+precise-note checks settle waiting Save/close/history actions; pattern and graph
+curve fields retain ownership of their original point; Core Audio schema methods
+are application-only; and song point edits preserve untouched native values and
+exact frames. Regressions cover delayed success/failure, newer and invalid input,
+mouse/keyboard selection, deletion, native range boundaries and precision.
+
+Full build 5 began at 06:21:16 UTC, more than one hour after build 4, and completed
+at 06:23:56 UTC from exactly `b56687e22`. All 3,521 tracked files were unchanged
+through the build and the copied QA bundle's signature verified. Computer use in
+`qa5` confirmed a time-only edit preserved the exact native value and second
+point; invalid pattern fields survived a canvas click without changing selected
+point ownership; correcting the value updated only point 0; and Command-S
+completed on the disposable `QA5-Review.screamseq` project.
+
+The next review reported a Tab-focus trap while curve fields were invalid. It was
+reproduced with computer use in build 5 and then corrected: Tab/Shift-Tab leave
+the canvas while point selection remains guarded. All 39 interface groups and a
+complete application type-check pass after this correction. The native tests use
+actual NSWindow key-view traversal in both curve editors. This last focus change
+is not in build 5; no second full build was run inside the hour.
+
+Build 5 source fingerprint: `2481d804877cebd20afac1d45a2f4c1a161ef7401557c75407b093266cb4d2b1`.
+Executable SHA-256 before QA identity signing: `e3ff43777fa3763a792b074c1d099fafb4bcd026b92dfe1b0e2bbb0060cb42eb`.
+The unpublished keyboard API work was set aside for this build and is not part
+of this review checkpoint. Broader parity limits below remain unchanged.
+
+## Keyboard, native editor API and retained Song Settings — 2026-10-30
+
+This source batch adds `workspace.keyboard.set`, the optional upper-octave C,
+shared command-palette Play/Stop bindings (including disabled and multi-key
+bindings), local text/menu/formula ownership, and guarded retained preference
+fields. Held-note release retains the pitch, instrument and channel captured at
+key-down after a mapping change. Preference edits leave song history unchanged.
+
+`plugin.editor.open/close` now use the existing rack host. Strict admission,
+revision guards, stable identity replies, repeated opening/closing and parameter
+preview preservation are covered. Closing a stopped native editor drains its
+accepted processor-input prefix before a later Undo; otherwise an older pending
+VST3 editor value could overwrite that Undo. State capture is limited to a joined,
+stopped processor and its returned effective state is not stored as the musical
+baseline. A retained recording take bypasses this drain and keeps original input.
+
+Song Settings is now a retained modeless window. Invalid/refused fields, hidden
+window drafts, stale targets and text entered during pending reads or writes are
+preserved. Requests contain only changed fields. Save/export/history wait for
+pending and valid newer drafts; failures settle their waiting actions. An
+uncertain write cannot replay until current state is read and explicitly accepted.
+
+Validation before the next permitted full build:
+
+- All 41 AppKit interface groups pass, including held-note release across mapping
+  changes, invalid/stale settings, delayed completion with newer input, explicit
+  uncertain-result review, failed initial reads and hidden-window retention.
+- Complete Swift application type-check and six schema/inventory checks pass.
+- The complete windowless socket suite passes against a freshly linked test host,
+  including strict/stale rack-editor requests, preview retention, built-in editor
+  refusal, no-op close and request replay. The app-only keyboard path awaits the
+  next integrated application build.
+- The native session and plugin CTest targets pass. Native fixture UI tests cover
+  repeated windows, strict admission, unchanged previews, manual editing followed
+  by close and one Undo restoring exact saved bytes.
+- The native UI/BlackHole lifecycle suite passes with 512-frame buffers, including
+  close during retained capture without changing original events, rejection of
+  opening during the take, recovery, live Keep/Undo/Redo, stopped verification and
+  save/reopen. The test verifies unchanged system output and buffer size. This is
+  fixture evidence, not physical-device or commercial-plugin qualification.
+
+Logs are under `bin/mac-parity-current/evidence/`: `interface-song-settings-final.log`,
+`typecheck-song-settings-final.log`, `test-plugin-editor-final.log`,
+`test-plugin-editor-flush.log`, `socket-plugin-editors-windowless-final.log`
+and `api-inventory-keyboard-plugin.log`.
+These additions are newer than full build 5. Application socket and computer-use
+qualification of the integrated binary remain pending; the next full build cannot
+start before 07:21:16 UTC under the one-build-per-hour limit.
+
+### Follow-up read completion and recorded source navigation
+
+The next Greptile review found that typing during the initial Song Settings read
+left all other fields empty. Read completion now fills each untouched field while
+preserving that field's newer generation or active composition. The regression
+queues Save after an early title edit, then verifies that only the title is written
+and the untouched fractional tempo, ticks and channel count are loaded unchanged.
+A deliberately cleared numeric field stays invalid instead of being filled in.
+
+Selecting a recorded point in Parameter Activity now establishes its stable
+plugin/parameter source link, and clearing selection retires that link. This fixes
+the previously nonfunctional Open source action for recorded table rows. A native
+interface regression exercises selection, opening and deselection. Desktop
+confirmation remains part of the next full-build qualification.
+
+The subsequent review identified a source-ownership regression: a recorded-table
+refresh could replace a newer frozen-trace selection. Refresh now updates a
+source link only when the table owns it. Targeted native interface regressions
+pass for no-row refreshes, trace selection during an outstanding read, removed
+rows, recorded-origin trace points and table-owned time edits/reordering. The
+full application build and desktop confirmation follow this source checkpoint.
+
+### Full build 6 and integrated follow-up
+
+Full build 6 started at 07:25:00 UTC on `b87371d8b`, more than an hour after
+build 5. All 3,527 tracked files remained unchanged through the build; bundle
+signature verification passed. The fingerprint is
+`4d26ec8340a9597c4cb790604c0bdc9004e8e7ce79a135e6bbe219220fb86f9b`.
+The complete application socket suite passes, including the rack editor API.
+
+Computer use in the separately identified QA6 app verified populated Song
+Settings, invalid-field refusal, hidden/reopened draft retention, Command-S
+completion after correction and Undo restoring the original title/tempo.
+Keyboard settings retain invalid mappings and accept the default optional top C.
+The native-editor API opened Apple's AULowpass window visibly and closed it
+without changing document data. An accessibility lookup timed out after hiding
+Song Settings; focusing a workspace panel restored computer-use access while
+the app continued responding through its API.
+
+The integrated Mac parity socket test uncovered a separate Return-binding
+collision with the graph's local Open plugin shortcut. The follow-up source fix
+allows that local binding to coexist with Return transport, which already only
+handles Return in PatternView; true global collisions still reject. Focused
+keyboard interface regressions and full application Swift type-checking pass.
+This fix is newer than build 6 and still needs integrated app qualification;
+no second full build is permitted before 08:25:00 UTC. The failed integrated
+receipt is retained as `socket-build6-mac-parity.log`.
+
+Greptile's review of `b87371d8b` completed at 07:29:04 UTC: 73 files, zero new
+comments, confidence 5/5, all eight threads resolved. The later Return-binding
+fix requires a fresh review of its own commit.
+
+## Explicit VST3 location repair follow-up — 2026-10-30
+
+Added the six shared rack/graph `plugin.path.get/scan/set` operations, a private
+verified module cache, and retained native Plugin location windows. Explicit
+isolated scanning ties the matching class/role to the current executable SHA-256;
+reconnect validates saved state before stopping playback and changing only the
+selected stored path. Chronological Undo also preserves the old Windows hint
+when automatic resolution had already found the same Mac module. Reads/scans/dry
+runs do not drain unrelated native input in the application wrapper. AU identity
+remains registered component identity, without format conversion.
+
+The editor captures document/processor identity and a revision, retains newer
+path input and candidate selection through asynchronous replies, and requires
+explicit readback/acknowledgement after an unknown outcome. Closing/reopening
+retains the draft. Scanning never silently chooses the first cached candidate.
+
+Targeted validation before the next full build:
+
+- Seven CTest groups passed: session, unified-history, signal-graph-session,
+  plugin-trust, plugin-inventory, plugin-locations and plugin-paths.
+- 42/42 native interface groups passed, including delayed plugin-location reads,
+  stale writes, explicit uncertain-result review and changed-document ownership.
+- Full Swift application type-checking and six API inventory checks passed.
+- The complete existing windowless socket suite passed; the new focused socket
+  path suite then passed real scanning, hash/refusal receipts, retained preview,
+  dry run, exact rack/graph state preservation, no-op and chronological Undo/Redo.
+- Direct native fixture tests also cover original hints, equal runtime paths,
+  unknown-field preservation and native save/reopen. Cache tests cover changed
+  executables/metadata, failed scans, canonical aliases and private cache files.
+
+Evidence is under `bin/mac-parity-current/evidence/` (`*plugin-path*`,
+`interface-plugin-path-all.log`, `test-plugin-path-validation.log`). Integrated
+bundle, desktop and latest-commit Greptile qualification remain pending at this
+source checkpoint; the preceding build 6 is not evidence for these changes.
+
+## Build 7 desktop and review checkpoint — 2026-10-30
+
+Full build 7 started at 08:29:21 UTC and completed at 08:33:05 UTC on
+`6c981f6f3`, more than an hour after build 6. Its 3,534 tracked source files
+remained unchanged; bundle signature verification passed. Source fingerprint:
+`71534bcd3b24ae2faf622677af1af70a9f7854eaa77c23a6dd1091a51c330edf`.
+Executable SHA-256:
+`a317e61d0a6f2f61e19a508ca26158ee6948c2e99250bb5788eba0d76991f6e6`.
+
+Computer use in unique QA bundle `org.resonance.tracker.qa.parity.20261030b7`
+verified missing Windows rack and graph paths, refused scan draft retention,
+explicit scan/candidate choice, dry check, reconnect, retained text after
+close/reopen, and main-window Command-Z/Command-Shift-Z restoring the old/new
+rack paths. Both repairs survived saving a separate song and reopening with the
+native Open dialog. The app showed no missing-plugin error after reopening.
+
+The integrated Mac parity socket checks now pass unchanged, including the
+Return binding alongside the graph's local binding. Real keyboard Return started
+and stopped the QA song on explicitly selected BlackHole 2ch at 48 kHz / 128
+frames. QA keyboard, loop and output settings were restored, and the disposable
+app was closed. System audio defaults were unchanged. No sustained performance
+or commercial-plugin qualification is claimed. After workspace preset checks,
+the main window was compressed; native Zoom restored its visible graph layout,
+and Pattern focus presented the grid. Broader workspace geometry remains open.
+
+The application socket suite exposed a preflight receipt lost by the final
+reply path. Greptile independently reported the same issue. `c1d609f51` forwards
+the already-prepared response, preserving `writeOutcome: notCommitted`, and the
+review thread is resolved. Complete Swift type-checking passes. This fix is
+**newer than build 7**, so the failed receipt assertion remains recorded in
+`socket-build7-app.log`; it is not reported as a passing full app suite. The
+existing suite passed through request-replay checks before that assertion.
+Direct-session and windowless path tests cover the correct receipt and remaining
+path contracts. Another full build cannot start before 09:29:21 UTC.
+
+Long candidate paths also now compress/truncate within the location inspector.
+A native interface regression with a 1,200-character path passes without forcing
+the initial window wider, alongside the retained-draft tests. Complete Swift
+application type-checking passes; this presentation follow-up is also newer than
+the packaged binary.
+
+Receipts: `build-7-identity.json`, `qa7-desktop-validation.json`,
+`socket-build7-mac-parity.log`, `typecheck-path-receipt.log`,
+`interface-plugin-location-width.log`, and `typecheck-plugin-path-width.log` in
+`bin/mac-parity-current/evidence/`.
+
+## Retained Mixer fields and location revisions — 2026-10-30
+
+The Windows `NativeCommandApplicationTests`, `AutomaticEditsApplicationTests`
+and `DraftImportRetentionTests` exposed additional Mac ownership gaps. Mixer
+Details now retains invalid name/color/timing and numeric text, output choices,
+and mute/solo intent; valid changed fields submit as one guarded transaction after
+an idle delay or Return. Unchanged rounded fields are omitted so they cannot alter
+native precision. Invalid fields block bus changes and structural commands.
+
+Strip gain text belongs to its stable bus even when scrolled out of view. It is
+not recycled or restored to an old number on validation failure. Explicit Reload
+reads accepted state before releasing retained work and cancels audition only for
+supported numeric/boolean controls. Newer text, input-method composition and
+old-document completions cannot be erased or authorized by delayed responses.
+
+Mixer completion now participates in Save, Save As, export, document history,
+document departure and Quit. Pending previews finish as one durable gesture;
+failed reads/writes settle waiting actions without proceeding. Send forms retain
+their explicit Set-send behavior and block departure while unfinished. Adding a
+bus opens its stable identity in Details and focuses its name.
+
+Plugin location read, scan and reconnect completions also retain the older
+revision when newer text or candidate choices arrive. Interrupted scans require
+readback; a reviewed result cannot authorize fields changed after that read.
+These checks apply to both rack and graph location windows.
+
+Validation: all 42 native interface groups passed, followed by the focused Mixer
+checks after the two-stage Reload revision fix. Whole-application Swift type
+checking passed. The complete windowless socket suite passed, including a new
+name/color batch check with exact untouched gain, one-step Undo/Redo and saved
+native metadata. Native tests cover failed reads/writes, newer inputs during
+write/read/preview release, retained strip recycling, composition and completion
+of waiting Save actions. Logs: `interface-mixer-location-all.log`,
+`interface-mixer-raw.log`, `typecheck-mixer-location.log` and
+`socket-mixer-raw-windowless.log` under the evidence directory.
+
+This source follow-up is newer than build 7. It does not claim packaged desktop
+qualification until the next hourly build and computer-use pass. The shared
+compact graph level control retains its existing transaction behavior; its
+broader refusal/retention audit remains open.
+
+## Recorder input identity follow-up — 2026-10-30
+
+Recorder device menus now create a separate native item for each hardware ID,
+including devices with identical names. Refresh retains a missing selected input
+and its channel pair as disconnected instead of choosing the default. Record is
+unavailable until that ID returns or the musician explicitly chooses another
+input. A retained take from a disconnected input remains importable; discarding
+it does not make the missing input available for a new take.
+
+The native `sample-recording` interface group passes duplicate-name, reorder,
+disconnection/reconnection, channel-pair and complete setup-retention regressions.
+Whole-application Swift type checking also passes. This follow-up is newer than
+build 7; recorder desktop and keyboard qualification remain pending. Evidence:
+`interface-recorder-devices.log` and `typecheck-recorder-devices.log`.
+
+## Build 8 desktop qualification and Mixer review follow-up — 2026-10-30
+
+Build 8 started at 09:29:37 UTC, more than one hour after build 7, and succeeded
+at 09:32:17 UTC on `f4cdc25845d29971531e477bec26d679f7fb539c`. All 3534 tracked
+source hashes stayed unchanged during the build. The complete packaged-app socket
+suite passed, including refused rack/graph reconnect receipts and the new atomic
+Mixer name/color transaction. The copied, separately identified QA bundle ran
+with inspection and automation enabled against a disposable project.
+
+Computer use confirmed retained invalid Mixer fields, corrected name/color Save,
+one-step document Undo/Redo, Add return with stable selection/name focus, and
+native Save/Open preserving the exact untouched gain `-3.2718281828`. Final live
+Mixer state matched the saved native metadata. The dynamic left pane exposed the
+Mixer actions. A 1230-character saved Windows plugin path stayed within the
+700-point location dialog; invalid scanning, readback, candidate check and rack
+reconnect behaved as expected. The repaired rack and graph paths survived reopen;
+graph repair itself used the API in this pass. Recorder checks selected BlackHole
+2ch explicitly and exercised setup refresh without starting capture or changing
+system audio defaults. Evidence: `build-8-identity.json`, `socket-build8-app.log`,
+`qa8-desktop-validation.json` and `qa8-final-state.json`.
+
+Two Greptile findings were reproduced in the built app: a pending send and bus
+name blocked each other, and a second bus could accept gain text while the first
+bus held an invalid draft. The source follow-up lets Set send finish while
+preserving other raw fields, then completes those fields against the owned send
+revision. It also guards native strip text admission before accepting another
+bus's input and preserves table selection after a successful control commit.
+These fixes are newer than build 8 and are not covered by its desktop evidence.
+All 42 native interface groups passed; focused Mixer regressions additionally
+cover equivalent numeric send spelling. Tests exercise real AppKit field-editor
+input, independent send completion, retained invalid color, correction at the
+owned revision, send replacement without duplication, newer input during a write
+and stable table selection. Complete application Swift type checking passed.
+Evidence: `interface-mixer-review-all.log`, `interface-mixer-review-final.log`
+and `typecheck-mixer-review-final.log`.
+
+The initial main window was visibly compressed until native Zoom. Recorder name
+entry survived Refresh after Tab completion, but reverted when clicking the
+instrument checkbox and Refresh directly from active editing. Both presentation
+and active-field retention issues remain open; no performance qualification is
+claimed from this pass.
+
+## Sample completion and recorder focus follow-up — 2026-10-30
+
+The sample name/rate/volume/pan form now uses guarded `sample.patch` requests
+instead of an unguarded direct bridge callback. Valid edits save automatically;
+Save/export/history/departure wait for successful same-revision readback before
+continuing. Requests capture both the slot and stable sample identity. Invalid
+batches, composition, newer input and failed readback retain their raw fields
+and original revision. Untouched fields stay absent from the patch, preserving
+sample panning inheritance and legacy tuning semantics. Explicit Reload stages
+the current fields before replacing a draft; Discard drafts releases local work
+when its original sample has disappeared. Native numeric displays use plain
+integer text rather than locale grouping that the strict parser cannot accept.
+
+Sample settings and loops complete in order. Only a verified owned settings
+write advances an unchanged loop draft. Definite busy loop retries now retain
+the exact submitted payload; newer typed fields and uncertain outcomes cannot
+be automatically replayed or rebased. Loop Reload reads current state and keeps
+the draft on missing fields, read failure or newer input. This ports the settings
+and loop portions of the Windows automatic-edit and staged-readback changes;
+other sample audio workflows, particularly refused drawing strokes, remain open.
+
+Recorder setup fields now stay editable while device/status requests and capture
+run. Add captures the current native field-editor text, refuses active input
+composition and preserves newer setup text if the result arrives later. A real
+AppKit field-editor regression first reproduced build 8's name loss and passes
+after the fix. Startup assembly also defers context-panel layout until the root
+stack is complete and preserves the chosen/restored window frame; this geometry
+change still requires desktop confirmation.
+
+Focused sample settings, recorder and core-layout checks pass, including actual
+native typing, caret/selection preservation, waiting Save, settings-plus-loops
+ordering, changed-target completion, malformed readback and exact busy retry.
+All 43 native interface groups and complete application Swift type checking pass.
+Evidence: `interface-sample-completion-final.log`,
+`interface-sample-completion-all.log`, `typecheck-sample-completion-final.log`,
+and the reproduced recorder failure in `interface-recorder-name-red.log`.
+This source follow-up is newer
+than build 8 and awaits the next hourly packaged build and computer-use pass.
+
+## Build 9 and retained drawing follow-up — 2026-10-30
+
+Build 9 passed on `d16357bc58121f93b69969d9499adfc54eb3e276`, including
+signature verification and the complete packaged-application socket suite. It
+started at 10:42:00 UTC, over an hour after build 8. All 3,535 tracked source files
+stayed unchanged. Its source fingerprint is
+`3b99837cbbc1ea75d6bb447d2395b9910b2d64f45c170ab33955ae06e42465fd`.
+Greptile reviewed that exact commit with zero findings and all twelve threads
+resolved. Computer use could not inspect the running separate QA9 bundle because
+the Mac was locked; the unlock request remains pending. Build 9 desktop
+qualification is incomplete. Evidence: `build-9-identity.json`,
+`socket-build9-app.log`, and `greptile-d16357bc5-receipt.json`.
+
+The next source follow-up ports retained released-stroke behavior from Windows
+commit `6b4bef32dc5a1a6a52cfa5be6b0072af754069d9` and the staged completion
+checks in `SampleMutation.inc`. A submitted stroke keeps its exact points,
+original sample identity, channels, viewport and revision until same-revision
+metadata and waveform readback succeed. Failures keep the overlay and settle
+waiting actions. Navigation and Escape cannot silently drop submitted work.
+Only an explicit busy/not-committed receipt enables a manual exact-payload retry.
+Review reads current state without replaying a write; Accept checks the reviewed
+revision again and preserves newer raw fields. Discard clears only the local
+stroke. Late callbacks cannot release a newer sample's busy state. Ordinary
+waveform replies now require matching coordinates, channels and complete finite
+peaks before being reported loaded.
+
+Native interface regressions cover refused and ambiguous writes, successful
+writes with failed readback, pending Save, viewport/channel/mode preservation,
+malformed metadata and waveforms, changed review revisions, original-target
+retries, newer field retention and retired callbacks. All 43 native interface
+groups and complete application Swift type checking pass. Evidence:
+`interface-drawing-metadata-all.log`, `interface-drawing-metadata-final.log`,
+`typecheck-drawing-metadata-final.log`, and the live API response-shape check
+`qa9-drawing-read-shape.json`. This source is newer than build 9. No DSP or PCM storage implementation changed; the existing shared
+`sample.draw` boundary still owns exact PCM, Undo and persistence. Packaged
+desktop qualification of this follow-up, numeric staged-point drawing controls
+and general staged viewport/selection navigation remain open.
+
+## Staged viewport and channel navigation — 2026-10-30
+
+The Mac sample view now stages viewport and channel reads before changing its
+accepted range, channel menu or peaks. This ports the viewport/channel cases in
+Windows `SampleReadback.inc` and `SampleReadbackApplicationTests.inc`. A complete
+reply must match the captured sample identity, document/revision, frame range,
+channels and bins. Failure, malformed or non-finite peaks, newer raw fields and
+active composition leave the accepted presentation and focus intact. Raw sample
+fields keep their original revision; these read-only operations do not write
+music or create history.
+
+A single in-flight read remains bounded while newer requests coalesce. Repeated
+zoom/pan gestures accumulate intent against the pending range. Draw mode keeps
+that pending target; no drawing gesture begins while navigation is unresolved.
+Agent viewport context still reports the accepted view. Empty samples adopt
+valid channel choices without inventing waveform data. Sample replacement and
+metadata refresh retire obsolete navigation replies before adoption.
+
+Focused native tests exercise failure and malformed replies, changed revisions,
+newer raw input, active AppKit composition/caret/focus, original target identity,
+rapid zoom/channel changes, empty samples and retired callbacks. All 43 native
+interface groups and complete application Swift type checking pass. Evidence:
+`interface-sample-navigation-all.log`, `interface-sample-navigation-final.log`
+and `typecheck-sample-navigation-final.log`. This source is newer than build 9 and still needs
+packaged computer-use validation. The next source checkpoint covers target
+selection/reload below; numeric staged-point drawing is covered in the later
+source checkpoint below.
+
+## Staged sample selection and reload — 2026-10-30
+
+The sample picker, dynamic context pane and cursor-follow now share a staged
+selection path. The existing sample, picker choice, viewport, peaks and raw
+fields remain visible until complete metadata and waveform reads match the
+captured stable identity, document and revision. A separate Reload sample action
+discards local drafts only after those reads succeed. It refuses a submitted
+stroke awaiting outcome review. Automatic refresh preserves raw settings, loop
+and selection fields; a superseded unsubmitted gesture survives failed reads
+and retires only when its replacement presentation is ready.
+
+Newer text, processing options, composition, native focus/caret, view changes,
+target removal and document replacement invalidate pending adoption. One read
+sequence runs at a time; newer choices replace queued intent. Returning to a
+stable sample restores its last accepted viewport and selection, clamped to its
+current length. Only successful native-picker selection changes the pattern's
+input sample; context-pane selection and cursor-follow remain inspection.
+Settings-only completion also refreshes the sample duration description without
+rebasing waveform evidence.
+
+`SampleSelectionInterfaceTests.swift` covers both read stages for failed and
+malformed replies, wrong identities/revisions/documents, newer raw fields and
+options, removed targets, explicit retry, retained strokes, coalesced choices,
+cached regions, shorter samples and retired callbacks. Native field-editor
+cases exercise new focus, movement between controls sharing AppKit's field
+editor, and composition. All 43 native interface groups and complete application
+Swift type checking pass, recorded in `interface-sample-selection-final-all.log`
+and `typecheck-sample-selection-final.log`.
+
+This source is newer than build 9. Build 9 remains running in its separate QA
+bundle; computer use again reported the Mac locked at approximately 11:42 UTC.
+No additional full build was started while its desktop validation was pending.
+The pending unlock request and the one-full-build-per-hour limit remain in force.
+
+## Numeric waveform drawing — 2026-10-30
+
+The sample editor now exposes exact frame/value staging and linear/step
+interpolation through a Numeric drawing section. Return stages a point;
+Command-Return from a drawing field or the waveform saves the batch. Repeated
+frames replace their existing staged value, and batches contain at most 4096
+finite normalized points spanning no more than 1,048,576 inclusive frames.
+Oversized spans leave the batch editable, with the rejected frame text retained
+for correction. Staging works at any zoom and changes no song data.
+The explicit Save sends one sorted `sample.draw` request through the existing
+shared editing API and its Undo/persistence implementation.
+
+Numeric batches retain their captured sample, revision, range and interpolation.
+Escape, navigation and automatic refresh cannot discard them. Newer unstaged
+frame/value text must be staged before Save. Raw drawing input and staged points
+prevent settings/loop controls from accepting a second musical form; existing
+settings/loop drafts likewise refuse new numeric input. Raw point text also
+blocks mouse/keyboard loop-handle edits before markers or fields can change,
+and joins the application's other-audio-write guard. Discard releases that
+ownership. Full sample Reload still discards the batch only after successful
+staged readback. Pointer gestures retain their existing release-to-save behavior.
+
+The existing retained drawing completion handles both batch types: definite
+not-committed failures allow exact-payload retry; accepted or unknown outcomes
+require Review/Accept or Discard. Newer numeric text and composition survive
+completion and explicit review at their original revision. The waveform overlay
+draws sparse linear or stepped segments without interpolating the stored batch
+into additional points.
+
+All 43 native interface groups and complete application Swift type checking
+pass, including both Greptile follow-ups (`interface-numeric-review-all.log`,
+`typecheck-numeric-review.log`).
+Coverage includes bounds/non-finite input, replacement at the 4096-point limit,
+coarse-zoom staging, sorted payloads, mode-preserving retry, form ownership,
+Command-Return focus scope, native composition/caret retention, the exact shared
+span limit in either staging order, and unstaged-text ownership across native
+mouse/keyboard loop edits. The existing
+shared API socket tests cover exact linear/step/channel PCM, preview, one-step
+Undo and retry behavior. This new native workflow is newer than build 9 and
+still requires packaged computer-use and save/reopen qualification. No new full
+build was started while build 9 desktop validation remained blocked by the
+locked Mac.
+
+## Remaining parity work
+
+These items are deliberately outside this checkpoint and must be resolved before
+claiming complete Windows parity:
+
+- Integrated application/socket/computer-use qualification of the newly added
+  keyboard settings, rack editor APIs and retained Song Settings.
+- Additional composing departure, panel-close and newer-input guards in other
+  editors.
+- Packaged qualification of the Mixer, sample completion, recorder focus and
+  startup-frame fixes in build 9; packaged qualification of retained drawing,
+  numeric staged-point controls, staged target selection/reload and broader
+  sample-operation/readback handling.
+- Remaining recorder/review focus, root keyboard traversal, paging and endpoint
+  presentation, including the source-tested input identity changes above.
+- Further source-by-source review of plugin/routing controls, instrument-envelope
+  navigation, recorded-point-row source links, accessibility and precise-note
+  navigation/cursor behavior.
+- Final integrated startup, workspace, recovery, long-export, reopening and
+  sustained presentation qualification across the remaining workflows.
+
+Sample recording already offers the same 60- and 300-second duration choices as
+Windows. The Mac API already separates request input timeout from a 120-second
+operation wait; the bundled client defaults to 120 seconds. Those source findings
+avoid unnecessary ports but do not replace runtime checks of long exports.
