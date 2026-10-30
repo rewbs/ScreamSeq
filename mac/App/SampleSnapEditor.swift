@@ -167,6 +167,6 @@ extension SampleEditor {
     } else {
       loopEditGeneration += 1; syncLoopMarkers(); query.resumeAutomaticEdit = true
     }
-    finishSnap(query, accepted: true, message: "Matched \(matched)/2 boundaries · \(start) → \(end)." + (query.target == .selection ? " Selection only." : " Saving loop…"))
+    finishSnap(query, accepted: true, message: "Matched \(matched)/2 boundaries · \(start) → \(end)." + (query.target == .selection ? " Selection only." : " Loop fields updated."))
   }
 }
