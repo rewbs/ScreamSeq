@@ -279,7 +279,7 @@ source checkpoint; the preceding build 6 is not evidence for these changes.
 
 ## Build 7 desktop and review checkpoint — 2026-10-30
 
-Full build 7 started at 08:29:20 UTC and completed at 08:33:05 UTC on
+Full build 7 started at 08:29:21 UTC and completed at 08:33:05 UTC on
 `6c981f6f3`, more than an hour after build 6. Its 3,534 tracked source files
 remained unchanged; bundle signature verification passed. Source fingerprint:
 `71534bcd3b24ae2faf622677af1af70a9f7854eaa77c23a6dd1091a51c330edf`.
@@ -310,7 +310,7 @@ review thread is resolved. Complete Swift type-checking passes. This fix is
 `socket-build7-app.log`; it is not reported as a passing full app suite. The
 existing suite passed through request-replay checks before that assertion.
 Direct-session and windowless path tests cover the correct receipt and remaining
-path contracts. Another full build cannot start before 09:29:20 UTC.
+path contracts. Another full build cannot start before 09:29:21 UTC.
 
 Long candidate paths also now compress/truncate within the location inspector.
 A native interface regression with a 1,200-character path passes without forcing
