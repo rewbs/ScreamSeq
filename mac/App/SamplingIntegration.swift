@@ -38,6 +38,14 @@ extension AppController {
     sampleRecordingWindow = win; win.center(); win.makeKeyAndOrderFront(nil); view.activate()
   }
   func selectRecordedSample(_ sample: Int, instrument: Int) {
+    // Completion may arrive while the musician edits another asset. Creating
+    // audio does not authorize replacing that editor's retained raw input.
+    guard !sampleEditor.hasDraft, instrument == 0 || !instrumentEditor.hasDraft else {
+      statusLabel.stringValue = "Created sample \(sample). Finish the current asset edit before selecting it."
+      return
+    }
+    guard model.samples.contains(where: { $0["index"] as? Int == sample }),
+      instrument == 0 || model.instruments.contains(where: { $0["index"] as? Int == instrument }) else { return }
     sampleEditor.index = sample
     if instrument > 0 { instrumentEditor.index = instrument; patternView.instrument = instrument }
     else if model.instruments.isEmpty { patternView.instrument = sample }
