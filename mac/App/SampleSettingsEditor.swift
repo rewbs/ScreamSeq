@@ -46,6 +46,10 @@ extension SampleEditor {
   }
   func finishAutomaticEdit(_ done: @escaping (Bool) -> Void) {
     guard !hasSampleComposition else { settingsStatus.stringValue = "Finish composing the sample value before continuing."; done(false); return }
+    if sampleOperation?.busy == true {
+      operationWaiters.append { [weak self] accepted in if accepted { self?.finishAutomaticEdit(done) } else { done(false) } }; return
+    }
+    guard !protectsSampleOperation else { operationStatus.stringValue = "Review the retained operation or Reload sample before continuing."; done(false); return }
     if drawingBusy {
       drawingWaiters.append { [weak self] accepted in if accepted { self?.finishAutomaticEdit(done) } else { done(false) } }; return
     }
@@ -116,7 +120,7 @@ extension SampleEditor {
     settingsDraft.reset(); settingsDraft.begin(index: index)(); settingsRevision = revision
   }
   func discardSampleDrafts() {
-    guard !settingsPending, !loopsBusy, !drawingBusy, !processing, !clipboardBusy, !crossfadeBusy, !hasSampleComposition else { return }
+    guard sampleOperation == nil, !settingsPending, !loopsBusy, !drawingBusy, !processing, !clipboardBusy, !crossfadeBusy, !hasSampleComposition else { return }
     // The explicit discard also releases a draft whose original sample was
     // deleted. Suppress focus-end submission before retiring local ownership.
     settingsPending = true; settingsWork?.cancel(); settingsWork = nil

@@ -1138,6 +1138,9 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
     sampleEditor.onRequest = { [weak self] method, params, reply in
       guard let self else { return }
+      if !method.hasSuffix(".get"), self.sampleEditor.protectsSampleOperation {
+        reply(AutomationServer.notAdmittedBusy("Review the retained sample operation before editing audio.")); return
+      }
       if !method.hasSuffix(".get"), self.sampleEditor.protectsDrawingInput {
         reply(AutomationServer.notAdmittedBusy("Save, review or discard the drawing before editing audio.")); return
       }

@@ -80,6 +80,7 @@ extension SampleEditor {
     sustainReverse.state = info["sustainReverse"] as? Bool == true ? .on : .off
   }
   func reloadLoops() {
+    guard !protectsSampleOperation else { operationStatus.stringValue = "Review the sample operation before reloading loops."; return }
     if drawingDraft?.numeric == true || hasNumericDrawingInput { drawingStatus.stringValue = "Save or discard drawing input before reloading loops."; return }
     guard !loopsBusy, !settingsPending, !hasSampleComposition, let onRequest else { return }
     loopSaveWork?.cancel();loopSaveWork=nil
@@ -109,6 +110,7 @@ extension SampleEditor {
   }
   func setLoops(dryRun: Bool, attempt: Int = 0) {
     guard !loopsBusy else { return }
+    guard !protectsSampleOperation else { operationStatus.stringValue = "Review the retained sample operation before changing loops."; finishLoopWaiters(false); return }
     guard !protectsDrawingInput else { drawingStatus.stringValue = "Save or discard drawing input before changing loops."; finishLoopWaiters(false); return }
     guard !loopNeedsReload, !drawingBusy, waveform.stroke.isEmpty, !hasSampleComposition, onRequest != nil, let revision = loopDraftRevision else { finishLoopWaiters(false); return }
     if settingsPending || settingsDraft.hasDraft || settingsNeedsReload {

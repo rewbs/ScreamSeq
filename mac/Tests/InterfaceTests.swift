@@ -173,6 +173,7 @@ struct InterfaceFailure: Error { let message: String }
     let recovery = try recoveryChecks()
     let commands = try patternCommandsChecks()
     try sampleCrossfadeChecks()
+    try sampleOperationChecks()
     try sampleLoopChecks()
     try sampleSnapChecks()
     let zoomedSample = try waveformChecks()
@@ -199,68 +200,8 @@ struct InterfaceFailure: Error { let message: String }
     sample.selectionEnd.stringValue = "301"
     var sampleRequests = [(String, [String: Any])]()
     var sampleReplies = [([String: Any]) -> Void]()
-    sample.onRequest = { method, params, reply in sampleRequests.append((method, params)); sampleReplies.append(reply) }
-    sample.operationPicker.selectItem(at: 2); sample.curvePicker.selectItem(at: 2); sample.exponent.stringValue = "2.5"
-    sample.updateProcessingOptions(); sample.process(dryRun: true)
-    try require(sampleRequests.count == 1 && sampleRequests[0].0 == "sample.process" && sampleRequests[0].1["exponent"] as? Double == 2.5 && sampleRequests[0].1["start"] as? Int == 300, "Native fades send exact controls through the shared API")
-    try require(!sample.previewButton.isEnabled && !sample.processButton.isEnabled, "Processing cannot be submitted twice while pending")
-    sampleReplies.removeFirst()(["result": ["revision": "sample-preview", "data": ["changedFrames": 1, "peakAfter": 0.0]]])
-    sample.process(dryRun: false)
-    try require(sampleRequests.last?.1["expectedRevision"] as? String == "sample-preview", "Apply uses the preview revision rather than silently rebasing it")
-    sampleReplies.removeFirst()(["error": ["code": -32001, "message": "Song changed"]])
-    try require(sample.processingStatus.stringValue == "Song changed", "Stale sample previews surface the API error")
-    sample.operationPicker.selectItem(at: 6); sample.updateProcessingOptions(); sample.smoothing.stringValue = "4"; sample.process(dryRun: true)
-    try require(sampleRequests.count == 2 && sample.processingStatus.stringValue.contains("odd"), "Invalid smoothing is rejected before dispatch")
-    sample.smoothing.stringValue = "5"; sample.process(dryRun: true)
-    sampleReplies.removeFirst()(["result": ["revision": "old-sample", "data": ["changedFrames": 0]]])
-    sample.index = 2; sample.index = 1; sample.selectionStart.stringValue = "300"; sample.selectionEnd.stringValue = "301"; sample.process(dryRun: false)
-    try require(sampleRequests.last?.1["expectedRevision"] == nil, "Changing sample selection retires its preview")
-    sampleReplies.removeFirst()(["result": ["revision": "new-sample", "data": ["changedFrames": 1]]])
-    sample.selectionStart.stringValue = "300"; sample.selectionEnd.stringValue = "300"; sample.setRange()
-    try require(sample.waveform.selection == 300...300, "A zero-length range is a retained insertion cursor")
-    var clipboardCount = sampleRequests.count
-    sample.clipboardAction("copy")
-    try require(sampleRequests.count == clipboardCount && sample.clipboardStatus.stringValue.contains("nonempty"), "Copy rejects an insertion cursor before dispatch")
-    sample.selectionEnd.stringValue = "310"; sample.setRange()
-    sample.waveform.copy(nil)
-    try require(sampleRequests.last?.0 == "sample.clipboard.copy" && sampleRequests.last?.1["start"] as? Int == 300 && sampleRequests.last?.1["end"] as? Int == 310, "Waveform Copy dispatches the exact half-open region through the API")
-    sample.waveform.cut(nil)
-    try require(sampleRequests.count == clipboardCount + 1, "Clipboard controls cannot submit twice while pending")
-    sampleReplies.removeFirst()(["result": ["revision": "copy-revision", "data": ["frames": 10, "channels": 1, "rate": 44100]]])
-    sample.pasteMode.selectItem(at: 2); sample.pasteModeChanged()
-    sample.pasteSourceGain.stringValue = "-3"; sample.pasteDestinationGain.stringValue = "-6"
-    sample.pasteClipboard(dryRun: true)
-    try require(sampleRequests.last?.0 == "sample.clipboard.get" && !sample.pasteDestinationGroup.isHidden, "Mix preview reads the clipboard identity and exposes existing-audio gain")
-    sampleReplies.removeFirst()(["result": ["revision": "clipboard-read", "data": ["clipboardId": "clipboard-A"]]])
-    try require(sampleRequests.last?.0 == "sample.paste" && sampleRequests.last?.1["sourceGainDB"] as? Double == -3 && sampleRequests.last?.1["destinationGainDB"] as? Double == -6 && sampleRequests.last?.1["expectedRevision"] as? String == "clipboard-read", "Mix preview preserves exact gains, identity and the read revision")
-    sampleReplies.removeFirst()(["result": ["revision": "paste-preview", "data": ["insertedFrames": 10, "resultFrames": 5_000_000, "clippedSamples": 2]]])
-    try require(sample.clipboardStatus.stringValue.contains("2 clipped"), "Clipping is reported before applying a paste")
-    clipboardCount = sampleRequests.count
-    sample.waveform.paste(nil)
-    try require(sampleRequests.count == clipboardCount + 1 && sampleRequests.last?.0 == "sample.paste" && sampleRequests.last?.1["clipboardId"] as? String == "clipboard-A" && sampleRequests.last?.1["expectedRevision"] as? String == "paste-preview", "Applying a matching preview freezes both document and clipboard identities without rereading")
-    sampleReplies.removeFirst()(["error": ["code": -32001, "message": "Clipboard changed"]])
-    try require(sample.clipboardStatus.stringValue == "Clipboard changed" && sample.pastePreviewID == nil, "Stale clipboard failures surface and retire the preview")
-    sample.pasteClipboard(dryRun: true)
-    sample.index = 2
-    clipboardCount = sampleRequests.count
-    sampleReplies.removeFirst()(["result": ["revision": "retired", "data": ["clipboardId": "retired"]]])
-    try require(sampleRequests.count == clipboardCount && !sample.clipboardBusy, "A delayed clipboard lookup cannot paste into a newly selected sample")
-    sample.index = 1; sample.selectionStart.stringValue = "300"; sample.selectionEnd.stringValue = "310"; sample.setRange()
-    sample.clipboardAction("cut")
-    sampleReplies.removeFirst()(["result": ["revision": "cut", "data": ["removedFrames": 10]]])
-    try require(sample.waveform.selection == 300...300, "Cut leaves an insertion cursor at the removed region")
-    sample.selectionEnd.stringValue = "310"; sample.setRange()
-    var copiedSample = 0
-    sample.onSelect = { copiedSample = $0 }
-    sample.clipboardAction("new")
-    try require(sampleRequests.last?.0 == "sample.copyToNew" && sampleRequests.last?.1["start"] as? Int == 300 && sampleRequests.last?.1["end"] as? Int == 310,
-      "Copy to new sends the selected region through the shared API")
-    sampleReplies.removeFirst()(["result": ["revision": "new-copy", "data": ["sample": 2, "frames": 10]]])
-    try require(sample.index == 2 && copiedSample == 2 && sample.waveform.selection == nil,
-      "Copy to new selects the returned slot and retires the old region")
-    sample.onSelect = nil; sample.index = 1
-    sample.pasteSourceGain.stringValue = "0"; sample.pasteDestinationGain.stringValue = "0"
-    sample.pasteMode.selectItem(at: 0); sample.pasteModeChanged()
+    // Operation completion and failure paths use realistic staged responses in
+    // sampleOperationChecks; this fixture below tests layout and navigation.
     sample.onRequest = nil
     sample.update(["name": "Long sample", "frames": 5_000_000, "channels": 2], samples: samples)
     sample.operationPicker.selectItem(at: 3); sample.curvePicker.selectItem(at: 3); sample.exponent.stringValue = "3"; sample.updateProcessingOptions()

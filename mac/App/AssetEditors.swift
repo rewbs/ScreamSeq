@@ -109,8 +109,8 @@ final class SampleEditor: NSView, NSTextFieldDelegate {
   var onSettingsRequest: ((String, [String: Any], String, @escaping ([String: Any]) -> Void) -> Void)?
   let settingsStatus = Theme.label("Changes save automatically · ⌘Z to undo", size: 11, color: Theme.muted)
   var hasLoopDraft: Bool { loopDraftBaseline != nil && loopDraftBaseline?.isEqual(rawLoopDraft) != true }
-  var hasDraft: Bool { settingsDraft.hasDraft || hasLoopDraft || settingsPending || settingsNeedsReload || loopNeedsReload || loopsBusy || drawingBusy || !waveform.stroke.isEmpty || hasNumericDrawingInput || hasSampleComposition }
-  func resetDocumentContext() { cancelSampleSelection(); sampleViewStates = [:]; resetSettingsContext(); resetDrawingContext(); sampleGeneration += 1; loopSaveWork?.cancel();loopSaveWork=nil;waveform.selectedLoopMarker=nil;waveform.draggingLoop=false; loopDraftBaseline=nil; loopDraftRevision=nil; loopPreviewSignature=nil; loopPreviewRevision=nil; savedLoopInfo=[:]; retireWaveform(); waveform.selection=nil; waveform.setViewport(nil,notify:false) }
+  var hasDraft: Bool { protectsSampleOperation || settingsDraft.hasDraft || hasLoopDraft || settingsPending || settingsNeedsReload || loopNeedsReload || loopsBusy || drawingBusy || !waveform.stroke.isEmpty || hasNumericDrawingInput || hasSampleComposition }
+  func resetDocumentContext() { resetOperationContext(); cancelSampleSelection(); sampleViewStates = [:]; resetSettingsContext(); resetDrawingContext(); sampleGeneration += 1; loopSaveWork?.cancel();loopSaveWork=nil;waveform.selectedLoopMarker=nil;waveform.draggingLoop=false; loopDraftBaseline=nil; loopDraftRevision=nil; loopPreviewSignature=nil; loopPreviewRevision=nil; savedLoopInfo=[:]; retireWaveform(); waveform.selection=nil; waveform.setViewport(nil,notify:false) }
   let waveform = WaveformView(frame: .zero),
     heading = Theme.label("Sample", size: 16, weight: .semibold),
     details = Theme.label("", size: 11, color: Theme.muted),
@@ -154,7 +154,12 @@ final class SampleEditor: NSView, NSTextFieldDelegate {
     ("Silence", "silence"), ("Trim to selection", "trim"), ("Swap channels", "swap-channels"),
     ("Copy left to right", "copy-left"), ("Copy right to left", "copy-right"), ("Average stereo channels", "stereo-average")]
   var onRequest: ((String, [String: Any], @escaping ([String: Any]) -> Void) -> Void)?
-  private(set) var processing = false
+  var sampleOperation: SampleOperation?, operationNeedsReload = false
+  var operationWaiters = [(Bool) -> Void]()
+  let operationStatus = Theme.label("", size: 11, color: Theme.muted)
+  lazy var retryOperationButton = ActionButton("Retry operation") { [weak self] in self?.retryOperation() }
+  lazy var reviewOperationButton = ActionButton("Review operation") { [weak self] in self?.reviewOperation() }
+  lazy var acceptOperationButton = ActionButton("Accept reviewed operation") { [weak self] in self?.acceptOperationReview() }
   var waveformInFlight = false, waveformPending = false, waveformAttempts = 0
   var waveformQuery: SampleWaveformQuery?
   var waveformChannels = "both"
@@ -194,7 +199,6 @@ final class SampleEditor: NSView, NSTextFieldDelegate {
   let crossfadeFrames = numberField(64, width: 90, label: "Loop crossfade length in frames")
   let crossfadeInfo = Theme.label("Uses the saved loop settings; loop edits save automatically.", size: 11, color: Theme.muted)
   let crossfadeStatus = Theme.label("Preview shows audio changes and the resulting loop period.", size: 11, color: Theme.muted)
-  var crossfadeBusy = false
   var crossfadePreviewSignature: NSDictionary?, crossfadePreviewRevision: String?
   lazy var crossfadePreviewButton = ActionButton("Preview crossfade") { [weak self] in self?.crossfade(dryRun:true) }
   lazy var crossfadeApplyButton = ActionButton("Apply crossfade") { [weak self] in self?.crossfade(dryRun:false) }
@@ -204,11 +208,10 @@ final class SampleEditor: NSView, NSTextFieldDelegate {
   let pasteSourceGain = numberField(0, label: "Clipboard gain in decibels"),
     pasteDestinationGain = numberField(0, label: "Existing audio gain in decibels")
   lazy var pasteDestinationGroup = labeled("EXISTING (dB)", pasteDestinationGain)
-  var clipboardBusy = false
   var pastePreviewSignature: NSDictionary?, pastePreviewRevision: String?, pastePreviewID: String?
-  private var previewSignature: NSDictionary?, previewRevision: String?
+  var previewSignature: NSDictionary?, previewRevision: String?
   var index = 1 {
-    didSet { if index != oldValue { cancelSampleSelection(); resetSettingsContext(); resetDrawingContext(); sampleGeneration += 1; loopSaveWork?.cancel();loopSaveWork=nil;waveform.selectedLoopMarker=nil;waveform.draggingLoop=false; loopDraftBaseline=nil;loopDraftRevision=nil;loopPreviewSignature=nil;loopPreviewRevision=nil;savedLoopInfo=[:]; retireWaveform(); waveform.setViewport(nil, notify: false); waveform.selection = nil; previewSignature = nil; previewRevision = nil; resetPastePreview();crossfadePreviewSignature=nil;crossfadePreviewRevision=nil } }
+    didSet { if index != oldValue { resetOperationContext(); cancelSampleSelection(); resetSettingsContext(); resetDrawingContext(); sampleGeneration += 1; loopSaveWork?.cancel();loopSaveWork=nil;waveform.selectedLoopMarker=nil;waveform.draggingLoop=false; loopDraftBaseline=nil;loopDraftRevision=nil;loopPreviewSignature=nil;loopPreviewRevision=nil;savedLoopInfo=[:]; retireWaveform(); waveform.setViewport(nil, notify: false); waveform.selection = nil; previewSignature = nil; previewRevision = nil; resetPastePreview();crossfadePreviewSignature=nil;crossfadePreviewRevision=nil } }
   }
   var onMessage: ((String) -> Void)?
   var onRecord: (() -> Void)?
@@ -244,11 +247,12 @@ final class SampleEditor: NSView, NSTextFieldDelegate {
     waveform.fixed(height: 180)
     waveform.canEditLoops = { [weak self] in
       guard let self else { return false }
+      if self.protectsSampleOperation { self.operationStatus.stringValue = "Review the retained sample operation before changing loops."; return false }
       if self.protectsDrawingInput { self.drawingStatus.stringValue = "Save or discard drawing input before changing loops."; return false }
       return true
     }
     waveform.onLoopMarker = { [weak self] marker,frame,finished in
-      guard let self, !self.protectsDrawingInput else{return}
+      guard let self, !self.protectsDrawingInput, !self.protectsSampleOperation else{return}
       [self.loopStart,self.loopEnd,self.sustainStart,self.sustainEnd][marker.rawValue].stringValue=String(frame)
       self.saveLoopsSoon(immediate:finished)
     }
@@ -283,7 +287,7 @@ final class SampleEditor: NSView, NSTextFieldDelegate {
     let content = stack(
       .vertical,
       [
-        top, details, waveform, makeWaveformControls(), makeDrawingActions(), drawingStatus, viewportStatus, selectionRow, rangeLabel,
+        top, details, makeOperationActions(), operationStatus, waveform, makeWaveformControls(), makeDrawingActions(), drawingStatus, viewportStatus, selectionRow, rangeLabel,
         ToolSection("Numeric drawing", id: "sample.numericDrawing", views: [makeNumericDrawingControls()]),
         ToolSection("Loops", id: "sample.loops", views: [makeLoopRow(sustain: false), makeLoopRow(sustain: true), makeLoopActions(), loopsStatus], expanded: true),
         ToolSection("Edit audio", id: "sample.processing", views: [editButtons, options, processingStatus]),
@@ -311,7 +315,7 @@ final class SampleEditor: NSView, NSTextFieldDelegate {
       self.updateDrawingActions()
     }
     waveform.onStroke = { [weak self] points in self?.commitDrawing(points) }
-    selectionChanged(nil)
+    selectionChanged(nil); updateOperationActions()
   }
   required init?(coder: NSCoder) { fatalError() }
   @objc func selectSample() {
@@ -384,37 +388,13 @@ final class SampleEditor: NSView, NSTextFieldDelegate {
     if selectedOperation == "smooth" {
       guard let value = Int(smoothing.stringValue), (3...255).contains(value), value % 2 == 1 else { processingStatus.stringValue = "Smoothing needs an odd window from 3 to 255 frames."; return nil }; p["window"] = value
     }
-    waveform.selection = a...b
     return p
   }
   func process(dryRun: Bool) {
-    guard !processing, let onRequest, var params = processingParams() else { return }
-    let signature = params as NSDictionary
-    if !dryRun, previewSignature?.isEqual(signature) == true, let previewRevision { params["expectedRevision"] = previewRevision }
-    params["dryRun"] = dryRun
-    processing = true; previewButton.isEnabled = false; processButton.isEnabled = false
-    processingStatus.stringValue = dryRun ? "Calculating preview…" : "Processing sample…"
-    let sample = index, generation = sampleGeneration
-    onRequest("sample.process", params) { [weak self] response in
-      guard let self else { return }
-      self.processing = false; self.previewButton.isEnabled = true; self.processButton.isEnabled = true
-      guard sample == self.index, generation == self.sampleGeneration else { return }
-      guard let result = response["result"] as? [String: Any], let data = result["data"] as? [String: Any] else {
-        self.processingStatus.stringValue = (response["error"] as? [String: Any])?["message"] as? String ?? "Processing failed."
-        self.previewSignature = nil; self.previewRevision = nil; return
-      }
-      let prefix = dryRun ? "Preview" : "Applied"
-      if let removed = data["removedFrames"] as? Int {
-        self.processingStatus.stringValue = "\(prefix): remove \(removed) frames; keep \(data["resultFrames"] ?? 0)."
-      } else {
-        let frames = data["changedFrames"] as? Int ?? 0, clipped = data["clippedSamples"] as? Int ?? 0
-        let peak = data["peakAfter"] as? Double ?? 0
-        let peakText = peak > 0 ? String(format: "%.2f dBFS", 20 * log10(peak)) : "silence"
-        self.processingStatus.stringValue = "\(prefix): \(frames) frames change · peak \(peakText)" + (clipped > 0 ? " · \(clipped) clipped values" : "")
-      }
-      self.previewSignature = dryRun ? signature : nil
-      self.previewRevision = dryRun ? result["revision"] as? String : nil
-    }
+    guard let params = processingParams() else { return }
+    let preview = !dryRun && previewSignature?.isEqual(params as NSDictionary) == true ? previewRevision : nil
+    guard let operation = beginOperation("sample.process", params: params, dryRun: dryRun, previewRevision: preview) else { return }
+    submitOperation(operation)
   }
   func updateCatalogue(_ samples: [[String: Any]]) {
     let next=samples.map{AssetCatalogueEntry($0,fallback:"Sample")}
@@ -429,6 +409,7 @@ final class SampleEditor: NSView, NSTextFieldDelegate {
   }
   func update(_ info: [AnyHashable: Any], samples: [[String: Any]], revision: String? = nil, loaded: SampleSelectionRead? = nil) {
     let identity = samples.first { $0["index"] as? Int == index }?["id"] as? String ?? ""
+    if protectsSampleOperation { updateCatalogue(samples); return }
     if let draft = drawingDraft, draft.submitted || draft.numeric {
       updateCatalogue(samples)
       if identity != draft.identity { drawingStatus.stringValue = "The captured sample is unavailable. Stroke kept for review or discard." }

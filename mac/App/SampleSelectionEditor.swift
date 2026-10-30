@@ -71,6 +71,7 @@ extension SampleEditor {
     startSampleSelection(sample, kind: .select, selectInput: selectInput)
   }
   func reloadSample() {
+    guard sampleOperation == nil else { operationStatus.stringValue = "Review the retained operation before reloading."; return }
     guard drawingDraft?.submitted != true else { drawingStatus.stringValue = "Review or discard the retained stroke before reloading."; return }
     guard !sampleOperationPending, !hasSampleComposition else { return }
     settingsWork?.cancel(); settingsWork = nil; loopSaveWork?.cancel(); loopSaveWork = nil
@@ -78,7 +79,7 @@ extension SampleEditor {
   }
   func refreshSample(samples: [[String: Any]]) {
     updateCatalogue(samples)
-    guard sampleSelectionQuery == nil, !sampleOperationPending, drawingDraft?.submitted != true, drawingDraft?.numeric != true, !hasSampleComposition else { return }
+    guard !protectsSampleOperation, sampleSelectionQuery == nil, !sampleOperationPending, drawingDraft?.submitted != true, drawingDraft?.numeric != true, !hasSampleComposition else { return }
     let revision = onSampleRevision?() ?? sampleRevision
     if !waveform.stroke.isEmpty {
       guard revision != sampleRevision else { return }
