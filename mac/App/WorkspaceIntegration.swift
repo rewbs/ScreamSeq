@@ -107,6 +107,8 @@ extension AppController {
       if modalInput {self.commandPalette.sequences.cancel()}
       else if self.commandPalette.window?.isKeyWindow != true && self.commandPalette.sequences.handle(event){return nil}
       if self.commandPalette.window?.isKeyWindow != true && self.commandPalette.handleAdditionalShortcut(event) { return nil }
+      if !modalInput, NSApp.isActive, self.commandPalette.window?.isKeyWindow != true,
+        target === self.sampleEditor.window, self.sampleEditor.handleLoopKey(event) { return nil }
       if self.handlePlaybackKey(event) || self.handleInspectorNote(event) { return nil }
       guard self.liveKeyboard,NSApp.isActive,self.commandPalette.window?.isVisible != true,
         NSApp.modalWindow == nil,self.window.attachedSheet == nil else{return event}

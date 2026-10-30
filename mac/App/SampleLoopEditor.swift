@@ -1,13 +1,64 @@
 import AppKit
 
 extension SampleEditor {
+  // The workspace monitor also calls this: unmodified F6 in a native field
+  // editor does not reliably travel through performKeyEquivalent.
+  func handleLoopKey(_ event: NSEvent) -> Bool {
+    guard event.type == .keyDown, let window, let responder = window.firstResponder,
+      event.windowNumber == window.windowNumber, NSApp.modalWindow == nil,
+      window.attachedSheet == nil, window.sheetParent == nil,
+      !KeyboardSettings.menuFocus.ownsUnmodifiedKey(event) else { return false }
+    let fields = [loopStart, loopEnd, sustainStart, sustainEnd]
+    let fieldIndex = fields.firstIndex { $0 === responder || $0.currentEditor() === responder }
+    let inLoops = fieldIndex != nil || (responder as? NSView)?.isDescendant(of: loopSection) == true
+    let onWaveform = responder === waveform
+    let modifiers = event.modifierFlags.intersection([.command, .control, .option, .shift])
+    if [36, 76].contains(event.keyCode), modifiers == .command,
+      inLoops || (onWaveform && waveform.selectedLoopMarker != nil) {
+      if onWaveform && protectsDrawingInput { return false }
+      if !event.isARepeat { setLoops(dryRun: false) }
+      return true
+    }
+    guard event.keyCode == 97, modifiers.isEmpty, inLoops || onWaveform else { return false }
+    // Moving focus would commit marked text, or invalidate an operation that
+    // still owns its native input. Keep that input and focus until it finishes.
+    guard !event.isARepeat, !hasSampleComposition, !protectsSampleOperation,
+      !protectsDrawingInput, waveform.stroke.isEmpty, !waveform.draggingLoop,
+      loopReloadQuery == nil, sampleSelectionQuery == nil, waveformQuery == nil, !waveformInFlight else { return true }
+    if onWaveform {
+      let marker = waveform.selectedLoopMarker ?? loopFocusMarker
+      let field = fields[marker.rawValue]
+      loopSection.setExpanded(true); window.layoutIfNeeded()
+      field.scrollToVisible(field.bounds)
+      if window.makeFirstResponder(field), let editor = field.currentEditor() as? NSTextView,
+        let selection = loopFieldSelections[marker] {
+        let location = min(selection.location, editor.string.utf16.count)
+        editor.setSelectedRange(NSRange(location: location, length: min(selection.length, editor.string.utf16.count - location)))
+      }
+    } else {
+      if let fieldIndex, let marker = WaveformView.LoopMarker(rawValue: fieldIndex) {
+        loopFocusMarker = marker
+        if let editor = fields[fieldIndex].currentEditor() as? NSTextView { loopFieldSelections[marker] = editor.selectedRange() }
+      }
+      if window.makeFirstResponder(waveform) {
+        waveform.selectedLoopMarker = waveform.loopMarkers.contains(loopFocusMarker) ? loopFocusMarker : nil
+        waveform.scrollToVisible(waveform.bounds); waveform.needsDisplay = true
+      }
+    }
+    return true
+  }
   func makeLoopRow(sustain: Bool) -> NSView {
     let first = sustain ? sustainStart : loopStart, last = sustain ? sustainEnd : loopEnd
     let enabled = sustain ? sustaining : looping, ping = sustain ? sustainPingpong : pingpong
     let reverse = sustain ? sustainReverse : loopReverse
     enabled.fixed(width: 78); ping.fixed(width: 92)
     reverse.fixed(width: 78)
-    for field in [first,last] {field.delegate=self;field.target=self;field.action=#selector(loopFieldChanged)}
+    for field in [first,last] {
+      field.delegate=self;field.target=self;field.action=#selector(loopFieldChanged)
+      // Typing already schedules autosave; navigation must not commit a preview.
+      field.cell?.sendsActionOnEndEditing = false
+      field.toolTip = "F6 switches to the waveform handle · ⌘Return saves both loops"
+    }
     for control in [enabled,ping, reverse] { control.target = self; control.action = #selector(loopModeChanged) }
     return stack(.horizontal, [enabled, ping, reverse, labeled("START FRAME", first), labeled("END FRAME", last), NSView(),
       ActionButton("Use selection") { [weak self] in
@@ -33,6 +84,7 @@ extension SampleEditor {
   }
   func makeLoopActions() -> NSView {
     loopsStatus.maximumNumberOfLines = 3; loopsStatus.lineBreakMode = .byWordWrapping
+    loopApplyButton.toolTip = "Save both loops · ⌘Return from a loop control or selected waveform handle"
     return stack(.horizontal, [loopPreviewButton, loopApplyButton,
       ActionButton("Reload loops") { [weak self] in self?.reloadLoops() }, NSView()], spacing: 10)
   }

@@ -19,6 +19,7 @@ final class WaveformView: NSView {
   var selectedLoopMarker: LoopMarker?, draggingLoop = false
   var onLoopMarker: ((LoopMarker, Int, Bool) -> Void)?
   var canEditLoops: (() -> Bool)?
+  var canNudgeLoops: (() -> Bool)?
   func markerFrame(_ marker:LoopMarker)->Int { [loopStart,loopEnd,sustainStart,sustainEnd][marker.rawValue] }
   var loopMarkers:[LoopMarker] {LoopMarker.allCases.filter{$0.rawValue<2 ? loopEnd>loopStart : sustainEnd>sustainStart}}
   func markerLocation(_ marker:LoopMarker)->NSPoint {NSPoint(x:max(5,min(bounds.width-5,x(Double(markerFrame(marker))))),y:marker.rawValue<2 ? bounds.height-7 : 7)}
@@ -222,11 +223,14 @@ final class WaveformView: NSView {
   @objc func cut(_ sender:Any?){onClipboard?("cut")}
   @objc func paste(_ sender:Any?){onClipboard?("paste")}
   override func keyDown(with event:NSEvent) {
-    if event.keyCode==48,!loopMarkers.isEmpty {
-      let list=loopMarkers,step=event.modifierFlags.contains(.shift) ? list.count-1:1
-      selectedLoopMarker=list[((selectedLoopMarker.flatMap{list.firstIndex(of:$0)} ?? (list.count-1))+step)%list.count];needsDisplay=true;return
+    let loopNavigation = event.modifierFlags.intersection([.command, .control, .option]).isEmpty
+    if loopNavigation,event.keyCode==48,!loopMarkers.isEmpty {
+      let list=loopMarkers,backward=event.modifierFlags.contains(.shift)
+      let at=selectedLoopMarker.flatMap{list.firstIndex(of:$0)} ?? (backward ? 0:list.count-1)
+      selectedLoopMarker=list[(at+(backward ? list.count-1:1))%list.count];needsDisplay=true;return
     }
-    if let marker=selectedLoopMarker,[123,124].contains(event.keyCode) {
+    if loopNavigation,let marker=selectedLoopMarker,[123,124].contains(event.keyCode) {
+      guard loopMarkers.contains(marker), canNudgeLoops?() ?? true else { return }
       moveLoopMarker(marker,to:markerFrame(marker)+(event.keyCode==123 ? -1:1)*(event.modifierFlags.contains(.shift) ? 64:1),finished:true);return
     }
     if event.keyCode==53 { cancelStroke();selectedLoopMarker=nil;needsDisplay=true }
@@ -240,6 +244,6 @@ final class WaveformView: NSView {
     let region="Visible frames \(visibleRange.lowerBound) to \(visibleRange.upperBound)\(marker)"
     if let selection { return "\(region). Selected frames \(selection.lowerBound) to \(selection.upperBound)" };return region
   }
-  override init(frame:NSRect){super.init(frame:frame);setAccessibilityElement(true);setAccessibilityRole(.image);setAccessibilityLabel("Sample waveform");setAccessibilityHelp("Drag gold normal-loop or green sustain-loop handles to edit immediately. Tab selects handles; arrows move one frame, Shift-arrows move 64. Drag elsewhere to select audio. Zoom to draw.")}
+  override init(frame:NSRect){super.init(frame:frame);setAccessibilityElement(true);setAccessibilityRole(.image);setAccessibilityLabel("Sample waveform");setAccessibilityHelp("Drag gold normal-loop or green sustain-loop handles to edit immediately. Tab selects handles; arrows move one frame, Shift-arrows move 64. F6 switches to the loop boundary field; Command-Return saves both loops. Drag elsewhere to select audio. Zoom to draw.")}
   required init?(coder:NSCoder){fatalError()}
 }

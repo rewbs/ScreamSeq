@@ -97,6 +97,7 @@ final class SampleEditor: NSView, NSTextFieldDelegate {
   override func mouseDown(with event: NSEvent) { window?.makeFirstResponder(self); super.mouseDown(with:event) }
   override func performKeyEquivalent(with event: NSEvent) -> Bool {
     if handleNumericDrawingKey(event) { return true }
+    if handleLoopKey(event) { return true }
     return super.performKeyEquivalent(with: event)
   }
 
@@ -132,6 +133,9 @@ final class SampleEditor: NSView, NSTextFieldDelegate {
   var loopsBusy = false
   var loopReloadQuery: SampleSelectionQuery?
   var loopWrite: SampleLoopWrite?
+  var loopFocusMarker = WaveformView.LoopMarker.start
+  var loopFieldSelections = [WaveformView.LoopMarker: NSRange]()
+  lazy var loopSection = ToolSection("Loops", id: "sample.loops", views: [makeLoopRow(sustain: false), makeLoopRow(sustain: true), makeLoopActions(), loopsStatus], expanded: true)
   lazy var loopPreviewButton = ActionButton("Preview both loops") { [weak self] in self?.setLoops(dryRun: true) }
   lazy var loopApplyButton = ActionButton("Save loops") { [weak self] in self?.setLoops(dryRun: false) }
   var loopNeedsReload = false
@@ -258,6 +262,15 @@ final class SampleEditor: NSView, NSTextFieldDelegate {
       if self.protectsDrawingInput { self.drawingStatus.stringValue = "Save or discard drawing input before changing loops."; return false }
       return true
     }
+    waveform.canNudgeLoops = { [weak self] in
+      guard let self else { return false }
+      guard !self.hasLoopDraft, !self.loopNeedsReload, !self.sampleOperationPending,
+        !self.snapBusy, !self.hasSampleComposition, self.sampleSelectionQuery == nil,
+        self.waveformQuery == nil, !self.waveformInFlight else {
+        self.loopsStatus.stringValue = "Finish or reload the loop fields before nudging a handle."; return false
+      }
+      return true
+    }
     waveform.onLoopMarker = { [weak self] marker,frame,finished in
       guard let self, !self.protectsDrawingInput, !self.protectsSampleOperation else{return}
       let continuesGesture = self.loopWrite?.gestureSignature.isEqual(self.rawLoopDraft) == true
@@ -298,7 +311,7 @@ final class SampleEditor: NSView, NSTextFieldDelegate {
       [
         top, details, makeOperationActions(), operationStatus, waveform, makeWaveformControls(), makeDrawingActions(), drawingStatus, viewportStatus, selectionRow, rangeLabel,
         ToolSection("Numeric drawing", id: "sample.numericDrawing", views: [makeNumericDrawingControls()]),
-        ToolSection("Loops", id: "sample.loops", views: [makeLoopRow(sustain: false), makeLoopRow(sustain: true), makeLoopActions(), loopsStatus], expanded: true),
+        loopSection,
         ToolSection("Edit audio", id: "sample.processing", views: [editButtons, options, processingStatus]),
         ToolSection("Selection snapping", id: "sample.snap", views: [makeSnapControls(), makeSnapActions(), snapStatus]),
         ToolSection("Clipboard & mixing", id: "sample.clipboard", views: [makeClipboardActions(), makePasteControls(), clipboardStatus]),

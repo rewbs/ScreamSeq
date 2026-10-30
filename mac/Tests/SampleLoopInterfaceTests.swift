@@ -68,6 +68,7 @@ extension InterfaceTests {
     try sampleLoopPreviewChecks()
     try sampleLoopWriteFocusChecks()
     try sampleLoopWriteFocusMovementChecks()
+    try sampleLoopKeyboardChecks()
     try sampleLoopReloadChecks()
   }
   static func sampleLoopRetryCompletionChecks() throws {
@@ -243,5 +244,103 @@ extension InterfaceTests {
           "\(move) during \(stage) preserves current focus/caret and releases Save without Reload")
       }
     }
+  }
+  static func sampleLoopKeyboardChecks() throws {
+    let f = SampleOperationFixture(), e = f.editor
+    let window = NSWindow(contentRect: e.frame, styleMask: [.titled], backing: .buffered, defer: false)
+    window.isReleasedWhenClosed = false; window.contentView = e
+    let priorExpanded = UserDefaults.standard.object(forKey: e.loopSection.preference)
+    defer {
+      e.settingsWork?.cancel(); e.loopSaveWork?.cancel(); window.orderOut(nil); window.contentView = nil
+      UserDefaults.standard.set(priorExpanded, forKey: e.loopSection.preference)
+    }
+    func key(_ code: UInt16, _ modifiers: NSEvent.ModifierFlags = [], repeatKey: Bool = false, windowNumber: Int? = nil, type: NSEvent.EventType = .keyDown) -> NSEvent {
+      NSEvent.keyEvent(with: type, location: .zero, modifierFlags: modifiers, timestamp: 0,
+        windowNumber: windowNumber ?? window.windowNumber, context: nil, characters: code == 97 ? "\u{F709}" : "\r",
+        charactersIgnoringModifiers: code == 97 ? "\u{F709}" : "\r", isARepeat: repeatKey, keyCode: code)!
+    }
+    func expand(_ view: NSView) { if let section = view as? ToolSection { section.setExpanded(true, persist: false) }; view.subviews.forEach(expand) }
+    expand(e); window.layoutIfNeeded()
+    window.makeFirstResponder(e.waveform); e.waveform.selectedLoopMarker = .sustainEnd
+    e.loopSection.setExpanded(false, persist: false)
+    try require(e.handleLoopKey(key(97)) && e.sustainEnd.currentEditor() === window.firstResponder,
+      "F6 reveals the loop tools and focuses the selected sustain endpoint")
+    guard let editor = e.sustainEnd.currentEditor() as? NSTextView else { throw InterfaceFailure(message: "Missing F6 boundary editor") }
+    editor.insertText("850", replacementRange: NSRange(location: 0, length: editor.string.utf16.count))
+    editor.setSelectedRange(NSRange(location: 1, length: 1))
+    e.setLoops(dryRun: true); try f.answerLoops("original")
+    let calls = f.calls.count, generation = e.loopEditGeneration
+    try require(e.handleLoopKey(key(97)) && window.firstResponder === e.waveform && e.waveform.selectedLoopMarker == .sustainEnd,
+      "F6 returns to the corresponding sustain handle")
+    try require(f.calls.count == calls && e.sustainEnd.stringValue == "850" && e.loopPreviewRevision == "original" && e.loopEditGeneration == generation,
+      "Leaving a loop field does not apply its preview or rewrite raw input")
+    try require(e.handleLoopKey(key(97)) && e.sustainEnd.currentEditor() === window.firstResponder,
+      "F6 returns from the waveform to the same boundary")
+    try require((window.firstResponder as? NSTextView)?.selectedRange() == NSRange(location: 1, length: 1),
+      "The selected digit survives the field/handle round trip")
+    try require(e.performKeyEquivalent(with: key(36, .command)) && f.loopCalls.count == 2 && f.loopCalls.last?.1["expectedRevision"] as? String == "original",
+      "Command-Return saves both loops through the original guarded revision")
+    let owner = e.loopWrite
+    try require(e.handleLoopKey(key(97)) && e.loopWrite === owner && e.loopsBusy,
+      "F6 navigation preserves the pending loop completion owner")
+    try require(e.handleLoopKey(key(36, .command, repeatKey: true)) && f.loopCalls.count == 2,
+      "Key repeats cannot duplicate loop writes")
+    var done: Bool?; e.finishAutomaticEdit { done = $0 }
+    try f.answerLoops(); try f.finishRead()
+    try require(done == true && !e.hasDraft && window.firstResponder === e.waveform,
+      "The owned write completes after keyboard focus movement without Reload")
+    e.reloadLoops()
+    try require(e.loopReloadQuery != nil && e.handleLoopKey(key(97)) && window.firstResponder === e.waveform,
+      "F6 leaves an in-flight reload's native focus intact")
+    try f.finishRead()
+    try require(!e.loopNeedsReload && !e.loopsBusy, "Guarded F6 lets the reload complete normally")
+
+    _ = e.handleLoopKey(key(97)); guard let current = e.sustainEnd.currentEditor() as? NSTextView else { throw InterfaceFailure(message: "Missing restored boundary editor") }
+    current.setMarkedText("-", selectedRange: NSRange(location: 1, length: 0), replacementRange: NSRange(location: 0, length: current.string.utf16.count))
+    let text = current.string, caret = current.selectedRange(), beforeComposition = f.calls.count
+    try require(e.handleLoopKey(key(97)) && e.handleLoopKey(key(36, .command)) && current.hasMarkedText() &&
+      current.string == text && current.selectedRange() == caret && window.firstResponder === current && f.calls.count == beforeComposition,
+      "Loop shortcuts keep native composition and its caret without dispatching a write")
+    current.unmarkText(); e.loopSaveWork?.cancel(); e.loopSaveWork = nil
+    try require(e.handleLoopKey(key(97)) && e.sustainEnd.stringValue == "-" && f.calls.count == beforeComposition,
+      "F6 retains invalid raw loop text without saving it")
+    let invalid = e.rawLoopDraft
+    e.waveform.keyDown(with: key(123))
+    try require(e.rawLoopDraft.isEqual(invalid) && f.calls.count == beforeComposition, "Keyboard nudges cannot overwrite unfinished loop fields")
+    try require(e.handleLoopKey(key(97)) && (window.firstResponder as? NSTextView)?.string == "-",
+      "F6 brings invalid text back for correction")
+    let focus = window.firstResponder
+    try require(!e.handleLoopKey(key(97, .command)) && !e.handleLoopKey(key(97, windowNumber: window.windowNumber + 1)) &&
+      !e.handleLoopKey(key(97, type: .keyUp)) && window.firstResponder === focus,
+      "Modified F6, other windows and key releases keep their existing routes")
+
+    // A disabled loop has no waveform handle, but its boundary remains reachable.
+    e.sustaining.state = .off; e.syncLoopMarkers()
+    try require(e.handleLoopKey(key(97)) && e.waveform.selectedLoopMarker == nil && e.handleLoopKey(key(97)) &&
+      e.sustainEnd.currentEditor() === window.firstResponder,
+      "Disabled loops retain their field destination without exposing an editable handle")
+    window.makeFirstResponder(e.name)
+    try require(!e.handleLoopKey(key(97)) && !e.handleLoopKey(key(36, .command)), "Loop shortcuts do not claim unrelated native fields")
+    e.loadLoopFields(f.info); e.loopDraftBaseline = e.rawLoopDraft; e.syncLoopMarkers()
+    window.makeFirstResponder(e.waveform); e.waveform.selectedLoopMarker = nil
+    e.waveform.keyDown(with: key(48, .shift))
+    try require(e.waveform.selectedLoopMarker == .sustainEnd, "Reverse Tab initially selects the last enabled handle")
+    e.waveform.keyDown(with: key(48))
+    try require(e.waveform.selectedLoopMarker == .start, "Forward Tab wraps to the first enabled handle")
+    let beforeNudge = f.loopCalls.count
+    e.waveform.keyDown(with: key(124, .command))
+    try require(f.loopCalls.count == beforeNudge && e.loopStart.stringValue == "0", "Modified arrows do not change loop boundaries")
+    e.waveform.keyDown(with: key(124, .shift))
+    try require(f.loopCalls.count == beforeNudge + 1 && e.loopStart.stringValue == "64", "Shift-arrow saves a 64-frame nudge through the owned loop writer")
+    let payload = f.loopCalls.last!.1 as NSDictionary
+    e.waveform.keyDown(with: key(124))
+    try require(f.loopCalls.count == beforeNudge + 1 && e.loopStart.stringValue == "64" && payload.isEqual(to: f.loopCalls.last!.1),
+      "Pending keyboard nudges retain their exact payload")
+    try f.answerLoops("nudged"); try f.finishRead()
+    e.drawingFrame.stringValue = "20"; e.drawingValue.stringValue = "0.5"; e.stageDrawingPoint()
+    try require(e.drawingDraft?.numeric == true && !e.handleLoopKey(key(36, .command)),
+      "A numeric drawing batch retains its waveform Command-Return shortcut")
+    try require(e.handleLoopKey(key(97)) && window.firstResponder === e.waveform && !e.waveform.stroke.isEmpty,
+      "F6 cannot move focus away from retained drawing input")
   }
 }
