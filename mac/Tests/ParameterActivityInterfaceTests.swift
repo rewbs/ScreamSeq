@@ -59,6 +59,31 @@ extension InterfaceTests {
       "A recorded point row opens its stable song-automation source")
     editor.table.deselectAll(nil);link=nil;editor.openSelected()
     try require(link==nil,"A deselected recorded row cannot keep an earlier source active")
+    let frozenPoint=editor.samples[0]
+    editor.trace.onSelect?(frozenPoint)
+    editor.loadRecorded();answer(["points":[["frame":48000,"value":-40]],"total":1])
+    link=nil;editor.openSelected()
+    try require(link?["kind"] as? String=="envelope" && link?["traceSequence"] as? UInt64==frozenPoint.sequence,
+      "A recorded refresh without a selected row preserves the frozen trace source")
+    editor.table.selectRowIndexes(IndexSet(integer:0),byExtendingSelection:false)
+    editor.loadRecorded();editor.trace.onSelect?(frozenPoint)
+    answer(["points":[["frame":48000,"value":-39]],"total":1])
+    link=nil;editor.openSelected()
+    try require(editor.pointValue.doubleValue == -39 && link?["kind"] as? String=="envelope" && link?["traceSequence"] as? UInt64==frozenPoint.sequence,
+      "A pending recorded refresh updates the row form without replacing a newer trace selection")
+    let recordedTrace=ParameterTraceSample(["sequence":1001,"value":-20,"source":["kind":"recorded"]])!
+    editor.trace.onSelect?(recordedTrace)
+    editor.loadRecorded();answer(["points":[],"total":0])
+    link=nil;editor.openSelected()
+    try require(link?["traceSequence"] as? UInt64==1001,
+      "Removing a recorded table row cannot clear a source selected on the trace")
+    editor.loadRecorded();answer(["points":[["frame":48000,"value":-40]],"total":1])
+    editor.table.selectRowIndexes(IndexSet(integer:0),byExtendingSelection:false)
+    editor.loadRecorded();answer(["points":[],"total":0])
+    link=nil;editor.openSelected()
+    try require(link==nil,"Removing the selected table row retires its own source link")
+    editor.loadRecorded();answer(["points":[["frame":48000,"value":-40]],"total":1])
+    editor.resumeCapture()
     editor.table.selectRowIndexes(IndexSet(integer:0),byExtendingSelection:false)
     editor.editRecordedCell(row:0,column:1)
     try require(editor.table.editedRow==0 && editor.table.editedColumn==1,"Recorded values must open a real inline field editor")
@@ -73,6 +98,8 @@ extension InterfaceTests {
     editor.tableView(editor.table,setObjectValue:"3",for:editor.table.tableColumns[0],row:0)
     answer([:]);answer(["points":[["frame":96000,"value":-20],["frame":144000,"value":-30]],"total":2])
     try require(editor.table.selectedRow==1 && editor.pointTime.doubleValue==3 && editor.pointValue.doubleValue == -30,"Editing recorded time follows that exact point through table reordering")
+    link=nil;editor.openSelected()
+    try require(link?["frame"] as? Int==144000,"A table-owned source follows its point when a time edit reorders rows")
     host.makeFirstResponder(editor.pointValue);(host.firstResponder as? NSTextView)?.string="-12.5"
     editor.loadRecorded();answer(["points":[["frame":96000,"value":-20],["frame":144000,"value":-31]],"total":2])
     try require((host.firstResponder as? NSTextView)?.string=="-12.5","Passive recorded refresh preserves an in-progress point-form text draft")

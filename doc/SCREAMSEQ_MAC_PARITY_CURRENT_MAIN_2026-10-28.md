@@ -205,6 +205,13 @@ the previously nonfunctional Open source action for recorded table rows. A nativ
 interface regression exercises selection, opening and deselection. Desktop
 confirmation remains part of the next full-build qualification.
 
+The subsequent review identified a source-ownership regression: a recorded-table
+refresh could replace a newer frozen-trace selection. Refresh now updates a
+source link only when the table owns it. Targeted native interface regressions
+pass for no-row refreshes, trace selection during an outstanding read, removed
+rows, recorded-origin trace points and table-owned time edits/reordering. The
+full application build and desktop confirmation follow this source checkpoint.
+
 ## Remaining parity work
 
 These items are deliberately outside this checkpoint and must be resolved before

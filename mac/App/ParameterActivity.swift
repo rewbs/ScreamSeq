@@ -226,7 +226,7 @@ final class ParameterActivityEditor:NSView,NSTableViewDataSource,NSTableViewDele
   func tableView(_ tableView:NSTableView,shouldSelectRow row:Int)->Bool {
     guard detailMode.selectedSegment==2,needsCompletion else{return true}
     let frame=recorded.indices.contains(row) ? recorded[row]["frame"] as? Int:nil
-    finishAutomaticEdit{[weak self] accepted in guard let self,accepted,let frame,let row=self.recorded.firstIndex(where:{$0["frame"] as? Int==frame}) else{return};self.table.selectRowIndexes(IndexSet(integer:row),byExtendingSelection:false);self.showRecordedSelection()};return false
+    finishAutomaticEdit{[weak self] accepted in guard let self,accepted,let frame,let row=self.recorded.firstIndex(where:{$0["frame"] as? Int==frame}) else{return};self.table.selectRowIndexes(IndexSet(integer:row),byExtendingSelection:false);self.showRecordedSelection(updateSource:true)};return false
   }
   func tableView(_ tableView:NSTableView,shouldEdit column:NSTableColumn?,row:Int)->Bool {detailMode.selectedSegment==2 && !pending}
   @objc func activateTableCell(){
@@ -238,12 +238,12 @@ final class ParameterActivityEditor:NSView,NSTableViewDataSource,NSTableViewDele
     table.editColumn(column,row:row,with:nil,select:true)
   }
   func tableView(_ tableView:NSTableView,setObjectValue object:Any?,for column:NSTableColumn?,row:Int){guard detailMode.selectedSegment==2,recorded.indices.contains(row),let n=Double("\(object ?? "")"),n.isFinite,n>=0 || column?.identifier.rawValue=="value" else{return};var params:[String:Any]=["frame":recorded[row]["frame"] ?? 0,"value":recorded[row]["value"] ?? 0];if column?.identifier.rawValue=="value"{params["value"]=n}else{params["newFrame"]=(n*48000).rounded()};editRecorded(params)}
-  func tableViewSelectionDidChange(_ notification:Notification){guard !refreshingRecorded else{return};let row=table.selectedRow;selectedSource=nil;if detailMode.selectedSegment==0,sources.indices.contains(row){selectedSource=sources[row];selectedSource?["parameter"]=parameterID;selectedSource?["plugin"]=target?["plugin"]}else if detailMode.selectedSegment==1,audit.indices.contains(row){selectedSource=link(audit[audit.count-1-row])}else if detailMode.selectedSegment==2{showRecordedSelection()}}
-  private func showRecordedSelection(){
+  func tableViewSelectionDidChange(_ notification:Notification){guard !refreshingRecorded else{return};let row=table.selectedRow;selectedSource=nil;if detailMode.selectedSegment==0,sources.indices.contains(row){selectedSource=sources[row];selectedSource?["parameter"]=parameterID;selectedSource?["plugin"]=target?["plugin"]}else if detailMode.selectedSegment==1,audit.indices.contains(row){selectedSource=link(audit[audit.count-1-row])}else if detailMode.selectedSegment==2{showRecordedSelection(updateSource:true)}}
+  private func showRecordedSelection(updateSource:Bool=false){
     guard !pointDraft,detailMode.selectedSegment==2 else{return}
-    guard recorded.indices.contains(table.selectedRow),let plugin=target?["plugin"] as? String,!plugin.isEmpty,let parameterID else{selectedSource=nil;return}
+    guard recorded.indices.contains(table.selectedRow),let plugin=target?["plugin"] as? String,!plugin.isEmpty,let parameterID else{if updateSource{selectedSource=nil};return}
     let point=recorded[table.selectedRow]
-    selectedSource=["kind":"recorded","plugin":plugin,"parameter":parameterID,"frame":point["frame"] ?? 0]
+    if updateSource{selectedSource=["kind":"recorded","plugin":plugin,"parameter":parameterID,"frame":point["frame"] ?? 0]}
     pointTime.stringValue=String(format:"%.7f",((point["frame"] as? NSNumber)?.doubleValue ?? 0)/48000)
     pointValue.stringValue="\(point["value"] ?? 0)"
   }
@@ -313,7 +313,10 @@ final class ParameterActivityEditor:NSView,NSTableViewDataSource,NSTableViewDele
       if let origin{self.table.enclosingScrollView?.contentView.scroll(to:origin)}
       // reloadData does not send a selection notification when the same row
       // remains selected. Refresh its form too, without overwriting typed text.
-      if self.pointTime.currentEditor()==nil && self.pointValue.currentEditor()==nil{self.showRecordedSelection()}
+      // Only the table's source follows a refreshed/moved row. A trace selection
+      // (including one made during this read) owns its own navigation link.
+      let tableSource=self.selectedSource?["kind"] as? String=="recorded" && self.selectedSource?["traceSequence"]==nil
+      if self.pointTime.currentEditor()==nil && self.pointValue.currentEditor()==nil{self.showRecordedSelection(updateSource:tableSource)}
       self.status.stringValue="Edit time or value directly during playback. Recorded points use song time. Changes take effect immediately and support Undo."
       self.finishPointWaiters(true)
     }
