@@ -60,5 +60,30 @@ extension InterfaceTests {
     view.discardTake(); answer(["take": "", "capturing": false, "frames": 0])
     try require(view.take.isEmpty && !view.add.isEnabled, "Discard retires take state")
     try require(!view.details.stringValue.contains("frames"), "Discard removes the retired take's frame count")
+    try require(!view.record.isEnabled, "Discarding a disconnected-device take cannot arm its unavailable input")
+    try sampleRecordingDeviceIdentityChecks()
+
   }
+  static func sampleRecordingDeviceIdentityChecks() throws {
+    let view = SampleRecordingView(frame: .zero)
+    let a: [String: Any] = ["id": "same-a", "name": "USB Input", "channels": 2]
+    let b: [String: Any] = ["id": "same-b", "name": "USB Input", "channels": 4]
+    let builtIn: [String: Any] = ["id": "default", "name": "Built-in", "channels": 1, "default": true]
+    var devices = [a, b, builtIn], permissions = 0
+    view.onPermission = { _ in permissions += 1 }; view.onDocument = { "song" }
+    view.onRequest = { method, _, reply in
+      reply(["result": ["data": method == "sample.recording.devices" ? ["devices": devices] : ["take": "", "capturing": false, "frames": 0]]])
+    }
+    view.loadDevices()
+    try require(view.devices.numberOfItems == 3 && view.devices.item(at: 0)?.representedObject as? String == "same-a" && view.devices.item(at: 1)?.representedObject as? String == "same-b", "Duplicate input names retain separate hardware identities")
+    view.devices.selectItem(at: 1); view.deviceChanged(); view.channels.selectItem(at: 5)
+    view.name.stringValue = "Retained setup"; view.limit.selectItem(at: 1); view.instrument.state = .on
+    try require(view.channels.titleOfSelectedItem == "Stereo · Inputs 3–4", "The second duplicate input uses its own channel count")
+    devices = [builtIn, a]; view.loadDevices(); view.start()
+    try require(view.devices.selectedItem?.representedObject as? String == "same-b" && view.devices.titleOfSelectedItem?.contains("disconnected") == true && !view.record.isEnabled && permissions == 0, "Refresh retains a disconnected selected UID and refuses Record instead of silently choosing the default")
+    try require(view.channels.titleOfSelectedItem == "Stereo · Inputs 3–4" && view.name.stringValue == "Retained setup" && view.limit.indexOfSelectedItem == 1 && view.instrument.state == .on, "Disconnection preserves the complete configured capture intent")
+    devices = [b, builtIn, a]; view.loadDevices()
+    try require(view.devices.indexOfSelectedItem == 0 && view.devices.selectedItem?.representedObject as? String == "same-b" && view.record.isEnabled && view.channels.titleOfSelectedItem == "Stereo · Inputs 3–4", "Reconnecting and reordering inputs restores availability without changing the selected UID or channels")
+  }
+
 }

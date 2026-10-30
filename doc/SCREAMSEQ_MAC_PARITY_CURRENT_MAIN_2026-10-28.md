@@ -364,6 +364,21 @@ qualification until the next hourly build and computer-use pass. The shared
 compact graph level control retains its existing transaction behavior; its
 broader refusal/retention audit remains open.
 
+## Recorder input identity follow-up — 2026-10-30
+
+Recorder device menus now create a separate native item for each hardware ID,
+including devices with identical names. Refresh retains a missing selected input
+and its channel pair as disconnected instead of choosing the default. Record is
+unavailable until that ID returns or the musician explicitly chooses another
+input. A retained take from a disconnected input remains importable; discarding
+it does not make the missing input available for a new take.
+
+The native `sample-recording` interface group passes duplicate-name, reorder,
+disconnection/reconnection, channel-pair and complete setup-retention regressions.
+Whole-application Swift type checking also passes. This follow-up is newer than
+build 7; recorder desktop and keyboard qualification remain pending. Evidence:
+`interface-recorder-devices.log` and `typecheck-recorder-devices.log`.
+
 ## Remaining parity work
 
 These items are deliberately outside this checkpoint and must be resolved before
@@ -378,7 +393,7 @@ claiming complete Windows parity:
 - Packaged qualification of the retained Mixer fields and location-revision
   changes above; sample-setting completion and retained refused waveform strokes.
 - Remaining recorder/review focus, root keyboard traversal, paging and endpoint
-  duplicate-name/disconnection details.
+  presentation, including the source-tested input identity changes above.
 - Further source-by-source review of plugin/routing controls, instrument-envelope
   navigation, recorded-point-row source links, accessibility and precise-note
   navigation/cursor behavior.

@@ -88,20 +88,35 @@ final class SampleRecordingView: NSView, NSWindowDelegate {
     // action after the current poll instead of dropping it as a busy request.
     if polling { afterPoll = send } else { send() }
   }
+  private var inputAvailable: Bool {
+    guard deviceData.indices.contains(devices.indexOfSelectedItem) else { return false }
+    return deviceData[devices.indexOfSelectedItem]["unavailable"] as? Bool != true
+  }
+  private func appendDevice(_ device: [String: Any]) {
+    var title = device["name"] as? String ?? "Input"
+    if device["unavailable"] as? Bool == true { title += " (disconnected)" }
+    else if device["default"] as? Bool == true { title += " (default)" }
+    // addItem(withTitle:) replaces an existing equal title. Each hardware UID
+    // must keep its own item even when multiple interfaces have the same name.
+    let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+    item.representedObject = device["id"] as? String; devices.menu?.addItem(item)
+  }
   func loadDevices() {
     request("sample.recording.devices", [:]) { [weak self] data in
       guard let self else { return }
       let previous = self.devices.selectedItem?.representedObject as? String
+      let previousDevice = self.deviceData.first { $0["id"] as? String == previous }
       self.deviceData = data["devices"] as? [[String: Any]] ?? []
-      self.devices.removeAllItems()
-      for device in self.deviceData {
-        let title = (device["name"] as? String ?? "Input") + (device["default"] as? Bool == true ? " (default)" : "")
-        self.devices.addItem(withTitle: title); self.devices.lastItem?.representedObject = device["id"] as? String
+      if let previous, var missing = previousDevice, !self.deviceData.contains(where: { $0["id"] as? String == previous }) {
+        missing["unavailable"] = true; self.deviceData.append(missing)
       }
+      self.devices.removeAllItems()
+      for device in self.deviceData { self.appendDevice(device) }
       if let index = self.deviceData.firstIndex(where: { $0["id"] as? String == previous }) { self.devices.selectItem(at: index) }
       else if let index = self.deviceData.firstIndex(where: { $0["default"] as? Bool == true }) { self.devices.selectItem(at: index) }
       self.deviceChanged()
       if self.deviceData.isEmpty { self.status.stringValue = "No input device is available. Connect a microphone or audio interface, then refresh inputs." }
+      else if !self.inputAvailable { self.status.stringValue = "The selected input is disconnected. Reconnect it or choose another input; your setup is retained." }
       self.poll()
     }
   }
@@ -144,8 +159,8 @@ final class SampleRecordingView: NSView, NSWindowDelegate {
         let first = data["firstChannel"] as? Int ?? 0
         if !deviceData.contains(where: { $0["id"] as? String == device }) {
           let label = data["deviceName"] as? String ?? "Recorded input"
-          deviceData.append(["id": device, "name": label, "channels": first + count])
-          devices.addItem(withTitle: label); devices.lastItem?.representedObject = device
+          let missing: [String: Any] = ["id": device, "name": label, "channels": first + count, "unavailable": true]
+          deviceData.append(missing); appendDevice(missing)
         }
         if let index = deviceData.firstIndex(where: { $0["id"] as? String == device }) {
           if devices.indexOfSelectedItem != index { devices.selectItem(at: index); deviceChanged() }
@@ -163,7 +178,7 @@ final class SampleRecordingView: NSView, NSWindowDelegate {
     updateControls()
   }
   func start() {
-    guard !pending, !permissionPending, take.isEmpty, channelChoices.indices.contains(channels.indexOfSelectedItem), let permission = onPermission else { return }
+    guard !pending, !permissionPending, take.isEmpty, inputAvailable, channelChoices.indices.contains(channels.indexOfSelectedItem), let permission = onPermission else { return }
     guard let document = onDocument?(), !document.isEmpty else {
       status.stringValue = "Wait for the song operation to finish, then Record again."; return
     }
@@ -207,7 +222,7 @@ final class SampleRecordingView: NSView, NSWindowDelegate {
   }
   private func updateControls() {
     let idle = !pending && !permissionPending
-    record.isEnabled = idle && take.isEmpty && !channelChoices.isEmpty
+    record.isEnabled = idle && take.isEmpty && inputAvailable && !channelChoices.isEmpty
     stop.isEnabled = idle && capturing; add.isEnabled = idle && !capturing && frames > 0 && !take.isEmpty
     discard.isEnabled = idle && !capturing && !take.isEmpty
     for control in [devices, channels, limit] { control.isEnabled = idle && take.isEmpty }
