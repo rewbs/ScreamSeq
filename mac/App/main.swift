@@ -495,6 +495,9 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     updateDocumentLoadReport()
     if previousDocument != model.revisionToken.split(separator:":").first {
       auditionOwnership.clear();pendingNotes.removeAll();midiNotes.removeAll()
+      // Admission protected dirty/pending commands. Retire an unchanged
+      // inline editor as well: its captured target belongs to the old song.
+      patternView.nudgeEditor?.onFinish?(false)
       sampleEditor.resetDocumentContext();instrumentEditor.settingsDraft.reset()
       mixerEditor.invalidateDocumentContext()
       (scratchGestureWindow?.contentView as? ScratchGestureEditor)?.invalidate()
