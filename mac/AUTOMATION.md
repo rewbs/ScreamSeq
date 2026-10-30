@@ -482,6 +482,17 @@ The complete machine-readable request definitions are in [resonance-api.schema.j
 
 `plugin.discover` uses the same persistent inventory as the plugin picker. Pass `{"rescan": true}` to refresh it after installing, removing or updating plugins. A first scan or explicit rescan may take several seconds; cached reads do not launch scanner processes. Discovery does not change the song revision.
 
+`plugin.editor.open` and `plugin.editor.close` take `slot` and `expectedRevision`,
+and return `{open, plugin}` with the stable plugin identity. Repeated opening
+raises the existing native window; closing an already closed editor is harmless.
+Presentation does not stop playback, replace processors, create Undo history or
+cancel a parameter preview. Closing first flushes accepted manual editor changes
+into their existing musical history and saved baseline. A retained recording take
+keeps ownership of its input: close remains available without draining or replaying
+that input, while opening another editor is refused until the take is resolved.
+These methods reject unknown fields and do not accept `dryRun`. Built-in devices
+use host parameter controls and have no native editor to open.
+
 `pattern.get` returns at most 4,096 cells per request and supports row/channel pagination. `pattern.apply` accepts up to 4,096 distinct cell patches, validates the entire batch before changing anything, and supports `dryRun`. A parameter batch or lane replacement likewise forms one plugin-history step. There are no cross-domain transactions or general dry runs yet.
 
 ### Transient recipe parameter gestures
@@ -1349,7 +1360,16 @@ The original preference file is not replaced by this fallback.
 
 The response contains `before`, `after`, `wouldChange` and `dryRun`. A real change stops playback and makes one document Undo entry; previews, no-ops and validation failures preserve transport, revision and Redo. Tempo/speed affect only the selected sequence. Other settings are global. Existing pattern-specific time signatures/grooves take precedence and are reported, not overwritten. Groove phase restarts with each pattern, including when its length is not a whole beat. Source-format tempo/speed effects retain their existing semantics. This is not a new tempo-envelope lane or a change to imported timing until explicitly applied.
 
-Native Pattern → Tempo and Groove uses these commands, including Preview and a two-row swing helper. The ordinary Song settings dialog and `document.patch` also retain fractional BPM. Grid beat/bar shading uses the displayed pattern's effective signature.
+Native Pattern → Tempo and Groove uses these commands, including Preview and a two-row swing helper. Song Settings and `document.patch` also retain fractional BPM. Grid beat/bar shading uses the displayed pattern's effective signature.
+
+File → Song Settings opens a retained native window. Invalid or refused fields,
+newer text entered during a request, and hidden-window drafts remain intact.
+Use current revision keeps the draft; Reload values explicitly reloads stored
+values. Apply sends only changed fields, so a title edit cannot round the tempo.
+Save, export and history wait for pending settings and valid newer drafts; invalid,
+stale or composing fields stop that action. An uncertain write requires a read and
+explicit acceptance of the observed state before another submission. These are
+the existing `document.patch` edits with normal Undo and project persistence.
 
 When a source module format loses these settings, native projects/history/playback use an optional `RSONGS2` timing payload inside project version 4 or 5. Older applications reject it. Source-compatible projects keep the earlier payload. Export Module rejects timing loss; audio export uses the full native settings. See [snapshot representation](SAMPLE_SNAPSHOTS.md). Plugin musical position retains the core's row/tick-based PPQ convention; dedicated tempo automation and broader plugin transport qualification remain separate work.
 
@@ -1597,6 +1617,20 @@ Changing source or disarming stops and retains any active take. Input at a take,
 document or source boundary is quarantined, including delayed old callbacks.
 
 ### Retained workspace layouts
+
+`workspace.get` also returns `keyboard` (`revision`, `lower`, `upper`,
+`playStopKeys`) and a read-only `keyboardWindow` draft snapshot.
+`workspace.keyboard.set` requires exactly `expectedKeyboard`, `lower`, `upper`
+and `playStopKeys`. Read the independent keyboard revision first. The lower row
+uses 12 keys; the upper row accepts 12 or 13, including an optional top C. Distinct
+letters, digits and unshifted punctuation are accepted, with canonical uppercase
+readback. Mac note input follows the native keyboard's characters. Play/Stop
+accepts `space`, `return`, an empty array to disable, or a one-to-four-stroke
+command-palette binding whose first stroke has a command/control/option modifier.
+Conflicts reject before changing either part. Settings preserve song data and
+Undo; held notes release their original pitch and target. The native Keyboard
+and Display window keeps invalid or stale drafts until corrected or explicitly
+reloaded, and can retain an existing custom command-palette binding.
 
 On macOS, **Workspace → Show Context Panel** (Command–Option–B) and the toolbar
 toggle the retained left pane. It follows the focused editor and offers relevant

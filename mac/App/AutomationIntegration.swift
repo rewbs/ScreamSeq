@@ -77,7 +77,8 @@ extension AppController {
     // recover it. stop/panic own their transport boundary; input stays with the
     // retained take rather than being retried through the manual edit prefix.
     let retainedTransportExit = session.parameterRecordingTakeID != nil && (method == "transport.stop" || method == "transport.panic")
-    let edits = method == "document.exportModule" || method == "document.exportAudio" || method.hasPrefix("automation.recording.") || retainedRecovery || retainedTransportExit ? 0 :
+    let retainedEditorExit = session.parameterRecordingTakeID != nil && method == "plugin.editor.close"
+    let edits = method == "document.exportModule" || method == "document.exportAudio" || method.hasPrefix("automation.recording.") || retainedRecovery || retainedTransportExit || retainedEditorExit ? 0 :
       session.collectPluginEdits(pluginEditor.record.state == .on, error: &error)
     if edits > 0 && session.parameterRecordingTakeID == nil {
       dirty = true
@@ -162,7 +163,7 @@ extension AppController {
           }
           if method == "api.describe", var described = result as? [String: Any], var data = described["data"] as? [String: Any] {
             data["reads"] = (data["reads"] as? [String] ?? []) + ["audio.devices.get", "audio.settings.get", "midi.devices.get", "midi.settings.get", "workspace.commands.get", "workspace.get", "recovery.status", "recovery.list", "sample.library.get", "sample.library.search", "sample.library.inspect", "sample.library.multisample.get"]
-            data["writes"] = (data["writes"] as? [String] ?? []) + ["audio.settings.set", "midi.settings.set", "workspace.input", "workspace.ruler", "workspace.shortcut.set", "workspace.panel", "workspace.layout", "recovery.save", "recovery.restore", "sample.library.roots.set", "sample.library.rescan", "sample.library.preview", "sample.library.preview.stop"]
+            data["writes"] = (data["writes"] as? [String] ?? []) + ["audio.settings.set", "midi.settings.set", "workspace.input", "workspace.ruler", "workspace.shortcut.set", "workspace.keyboard.set", "workspace.panel", "workspace.layout", "recovery.save", "recovery.restore", "sample.library.roots.set", "sample.library.rescan", "sample.library.preview", "sample.library.preview.stop"]
             data["sampleLibrary"] = "Application only: cached local search of filenames and inherited folder tags. Library methods use libraryRevision, not the song revision. sample.importMany works in both hosts and is one atomic document Undo."
             data["recovery"] = "Application only: automatic recovery copies every 10 seconds; restore protects current unsaved edits and opens an unsaved song. Recordings reopen as stopped takes."
             described["data"] = data; reply(["result": described])

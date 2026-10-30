@@ -6,6 +6,11 @@ final class WorkspaceCommandPalette: NSObject, NSTableViewDataSource, NSTableVie
   var entries = [Entry](), filtered = [Entry](), window: NSPanel?
   var onShortcutsChanged:(()->Void)?
   var shortcutAllowed:((String)->Bool)?
+  var persistPreferences = true
+  private var preferencesLoaded = false
+  var transportBinding: [String]?
+  var sessionBindings = [String:[String:Any]]()
+  static func isTransport(_ entry: Entry) -> Bool { entry.item.action.map(NSStringFromSelector) == "playOrStop" }
   var additionalMenus: (() -> [NSMenu])?
   private var additionalIDs = Set<String>()
   var recording = false
@@ -30,10 +35,22 @@ final class WorkspaceCommandPalette: NSObject, NSTableViewDataSource, NSTableVie
     for menu in additionalMenus?() ?? [] { visit(menu, menu.title) }
     additionalIDs = Set(entries.dropFirst(globalCount).map(\.id))
     for entry in entries where defaults[entry.id] == nil { defaults[entry.id] = ["key":entry.item.keyEquivalent,"modifiers":entry.item.keyEquivalentModifierMask.rawValue] }
-    sequences.load();sequences.isAvailable = {[weak self] id in self?.shortcutAllowed?(id) ?? true}
+    if persistPreferences || !preferencesLoaded { sequences.load();transportBinding=nil }
+    sequences.isAvailable = {[weak self] id in self?.shortcutAllowed?(id) ?? true}
     sequences.onRun = {[weak self] id in guard let self else{return};self.collect();guard let entry=self.entries.first(where:{$0.id==id}),let action=entry.item.action else{return};guard self.isAvailable(entry.item,from:NSApp.keyWindow?.firstResponder ?? NSApp.keyWindow) else{NSSound.beep();return};NSApp.sendAction(action,to:entry.item.target,from:entry.item)}
     let bindings = UserDefaults.standard.dictionary(forKey:"workspaceShortcuts") as? [String:[String:Any]] ?? [:]
-    for entry in entries { if let binding = bindings[entry.id],let key = binding["key"] as? String,let mods = binding["modifiers"] as? UInt { entry.item.keyEquivalent = key; entry.item.keyEquivalentModifierMask = .init(rawValue:mods) };if sequences.bindings[entry.id] != nil{entry.item.keyEquivalent=""} }
+    if !preferencesLoaded {sessionBindings=bindings}
+    for entry in entries {
+      if let binding=(persistPreferences ? bindings:sessionBindings)[entry.id],let key=binding["key"] as? String,let mods=binding["modifiers"] as? UInt {
+        entry.item.keyEquivalent=key;entry.item.keyEquivalentModifierMask = .init(rawValue:mods)
+        if Self.isTransport(entry) {transportBinding=key.isEmpty ? []:[WorkspaceStrokeString(key,.init(rawValue:mods))]}
+      }
+      if let sequence=sequences.bindings[entry.id] {entry.item.keyEquivalent="";if Self.isTransport(entry){transportBinding=sequence.map(\.encoded)}}
+      // Transport is dispatched after local input ownership checks, never by
+      // AppKit's menu key-equivalent path ahead of editable text and Formula.
+      if Self.isTransport(entry) {entry.item.keyEquivalent=""}
+    }
+    preferencesLoaded=true
   }
   func show() {
     previousWindow = NSApp.keyWindow; previousResponder = previousWindow?.firstResponder; collect()
@@ -69,6 +86,7 @@ final class WorkspaceCommandPalette: NSObject, NSTableViewDataSource, NSTableVie
   }
   func controlTextDidChange(_ obj: Notification) {filter()}
   func shortcutText(_ entry:Entry)->String {
+    if Self.isTransport(entry) {return shortcutKeys(entry).joined(separator:" → ")}
     if let sequence=sequences.bindings[entry.id] {return sequence.map(\.encoded).joined(separator:" → ")}
     guard !entry.item.keyEquivalent.isEmpty else{return ""}
     let mask=entry.item.keyEquivalentModifierMask
@@ -137,9 +155,11 @@ final class WorkspaceCommandPalette: NSObject, NSTableViewDataSource, NSTableVie
     if !key.isEmpty,entries.contains(where:{$0.id != id && $0.item.keyEquivalent==key && $0.item.keyEquivalentModifierMask.intersection(WorkspaceStroke.mask)==flags.intersection(WorkspaceStroke.mask)}) {return "The default key is assigned to another command"}
     // Restoring the shipped local M/Q/F bindings is valid even though new
     // user bindings require a modifier to protect tracker note entry.
-    sequences.cancel();sequences.bindings.removeValue(forKey:id);sequences.save()
+    sequences.cancel();sequences.bindings.removeValue(forKey:id);if persistPreferences{sequences.save()}
     var bindings=UserDefaults.standard.dictionary(forKey:"workspaceShortcuts") as? [String:[String:Any]] ?? [:]
-    bindings.removeValue(forKey:id);UserDefaults.standard.set(bindings,forKey:"workspaceShortcuts")
+    bindings.removeValue(forKey:id);if persistPreferences{UserDefaults.standard.set(bindings,forKey:"workspaceShortcuts")}
+    sessionBindings.removeValue(forKey:id)
+    if Self.isTransport(entry){transportBinding=nil}
     entry.item.keyEquivalent=key;entry.item.keyEquivalentModifierMask=flags
     table.reloadData();onShortcutsChanged?();return nil
   }

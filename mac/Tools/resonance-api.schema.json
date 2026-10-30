@@ -3155,6 +3155,53 @@
       "additionalProperties": false
     },
     {
+      "description": "Open or close one rack plugin native editor. Presentation keeps playback and musical history intact; close flushes accepted manual edits unless a retained recording take owns the input. Returns open and the stable plugin identity. No dryRun.",
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "enum": [
+            "plugin.editor.open",
+            "plugin.editor.close"
+          ]
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "slot": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 63
+            },
+            "expectedRevision": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          },
+          "required": [
+            "slot",
+            "expectedRevision"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    {
       "description": "Audition one rack parameter in native catalog units without changing saved state or history. Requires a stable plugin identity and a gesture token. Returns audible:false without starting audio when the host is inactive.",
       "type": "object",
       "properties": {
@@ -15925,6 +15972,64 @@
           "required": [
             "command",
             "keys"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false,
+      "x-application-only": true
+    },
+    {
+      "description": "Set musical note rows and Play/Stop binding together, guarded by workspace.get keyboard.revision. Presentation preferences do not change song history. Lower uses 12 distinct keys; upper allows an optional thirteenth top-C key.",
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "workspace.keyboard.set"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "expectedKeyboard": {
+              "type": "string",
+              "minLength": 1
+            },
+            "lower": {
+              "type": "string",
+              "minLength": 12,
+              "maxLength": 12
+            },
+            "upper": {
+              "type": "string",
+              "minLength": 12,
+              "maxLength": 13
+            },
+            "playStopKeys": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "maxItems": 4
+            }
+          },
+          "required": [
+            "expectedKeyboard",
+            "lower",
+            "upper",
+            "playStopKeys"
           ],
           "additionalProperties": false
         }

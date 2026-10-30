@@ -177,8 +177,21 @@ public:
     pluginStates_[slot].bypass=value;return true;
   }
   void showPluginEditor(size_t slot) {
-    if (plugins_)
-      plugins_->showEditor(slot);
+    const auto owner=plugins_;
+    if(!owner)throw std::runtime_error("Resolve unavailable plugins before opening an editor");
+    owner->showEditor(slot);
+  }
+  void closePluginEditor(size_t slot,bool flushStoppedControls) {
+    const auto owner=plugins_;
+    if(!owner)throw std::runtime_error("Resolve unavailable plugins before closing an editor");
+    owner->closeEditor(slot);
+    // A stopped VST3 still has its editor-to-processor mailbox. Drain that
+    // accepted prefix before a subsequent Undo queues its newer value, or a
+    // later state capture can replay the old editor value over the Undo.
+    // Native state capture flushes without starting audio; discard its opaque
+    // snapshot so effective automation never becomes the saved baseline.
+    // Retained recording input has a separate owner and must bypass this step.
+    if(flushStoppedControls&&plugins_==owner&&joinStoppedProcessing())(void)owner->state(slot);
   }
   std::vector<size_t> openPluginEditors() const {return plugins_?plugins_->openEditors():std::vector<size_t>{};}
   bool popPluginEdit(size_t slot, uint32_t &id, float &value) { return plugins_ && plugins_->popEdit(slot, id, value); }

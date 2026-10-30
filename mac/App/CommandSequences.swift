@@ -38,20 +38,42 @@ final class WorkspaceSequences {
 }
 
 extension WorkspaceCommandPalette {
-  func shortcutCommands()->[[String:Any]] {entries.map{entry in let key=entry.item.keyEquivalent;let single=key.isEmpty ? [] : [WorkspaceStrokeString(key,entry.item.keyEquivalentModifierMask)];return ["id":entry.id,"name":entry.path,"keys":sequences.bindings[entry.id]?.map(\.encoded) ?? single]}}
-  // allowUnmodified is only for restoring a built-in default such as a bare "?".
-  func setShortcut(_ id:String,keys:[String],persist:Bool=true,allowUnmodified:Bool=false)->String?{
+  func shortcutKeys(_ entry:Entry)->[String] {
+    if Self.isTransport(entry) {return transportBinding ?? KeyboardSettings.legacyPlayStopKeys}
+    if let keys=sequences.bindings[entry.id] {return keys.map(\.encoded)}
+    return entry.item.keyEquivalent.isEmpty ? []:[WorkspaceStrokeString(entry.item.keyEquivalent,entry.item.keyEquivalentModifierMask)]
+  }
+  func shortcutCommands()->[[String:Any]] {entries.map{["id":$0.id,"name":$0.path,"keys":shortcutKeys($0)]}}
+  func validateShortcut(_ id:String,keys:[String],allowUnmodified:Bool=false)->String? {
     guard let entry=entries.first(where:{$0.id==id}),keys.count<=4 else{return "Choose a known command and at most four keys"}
     let strokes=keys.compactMap(WorkspaceStroke.init);guard strokes.count==keys.count else{return "Use keys such as cmd+g, ctrl+opt+r, or space"}
-    if let first=strokes.first{guard allowUnmodified || !first.modifiers.intersection([.command,.control,.option]).isEmpty else{return "The first key needs cmd, ctrl or opt to preserve note entry"}
-      if entries.contains(where:{$0.id != id && $0.item.keyEquivalent==first.key && $0.item.keyEquivalentModifierMask.intersection(WorkspaceStroke.mask)==first.modifiers}){return "That first key already runs a command"}
+    if let first=strokes.first {
+      let localTransport=Self.isTransport(entry) && strokes.count==1 && first.modifiers.isEmpty && [" ","\r"].contains(first.key)
+      guard allowUnmodified || localTransport || !first.modifiers.intersection([.command,.control,.option]).isEmpty else{return "The first key needs cmd, ctrl or opt to preserve note entry"}
+      for other in entries where other.id != id {
+        let existing=shortcutKeys(other).compactMap(WorkspaceStroke.init)
+        if !existing.isEmpty && (existing.starts(with:strokes) || strokes.starts(with:existing)) {return "That sequence overlaps another shortcut"}
+      }
       if sequences.conflict(strokes,except:id){return "That sequence overlaps another shortcut"}
     }
+    return nil
+  }
+  func setShortcut(_ id:String,keys:[String],persist:Bool=true,allowUnmodified:Bool=false)->String? {
+    if let error=validateShortcut(id,keys:keys,allowUnmodified:allowUnmodified){return error}
+    guard let entry=entries.first(where:{$0.id==id}) else{return "Choose a known command"}
+    let strokes=keys.compactMap(WorkspaceStroke.init),normalized=strokes.map(\.encoded)
+    guard shortcutKeys(entry) != normalized else{return nil}
     sequences.cancel();sequences.bindings.removeValue(forKey:id)
     entry.item.keyEquivalent="";entry.item.keyEquivalentModifierMask=[]
-    if strokes.count==1{entry.item.keyEquivalent=strokes[0].key;entry.item.keyEquivalentModifierMask=strokes[0].modifiers}
-    else if strokes.count>1{sequences.bindings[id]=strokes}
-    if persist{sequences.save();var bindings=UserDefaults.standard.dictionary(forKey:"workspaceShortcuts") as? [String:[String:Any]] ?? [:];bindings[id]=["key":entry.item.keyEquivalent,"modifiers":entry.item.keyEquivalentModifierMask.rawValue];UserDefaults.standard.set(bindings,forKey:"workspaceShortcuts")}
+    if Self.isTransport(entry) {transportBinding=normalized}
+    else if strokes.count==1{entry.item.keyEquivalent=strokes[0].key;entry.item.keyEquivalentModifierMask=strokes[0].modifiers}
+    if strokes.count>1{sequences.bindings[id]=strokes}
+    sessionBindings[id]=["key":strokes.count==1 ? strokes[0].key:"","modifiers":strokes.count==1 ? strokes[0].modifiers.rawValue:0]
+    if persist && persistPreferences {
+      sequences.save();var bindings=UserDefaults.standard.dictionary(forKey:"workspaceShortcuts") as? [String:[String:Any]] ?? [:]
+      bindings[id]=sessionBindings[id]
+      UserDefaults.standard.set(bindings,forKey:"workspaceShortcuts")
+    }
     table.reloadData();onShortcutsChanged?();return nil
   }
   func recordSequence(_ event:NSEvent){

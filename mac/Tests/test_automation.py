@@ -16,6 +16,7 @@ sys.path.insert(0, str(ROOT / "mac/Tools"))
 from resonance_api import APIError, Client, drum_roll, endpoints
 from test_audio_fanout import audio_fanout
 from test_scratch_gestures import scratch_gestures
+from test_plugin_editor_api import plugin_editor_api
 sys.path.insert(0, str(ROOT / 'editor/Tests'))
 from parameter_preview_contract import parameter_preview_contract
 from recipe_parameter_contract import recipe_parameter_contract
@@ -2428,6 +2429,7 @@ def main():
                 audio_fanout(client, directory)
                 scratch_gestures(client, directory)
                 parameter_preview_contract(client, directory, expect_error)
+                plugin_editor_api(client, expect_error)
                 recipe_parameter_contract(client, directory, expect_error)
                 recipe_preview_contract(client, directory, expect_error)
                 rack_dry_run_contract(client, directory, expect_error)

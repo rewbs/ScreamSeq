@@ -789,9 +789,9 @@ struct InterfaceFailure: Error { let message: String }
     editorDraftGroups + [
       ("automation-tools", automationToolsChecks), ("automation-target", automationTargetChecks),
       ("parameter-activity", parameterActivityChecks), ("mixer-strips", mixerStripsChecks),
-      ("plugin-preset", pluginPresetChecks), ("song-timing", songTimingChecks),
+      ("plugin-preset", pluginPresetChecks), ("song-timing", songTimingChecks), ("song-settings", songSettingsChecks),
       ("plugin-programs", pluginProgramsChecks), ("precise-notes", preciseNotesChecks),
-      ("mac-parity", macParityChecks), ("workspace", workspaceChecks), ("signal-graph", signalGraphChecks),
+      ("keyboard-settings", keyboardSettingsChecks), ("mac-parity", macParityChecks), ("workspace", workspaceChecks), ("signal-graph", signalGraphChecks),
       ("graph-actions", graphActionCatalogChecks), ("graph-ports", graphPortActionChecks),
       ("graph-preview", graphConnectionPreviewChecks), ("sample-browser", sampleBrowserChecks),
       ("sample-recording", sampleRecordingChecks), ("plugin-recording", pluginRecordingChecks),

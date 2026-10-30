@@ -1,6 +1,12 @@
 import AppKit
 extension AppController {
   func finishPendingNotes(_ action:@escaping ()->Void)->Bool {
+    if let editor=songSettingsWindow?.editor,editor.needsCompletion {
+      editor.finishAutomaticEdit {[weak self] accepted in
+        if accepted {action()} else {self?.statusLabel.stringValue="Finish or reload the retained song settings before continuing."}
+      }
+      return true
+    }
     if instrumentEditor.hasDraft {
       instrumentEditor.finishAutomaticEdit {[weak self] accepted in
         if accepted {action()} else {self?.statusLabel.stringValue="Finish or reload the retained instrument edit before continuing."}

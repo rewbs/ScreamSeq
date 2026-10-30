@@ -8,6 +8,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
   lazy var patternGraphHost=PatternGraphHost(patternView)
   let sampleEditor = SampleEditor(frame: .zero), instrumentEditor = InstrumentEditor(frame: .zero)
   let keyboardSettings = KeyboardSettings()
+  var songSettingsWindow: SongSettingsWindow?
   let pluginEditor = PluginEditor(frame: .zero)
   let pluginPortsEditor = PluginPortsEditor(frame: .zero)
   var pluginPortsWindow: NSWindow?
@@ -1390,41 +1391,20 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
       })
   }
   @objc func songSettings() {
-    guard !busy else { return }
-    let alert = NSAlert()
-    alert.messageText = "Song settings"
-    let settingsRevision = model.revisionToken
-    let title = NSTextField(string: model.title)
-    let tempo = NSTextField(string: model.tempoText)
-    tempo.fixed(width: 96); tempo.setAccessibilityLabel("Tempo")
-    let speed = numberField(model.speed, label: "Ticks per row")
-    let channels = numberField(model.channels, label: "Channel count")
-    title.fixed(width: 300)
-    let content = stack(
-      .vertical,
-      [
-        labeled("TITLE", title),
-        stack(
-          .horizontal,
-          [labeled("BPM", tempo), labeled("TICKS / ROW", speed), labeled("CHANNELS", channels)],
-          spacing: 24),
-      ], spacing: 16)
-    content.frame = NSRect(x: 0, y: 0, width: 320, height: 110)
-    alert.accessoryView = content
-    alert.addButton(withTitle: "Apply")
-    alert.addButton(withTitle: "Cancel")
-    if alert.runModal() == .alertFirstButtonReturn {
-      let text = title.stringValue
-      guard let bpm = Double(tempo.stringValue), bpm.isFinite, let ticks = Int(speed.stringValue), let count = Int(channels.stringValue) else {
-        statusLabel.stringValue = "Enter a finite tempo and whole-number ticks/channel counts."; return
-      }
-      handleAutomation("document.patch", params: ["expectedRevision": settingsRevision, "title": text, "tempo": bpm, "speed": ticks, "channels": count]) { [weak self] response in
-        if let error = response["error"] as? [String: Any] { self?.statusLabel.stringValue = error["message"] as? String ?? "Song settings failed" }
-      }
+    if let open=songSettingsWindow {open.makeKeyAndOrderFront(nil);return}
+    guard !busy else{return}
+    let panel=SongSettingsWindow();songSettingsWindow=panel
+    panel.editor.onContext = {[weak self] in
+      guard let self else{return ("","")};return (self.recoveryID,self.session.automationRevision)
     }
+    panel.editor.onRequest = {[weak self] method,params,reply in self?.handleAutomation(method,params:params,reply:reply)}
+    panel.editor.onReturn = {[weak self] in
+      guard let self else{return};self.window.makeKeyAndOrderFront(nil);self.window.makeFirstResponder(self.patternView)
+    }
+    panel.center();panel.makeKeyAndOrderFront(nil);panel.editor.load(reload:true);panel.makeFirstResponder(panel.editor.title)
   }
   @objc func keyboardPreferences() {
-    keyboardSettings.show { self.patternView.rowHeight = KeyboardSettings.rowHeight }
+    keyboardSettings.show { self.patternView.rowHeight = Float(self.keyboardSettings.zoom.selectedTag()) }
     keyboardSettings.window?.delegate = self
   }
   @objc func importReport() {

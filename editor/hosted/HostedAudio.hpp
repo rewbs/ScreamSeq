@@ -699,6 +699,7 @@ public:
   bool schedulePitchMIDI(const NoteSource &,uint8_t channel,uint16_t wheel,uint64_t frame) noexcept;
   void endNotes() noexcept;
   void showEditor(size_t slot);
+  void closeEditor(size_t slot);
   std::vector<size_t> openEditors() const;
   bool popEdit(size_t slot, uint32_t &, float &) noexcept;
   bool popEdit(size_t slot, PluginEdit &) noexcept;

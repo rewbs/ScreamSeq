@@ -11,7 +11,40 @@ from resonance_api import APIError, Client
 
 def check(client):
     before = client.call("document.get")
+    keyboard = client.call("workspace.get")["data"]["keyboard"]
+    proposed_keyboard = dict(expectedKeyboard=keyboard["revision"], lower="FSXDCVGBHNJM",
+                             upper="Q2W3ER5T6Y7UI", playStopKeys=["return"])
+    try:
+        for patch, code in [({"expectedKeyboard": "stale"}, -32001), ({"lower": "duplicate"}, -32602),
+                            ({"upper": "Q2W3ER5T6Y7UM"}, -32602), ({"playStopKeys": ["cmd+k"]}, -32602),
+                            ({"playStopKeys": "return"}, -32602), ({"extra": True}, -32602)]:
+            try:
+                client.call("workspace.keyboard.set", {**proposed_keyboard, **patch})
+            except APIError as error:
+                assert error.code == code, error
+            else:
+                raise AssertionError("Invalid keyboard preferences accepted")
+            assert client.call("workspace.get")["data"]["keyboard"] == keyboard
+            assert client.call("document.get") == before
+        applied = client.call("workspace.keyboard.set", proposed_keyboard, request_id="parity-keyboard-once")
+        assert not applied["changed"] and not applied["playbackStopped"]
+        assert applied["data"]["upper"] == "Q2W3ER5T6Y7UI" and applied["data"]["playStopKeys"] == ["return"]
+        assert client.call("workspace.keyboard.set", proposed_keyboard, request_id="parity-keyboard-once") == applied
+        no_op = client.call("workspace.keyboard.set", {**proposed_keyboard, "expectedKeyboard": applied["data"]["revision"]})
+        assert no_op["data"] == applied["data"]
+        try:
+            client.call("workspace.keyboard.set", proposed_keyboard)
+        except APIError as error:
+            assert error.code == -32001
+        else:
+            raise AssertionError("Stale keyboard preferences accepted")
+        assert client.call("document.get") == before
+    finally:
+        current = client.call("workspace.get")["data"]["keyboard"]
+        client.call("workspace.keyboard.set", {"expectedKeyboard": current["revision"],
+                    **{field: keyboard[field] for field in ("lower", "upper", "playStopKeys")}})
     advertised = client.call("api.describe")["data"]
+    assert "workspace.keyboard.set" in advertised["writes"]
     assert {"midi.devices.get", "midi.settings.get", "midi.settings.set"} <= set(advertised["reads"] + advertised["writes"])
     assert all(device["id"].startswith("coremidi:") for device in client.call("midi.devices.get")["data"]["devices"])
     assert {"audio.devices.get", "audio.settings.get", "audio.settings.set"} <= set(advertised["reads"] + advertised["writes"])

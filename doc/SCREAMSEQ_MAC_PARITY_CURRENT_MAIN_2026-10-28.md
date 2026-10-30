@@ -141,6 +141,55 @@ Executable SHA-256 before QA identity signing: `e3ff43777fa3763a792b074c1d099faf
 The unpublished keyboard API work was set aside for this build and is not part
 of this review checkpoint. Broader parity limits below remain unchanged.
 
+## Keyboard, native editor API and retained Song Settings — 2026-10-30
+
+This source batch adds `workspace.keyboard.set`, the optional upper-octave C,
+shared command-palette Play/Stop bindings (including disabled and multi-key
+bindings), local text/menu/formula ownership, and guarded retained preference
+fields. Held-note release retains the pitch, instrument and channel captured at
+key-down after a mapping change. Preference edits leave song history unchanged.
+
+`plugin.editor.open/close` now use the existing rack host. Strict admission,
+revision guards, stable identity replies, repeated opening/closing and parameter
+preview preservation are covered. Closing a stopped native editor drains its
+accepted processor-input prefix before a later Undo; otherwise an older pending
+VST3 editor value could overwrite that Undo. State capture is limited to a joined,
+stopped processor and its returned effective state is not stored as the musical
+baseline. A retained recording take bypasses this drain and keeps original input.
+
+Song Settings is now a retained modeless window. Invalid/refused fields, hidden
+window drafts, stale targets and text entered during pending reads or writes are
+preserved. Requests contain only changed fields. Save/export/history wait for
+pending and valid newer drafts; failures settle their waiting actions. An
+uncertain write cannot replay until current state is read and explicitly accepted.
+
+Validation before the next permitted full build:
+
+- All 41 AppKit interface groups pass, including held-note release across mapping
+  changes, invalid/stale settings, delayed completion with newer input, explicit
+  uncertain-result review, failed initial reads and hidden-window retention.
+- Complete Swift application type-check and six schema/inventory checks pass.
+- The complete windowless socket suite passes against a freshly linked test host,
+  including strict/stale rack-editor requests, preview retention, built-in editor
+  refusal, no-op close and request replay. The app-only keyboard path awaits the
+  next integrated application build.
+- The native session and plugin CTest targets pass. Native fixture UI tests cover
+  repeated windows, strict admission, unchanged previews, manual editing followed
+  by close and one Undo restoring exact saved bytes.
+- The native UI/BlackHole lifecycle suite passes with 512-frame buffers, including
+  close during retained capture without changing original events, rejection of
+  opening during the take, recovery, live Keep/Undo/Redo, stopped verification and
+  save/reopen. The test verifies unchanged system output and buffer size. This is
+  fixture evidence, not physical-device or commercial-plugin qualification.
+
+Logs are under `bin/mac-parity-current/evidence/`: `interface-song-settings-final.log`,
+`typecheck-song-settings-final.log`, `test-plugin-editor-final.log`,
+`test-plugin-editor-flush.log`, `socket-plugin-editors-windowless-final.log`
+and `api-inventory-keyboard-plugin.log`.
+These additions are newer than full build 5. Application socket and computer-use
+qualification of the integrated binary remain pending; the next full build cannot
+start before 07:21:16 UTC under the one-build-per-hour limit.
+
 ## Remaining parity work
 
 These items are deliberately outside this checkpoint and must be resolved before
@@ -148,10 +197,10 @@ claiming complete Windows parity:
 
 - Explicit rack/graph plugin path scan and reconnect with module-hash guards and
   Undo. Mac's trusted automatic class resolution is not an equivalent workflow.
-- Rack plugin-editor open/close API and guarded musical-keyboard settings API,
-  including optional upper-octave C and custom Play/Stop binding integration.
-- Retained Song Settings form after invalid/refused edits; additional composing
-  departure, panel-close and newer-input guards.
+- Integrated application/socket/computer-use qualification of the newly added
+  keyboard settings, rack editor APIs and retained Song Settings.
+- Additional composing departure, panel-close and newer-input guards in other
+  editors.
 - Mixer raw-field retention and completion, sample-setting completion and retained
   refused waveform strokes.
 - Remaining recorder/review focus, root keyboard traversal, paging and endpoint

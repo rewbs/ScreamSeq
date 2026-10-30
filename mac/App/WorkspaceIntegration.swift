@@ -2,6 +2,7 @@ import AppKit
 
 extension AppController {
   func installWorkspace() {
+    commandPalette.persistPreferences = !inspectionTest && !automationTest
     let dock = DockWorkspace(patternView:patternGraphHost); workspace = dock; dock.fill(editorHost)
     func add(_ id:String,_ title:String,_ view:NSView,_ location:String,_ height:CGFloat? = nil) {
       let panel=WorkspacePanel(id:id,title:title,view:view,height:height)
@@ -100,7 +101,11 @@ extension AppController {
         KeyboardSettings.traceInput("workspace.key.menu-owned",event:event)
         return event
       }
-      if self.commandPalette.window?.isKeyWindow != true && self.commandPalette.sequences.handle(event){return nil}
+      if self.focusedView(event) is FormulaCodeView,event.keyCode==49,event.modifierFlags.intersection(WorkspaceStroke.mask)==[.control] {self.commandPalette.sequences.cancel();return event}
+      let target=KeyboardSettings.focusWindow(for:event,keyWindow:NSApp.keyWindow)
+      let modalInput=NSApp.modalWindow != nil || self.window.attachedSheet != nil || target?.attachedSheet != nil || target?.sheetParent != nil
+      if modalInput {self.commandPalette.sequences.cancel()}
+      else if self.commandPalette.window?.isKeyWindow != true && self.commandPalette.sequences.handle(event){return nil}
       if self.commandPalette.window?.isKeyWindow != true && self.commandPalette.handleAdditionalShortcut(event) { return nil }
       if self.handlePlaybackKey(event) || self.handleInspectorNote(event) { return nil }
       guard self.liveKeyboard,NSApp.isActive,self.commandPalette.window?.isVisible != true,
@@ -117,7 +122,11 @@ extension AppController {
     NotificationCenter.default.addObserver(forName:NSApplication.didResignActiveNotification,object:nil,queue:.main){[weak self] _ in self?.releaseWorkspaceKeys();self?.releaseInspectorKeys();self?.commandPalette.sequences.cancel()}
     commandPalette.sequences.onHint = {[weak self] hint in self?.window.subtitle=hint}
     commandPalette.shortcutAllowed = {[weak self] id in
-      id==GraphCommand.returnFromSource.id || !id.hasPrefix("graph.") || NSApp.keyWindow?.firstResponder === self?.signalGraphEditor.canvas
+      guard let self else{return false}
+      if self.transportCommand?.id==id {
+        return NSApp.modalWindow==nil && self.window.attachedSheet==nil && NSApp.keyWindow?.attachedSheet==nil && NSApp.keyWindow?.sheetParent==nil
+      }
+      return id==GraphCommand.returnFromSource.id || !id.hasPrefix("graph.") || NSApp.keyWindow?.firstResponder === self.signalGraphEditor.canvas
     }
     commandPalette.additionalMenus = { [weak self] in
       guard let self, let dock = self.workspace else { return [] }
@@ -141,6 +150,7 @@ extension AppController {
       return menus
     }
     commandPalette.collect()
+    installKeyboardPreferences()
     for tabs in [dock.right,dock.bottom,dock.secondary] {
       tabs.shortcutLabel = {[weak self] id in
         guard let self,let entry=self.commandPalette.entries.first(where:{$0.item.representedObject as? String==id}) else{return ""}
@@ -326,6 +336,12 @@ extension AppController {
   func handleWorkspaceAutomation(_ method:String,params:[String:Any],reply:@escaping AutomationServer.Reply)->Bool{
     guard method.hasPrefix("workspace.") else{return false}
     func fail(_ message:String){reply(AutomationServer.error(-32602,message))}
+    if method=="workspace.keyboard.set" {
+      do {let state=try applyKeyboardPreferences(params);reply(["result":["revision":session.automationRevision,"data":state,"changed":false,"playbackStopped":false]])}
+      catch let error as KeyboardSettings.Failure {reply(AutomationServer.error(error.code,error.message))}
+      catch {reply(AutomationServer.error(-32003,error.localizedDescription))}
+      return true
+    }
     if method=="workspace.input" {
       guard Set(params.keys).isSubset(of:["expectedRevision","expectedContext","instrument","octave"]),params["instrument"] != nil || params["octave"] != nil else {fail("Supply instrument and/or octave with revision and context guards");return true}
       guard let revision=params["expectedRevision"] as? String,let context=params["expectedContext"] as? String else{fail("Supply expectedRevision and expectedContext");return true}
@@ -375,6 +391,8 @@ extension AppController {
     var state=workspace?.state ?? [:];state["panels"]=workspace?.panels.keys.sorted() ?? [];state["visible"]=workspace?.visibleIDs ?? [];state["focus"]=workspace?.focusedPanel()?.id ?? "pattern";state["liveKeyboard"]=liveKeyboard;var context=contextPanel.snapshot;context["visible"]=workspace?.contextPanelVisible ?? true;state["contextPanel"]=context;state["positionMode"]=patternView.positionMode.rawValue
     state["targets"]=workspace?.panels.mapValues{$0.target.stringValue};state["screens"]=NSScreen.screens.map{["name":$0.localizedName,"width":$0.visibleFrame.width,"height":$0.visibleFrame.height,"scale":$0.backingScaleFactor]}
     state["savedLayouts"]=workspaceLayouts.names
+    state["keyboard"]=keyboardState;state["keyboardWindow"]=keyboardSettings.snapshot
+    if let settings=songSettingsWindow {state["songSettings"] = settings.editor.snapshot.merging(["visible":settings.isVisible]){_,new in new}}
     reply(["result":["revision":session.automationRevision,"data":state,"changed":false,"playbackStopped":false]]);return true
   }
 }
