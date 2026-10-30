@@ -11,14 +11,15 @@ extension AppController {
     view.instrument.state = model.instruments.isEmpty ? .off : .on
     view.onRequest = { [weak self] method, params, reply in self?.handleAutomation(method, params: params, reply: reply) }
     view.onRevision = { [weak self] in
-      guard let self, !self.busy, !self.sessionReading else { return "" }
-      return self.session.automationRevision
+      guard let self, !self.shuttingDown else { return "" }
+      return self.model.revisionToken
     }
     view.onDocument = { [weak self] in
       guard let self, !self.shuttingDown else { return nil }
       // This main-owned identity changes for New, Open and recovery restore.
-      return self.recoveryID
+      return String(self.model.revisionToken.split(separator: ":").first ?? "")
     }
+    view.establishSetupBaseline()
     view.onAdded = { [weak self] sample, instrument in self?.selectRecordedSample(sample, instrument: instrument) }
     view.onPermission = { reply in
       switch AVCaptureDevice.authorizationStatus(for: .audio) {
@@ -30,9 +31,10 @@ extension AppController {
       default: reply("Microphone access is unavailable. Enable ScreamSeq in System Settings → Privacy & Security → Microphone, then Record again.")
       }
     }
-    let win = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 650, height: 540), styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
-    win.title = "Record sample"; win.contentMinSize = NSSize(width: 610, height: 520)
+    let win = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 650, height: 600), styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
+    win.title = "Record sample"; win.contentMinSize = NSSize(width: 610, height: 580)
     win.isReleasedWhenClosed = false; win.contentView = view; win.delegate = view
+    win.autorecalculatesKeyViewLoop = false; win.initialFirstResponder = view.name
     sampleRecordingWindow = win; win.center(); win.makeKeyAndOrderFront(nil); view.activate()
   }
   func selectRecordedSample(_ sample: Int, instrument: Int) {

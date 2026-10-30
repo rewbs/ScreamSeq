@@ -1170,7 +1170,9 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     instrumentEditor.onImport = { [weak self] in self?.importInstrument() }
     instrumentEditor.onRecord = { [weak self] in
       self?.showSampleRecorder()
-      (self?.sampleRecordingWindow?.contentView as? SampleRecordingView)?.instrument.state = .on
+      if let recorder = self?.sampleRecordingWindow?.contentView as? SampleRecordingView {
+        recorder.instrument.state = .on; recorder.setupChanged()
+      }
     }
     instrumentEditor.onEnvelopeBank = { [weak self] kind in self?.showInstrumentEnvelopeBank(kind) }
     instrumentEditor.onEnvelopeTools = { [weak self] kind in self?.showInstrumentEnvelopeTools(kind) }

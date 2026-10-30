@@ -2,7 +2,7 @@ import AppKit
 
 /// A take is session state until Add succeeds. Closing this window stops input,
 /// but never silently throws away recorded audio or starts a second take.
-final class SampleRecordingView: NSView, NSWindowDelegate {
+final class SampleRecordingView: NSView, NSWindowDelegate, NSTextFieldDelegate {
   var onRequest: ((String, [String: Any], @escaping ([String: Any]) -> Void) -> Void)?
   var onPermission: ((@escaping (String?) -> Void) -> Void)?
   var onRevision: (() -> String)?
@@ -21,17 +21,31 @@ final class SampleRecordingView: NSView, NSWindowDelegate {
   lazy var stop = ActionButton("Stop", symbol: "stop.fill") { [weak self] in self?.stopRecording() }
   lazy var add = ActionButton("Add to song", symbol: "plus", prominent: true) { [weak self] in self?.commit() }
   lazy var discard = ActionButton("Discard take") { [weak self] in self?.discardTake() }
-  private(set) var take = "", capturing = false, frames = 0, pending = false
-  var needsDocumentCompletion: Bool { pending || permissionPending || capturing || !take.isEmpty }
+  lazy var refresh = ActionButton("Refresh", symbol: "arrow.clockwise") { [weak self] in self?.loadDevices() }
+  lazy var review = ActionButton("Review current take") { [weak self] in self?.reviewOperation() }
+  lazy var acceptState = ActionButton("Accept observed state") { [weak self] in self?.acceptObservation() }
+  lazy var discardSetup = ActionButton("Discard setup") { [weak self] in self?.resetSetup() }
+  var take = "", takeDocument = "", capturing = false, frames = 0, pending = false
+  var operation: SampleRecordingOperation?
+  var baseline = SampleRecordingSetup(name: "Recording", instrument: false)
+  var observedSetup = SampleRecordingSetup(name: "Recording", instrument: false)
+  var setupContext: SampleRecordingContext?, permissionContext: SampleRecordingContext?
+  var setupGeneration: UInt64 = 0
+  var needsDocumentCompletion: Bool {
+    syncSetup()
+    return pending || permissionPending || operation != nil || capturing || !take.isEmpty || rawSetup != baseline || composingName
+  }
   private var deviceData = [[String: Any]](), channelChoices = [(Int, Int)]()
-  private var timer: Timer?, closing = false, permissionPending = false
-  private var polling = false, pollGeneration: UInt64 = 0
-  private var afterPoll: (() -> Void)?
+  private var timer: Timer?
+  var closing = false, permissionPending = false
+  var polling = false, pollGeneration: UInt64 = 0
+  var afterPoll: (() -> Void)?
   override init(frame: NSRect) {
     super.init(frame: frame)
     wantsLayer = true; layer?.backgroundColor = Theme.panel.cgColor
     devices.setAccessibilityLabel("Recording input device"); channels.setAccessibilityLabel("Recording input channels")
     name.setAccessibilityLabel("Recorded sample name"); limit.setAccessibilityLabel("Recording time limit")
+    name.delegate = self; instrument.target = self; instrument.action = #selector(setupChanged)
     devices.target = self; devices.action = #selector(deviceChanged)
     limit.addItems(withTitles: ["60 seconds", "5 minutes"])
     meter.levelIndicatorStyle = .continuousCapacity; meter.minValue = 0; meter.maxValue = 1
@@ -41,52 +55,43 @@ final class SampleRecordingView: NSView, NSWindowDelegate {
     status.preferredMaxLayoutWidth = 580
     details.lineBreakMode = .byWordWrapping; details.maximumNumberOfLines = 2
     let input = stack(.horizontal, [labeled("INPUT", devices), labeled("CHANNELS", channels),
-      ActionButton("Refresh", symbol: "arrow.clockwise") { [weak self] in self?.loadDevices() }], spacing: 12)
+      refresh], spacing: 12)
     devices.widthAnchor.constraint(greaterThanOrEqualToConstant: 250).isActive = true
     channels.widthAnchor.constraint(greaterThanOrEqualToConstant: 190).isActive = true
     let capture = stack(.horizontal, [record, stop, NSView(), labeled("LIMIT", limit)], spacing: 10)
     let destination = stack(.horizontal, [instrument, NSView(), discard, add], spacing: 10)
     let content = stack(.vertical, [Theme.label("Record a sample", size: 18, weight: .semibold), input,
       stack(.horizontal, [clock, NSView()]), meter, details, capture,
-      labeled("SAMPLE NAME", name), destination, status, NSView()], spacing: 14)
-    content.stretchAcrossAxis(); content.fill(self, inset: 18); updateControls()
+      labeled("SAMPLE NAME", name), destination, stack(.horizontal, [review, acceptState, discardSetup], spacing: 10), status, NSView()], spacing: 14)
+    content.stretchAcrossAxis(); content.fill(self, inset: 18)
+    for index in keyboardOrder.indices { keyboardOrder[index].nextKeyView = keyboardOrder[(index + 1) % keyboardOrder.count] }
+    updateControls()
   }
   required init?(coder: NSCoder) { fatalError() }
   deinit { timer?.invalidate() }
   func activate() {
-    closing = false; loadDevices(); poll()
+    closing = false
+    if operation == nil { loadDevices(adoptTake: true) }
+    focusEntry()
     timer?.invalidate()
     timer = Timer.scheduledTimer(withTimeInterval: 0.3, repeats: true) { [weak self] _ in
       guard let self, self.window?.isVisible == true else { return }; self.poll()
     }
   }
-  private func request(_ method: String, _ params: [String: Any], document: String? = nil, done: @escaping ([String: Any]) -> Void) {
-    guard !pending, let onRequest else { return }
+  // Read-only requests can share the deliberate-action queue. Writes have a
+  // separate retained owner that survives missing replies and failed readback.
+  private func request(_ method: String, _ params: [String: Any], done: @escaping ([String: Any]) -> Void) {
+    guard !pending, !permissionPending, operation == nil, let onRequest else { return }
     pending = true; pollGeneration &+= 1; updateControls()
     let send = { [weak self] in
       guard let self else { return }
-      if let document, self.onDocument?() != document {
-        self.pending = false; self.closing = false
-        self.status.stringValue = "The song changed before recording could start. Press Record to start a take for this song."
-        self.updateControls(); return
-      }
-      var currentParams = params
-      if currentParams["expectedRevision"] != nil { currentParams["expectedRevision"] = self.onRevision?() ?? "" }
-      onRequest(method, currentParams) { [weak self] response in
+      onRequest(method, params) { [weak self] response in
         guard let self else { return }; self.pending = false
-        if let error = response["error"] as? [String: Any] {
-          self.status.stringValue = error["message"] as? String ?? "Recording operation failed. The take is retained."
-          self.closing = false; self.updateControls(); return
-        }
-        guard let result = response["result"] as? [String: Any], let data = result["data"] as? [String: Any] else {
-          self.status.stringValue = "No recording response. Reopen this window to check the take."
-          self.closing = false; self.updateControls(); return
-        }
-        done(data); self.updateControls()
+        if let data = (response["result"] as? [String: Any])?["data"] as? [String: Any] { done(data) }
+        else { self.status.stringValue = (response["error"] as? [String: Any])?["message"] as? String ?? "Could not read recording inputs. Refresh to try again." }
+        self.updateControls()
       }
     }
-    // Reads must never blink buttons/field editors off. Serialize a deliberate
-    // action after the current poll instead of dropping it as a busy request.
     if polling { afterPoll = send } else { send() }
   }
   private var inputAvailable: Bool {
@@ -102,7 +107,7 @@ final class SampleRecordingView: NSView, NSWindowDelegate {
     let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
     item.representedObject = device["id"] as? String; devices.menu?.addItem(item)
   }
-  func loadDevices() {
+  func loadDevices(adoptTake: Bool = false) {
     request("sample.recording.devices", [:]) { [weak self] data in
       guard let self else { return }
       let previous = self.devices.selectedItem?.representedObject as? String
@@ -118,7 +123,7 @@ final class SampleRecordingView: NSView, NSWindowDelegate {
       self.deviceChanged()
       if self.deviceData.isEmpty { self.status.stringValue = "No input device is available. Connect a microphone or audio interface, then refresh inputs." }
       else if !self.inputAvailable { self.status.stringValue = "The selected input is disconnected. Reconnect it or choose another input; your setup is retained." }
-      self.poll()
+      self.poll(adopt: adoptTake)
     }
   }
   @objc func deviceChanged() {
@@ -133,28 +138,39 @@ final class SampleRecordingView: NSView, NSWindowDelegate {
     if let previous, let index = channelChoices.firstIndex(where: { $0 == previous }) { channels.selectItem(at: index) }
     updateControls()
   }
-  func poll() {
-    guard !pending, !permissionPending, !polling, let onRequest else { return }
-    polling = true; let generation = pollGeneration
-    onRequest("sample.recording.get", [:]) { [weak self] response in
+  func poll(adopt: Bool = false) {
+    guard !pending, !permissionPending, operation == nil, !polling, let onRequest else { return }
+    polling = true; let generation = pollGeneration, identity = take
+    let params: [String: Any] = !adopt && !identity.isEmpty ? ["take": identity] : [:]
+    onRequest("sample.recording.get", params) { [weak self] response in
       guard let self else { return }; self.polling = false
       if let action = self.afterPoll { self.afterPoll = nil; action(); return }
-      guard generation == self.pollGeneration, !self.pending, !self.permissionPending else { return }
+      guard generation == self.pollGeneration, !self.pending, !self.permissionPending, self.operation == nil else { return }
       if let error = response["error"] as? [String: Any] {
         if error["code"] as? Int != -32002 { self.status.stringValue = error["message"] as? String ?? "Cannot read the recorded take. Try reopening the recorder." }
         return
       }
-      if let result = response["result"] as? [String: Any], let data = result["data"] as? [String: Any] { self.apply(data) }
+      if let result = response["result"] as? [String: Any], let data = result["data"] as? [String: Any] {
+        guard adopt || identity.isEmpty || SampleRecordingRead.identity(data) == identity else {
+          self.status.stringValue = "The take changed. Reopen the recorder to inspect the current take."; return
+        }
+        self.apply(data)
+      }
     }
   }
   func apply(_ data: [String: Any]) {
+    guard SampleRecordingRead.validTake(data) else {
+      status.stringValue = "Could not validate the current take. The retained take is unchanged."; return
+    }
     let wasCapturing = capturing
+    takeDocument = data["documentId"] as? String ?? ""
     take = data["take"] as? String ?? ""; capturing = data["capturing"] as? Bool ?? false; frames = data["frames"] as? Int ?? 0
-    let seconds = max(0, data["seconds"] as? Double ?? 0)
+    let elapsed = data["seconds"] as? Double ?? 0
+    let seconds = elapsed.isFinite ? min(300, max(0, elapsed)) : 0
     clock.stringValue = String(format: "%d:%04.1f", Int(seconds) / 60, seconds.truncatingRemainder(dividingBy: 60))
     meter.doubleValue = min(1, max(0, data["peak"] as? Double ?? 0))
     if !take.isEmpty {
-      let rate = Int(data["sampleRate"] as? Double ?? 0), count = data["channels"] as? Int ?? 1
+      let rate = SampleRecordingRead.integer(data["sampleRate"], maximum: 768000) ?? 0, count = data["channels"] as? Int ?? 1
       let maximum = data["maxSeconds"] as? Double ?? 60
       if let device = data["device"] as? String, !device.isEmpty {
         let first = data["firstChannel"] as? Int ?? 0
@@ -179,57 +195,56 @@ final class SampleRecordingView: NSView, NSWindowDelegate {
     updateControls()
   }
   func start() {
-    guard !pending, !permissionPending, take.isEmpty, inputAvailable, channelChoices.indices.contains(channels.indexOfSelectedItem), let permission = onPermission else { return }
-    guard let document = onDocument?(), !document.isEmpty else {
-      status.stringValue = "Wait for the song operation to finish, then Record again."; return
-    }
-    permissionPending = true; pollGeneration &+= 1; updateControls()
+    syncSetup()
+    guard !pending, !permissionPending, operation == nil, take.isEmpty, inputAvailable,
+      channelChoices.indices.contains(channels.indexOfSelectedItem), let permission = onPermission,
+      let context = currentContext, requireSetupDocument(context) else { return }
+    let pair = channelChoices[channels.indexOfSelectedItem]
+    let params: [String: Any] = ["device": devices.selectedItem?.representedObject as? String ?? "", "firstChannel": pair.0,
+      "channels": pair.1, "maxSeconds": limit.indexOfSelectedItem == 1 ? 300 : 60, "expectedRevision": context.revision]
+    permissionContext = context; permissionPending = true; pollGeneration &+= 1; updateControls()
     permission { [weak self] error in
-      guard let self else { return }; self.permissionPending = false
+      guard let self else { return }; self.syncSetup(); self.permissionPending = false; self.permissionContext = nil
       if let error { self.status.stringValue = error; self.updateControls(); return }
-      guard self.onDocument?() == document else {
+      guard self.onDocument?() == context.document else {
         self.status.stringValue = "The song changed while microphone access was requested. Press Record to start a take for this song."
         self.updateControls(); return
       }
-      guard self.channelChoices.indices.contains(self.channels.indexOfSelectedItem) else { self.updateControls(); return }
-      let pair = self.channelChoices[self.channels.indexOfSelectedItem]
-      let p: [String: Any] = ["device": self.devices.selectedItem?.representedObject as? String ?? "", "firstChannel": pair.0,
-        "channels": pair.1, "maxSeconds": self.limit.indexOfSelectedItem == 1 ? 300 : 60, "expectedRevision": self.onRevision?() ?? ""]
-      self.request("sample.recording.start", p, document: document) { [weak self] data in self?.apply(data) }
+      self.submit("sample.recording.start", params: params, context: context)
     }
   }
   func stopRecording() {
-    guard !take.isEmpty, !pending else { return }
-    request("sample.recording.stop", ["take": take]) { [weak self] data in
-      guard let self else { return }; self.apply(data)
-      if self.closing { self.closing = false; self.window?.close() }
-    }
+    guard !take.isEmpty, !pending, !permissionPending, operation == nil else { return }
+    submit("sample.recording.stop", params: ["take": take])
   }
   func commit() {
-    guard !pending, !capturing, !take.isEmpty, frames > 0 else { return }
-    let editor = name.currentEditor() as? NSTextView
-    guard editor?.hasMarkedText() != true else {
-      status.stringValue = "Finish composing the sample name before adding the take."; return
+    guard !pending, !permissionPending, operation == nil, !capturing, !take.isEmpty, frames > 0 else { return }
+    syncSetup()
+    guard !composingName else { status.stringValue = "Finish composing the sample name before adding the take."; return }
+    guard let context = currentContext, requireSetupDocument(context), context.document == takeDocument else {
+      status.stringValue = "The take or sample setup belongs to another song. The take and raw setup are retained."; return
     }
-    request("sample.recording.commit", ["take": take, "name": editor?.string ?? name.stringValue, "createInstrument": instrument.state == .on,
-      "expectedRevision": onRevision?() ?? ""]) { [weak self] data in
-      guard let self, let sample = data["sample"] as? Int else { return }
-      self.take = ""; self.frames = 0; self.meter.doubleValue = 0
-      self.status.stringValue = "Added sample \(sample) · ⌘Z undoes the sample and instrument together."
-      self.onAdded?(sample, data["instrument"] as? Int ?? 0)
-    }
+    let fields = rawSetup
+    guard !fields.name.isEmpty, fields.name.utf8.count <= 128 else { status.stringValue = "Enter a sample name using 1–128 UTF-8 bytes."; return }
+    submit("sample.recording.commit", params: ["take": take, "name": fields.name,
+      "createInstrument": fields.instrument, "expectedRevision": context.revision], context: context)
   }
   func discardTake() {
-    guard !pending, !capturing, !take.isEmpty else { return }
-    request("sample.recording.discard", ["take": take]) { [weak self] data in
-      self?.apply(["take": "", "capturing": false, "frames": 0]); self?.status.stringValue = "Take discarded. Ready to record."
-    }
+    guard !pending, !permissionPending, operation == nil, !capturing, !take.isEmpty else { return }
+    submit("sample.recording.discard", params: ["take": take])
   }
-  private func updateControls() {
-    let idle = !pending && !permissionPending
+  func updateControls() {
+    let idle = !pending && !permissionPending && operation == nil
     record.isEnabled = idle && take.isEmpty && inputAvailable && !channelChoices.isEmpty
     stop.isEnabled = idle && capturing; add.isEnabled = idle && !capturing && frames > 0 && !take.isEmpty
     discard.isEnabled = idle && !capturing && !take.isEmpty
+    add.isEnabled = add.isEnabled && takeDocument == onDocument?()
+    refresh.isEnabled = idle
+    review.isHidden = operation == nil; review.isEnabled = !pending && operation != nil
+    review.title = operation?.isCommit == true ? "Review Add result" : "Review current take"
+    acceptState.isHidden = operation?.isCommit != true || operation?.receipt != nil
+    acceptState.isEnabled = !pending && operation?.observation != nil
+    discardSetup.isEnabled = idle
     for control in [devices, channels, limit] { control.isEnabled = idle && take.isEmpty }
     // These are local setup fields until Add captures them. Disabling an active
     // NSTextField for a device read aborts its field editor and loses raw text.
@@ -237,8 +252,27 @@ final class SampleRecordingView: NSView, NSWindowDelegate {
   }
   func windowShouldClose(_ sender: NSWindow) -> Bool {
     guard !pending && !permissionPending else { status.stringValue = "Finishing the recording operation…"; return false }
+    guard operation == nil else {
+      status.stringValue = "Review the recording result before closing. The microphone may still be active."; return false
+    }
     if capturing { closing = true; stopRecording(); return false }
     return true
   }
+  var keyboardOrder: [NSControl] { [devices, refresh, channels, limit, name, instrument, review, acceptState, record, stop, add, discard, discardSetup] }
+  func focusTabEntry(reverse: Bool = false) {
+    let order = reverse ? Array(keyboardOrder.reversed()) : keyboardOrder
+    if let entry = order.first(where: { $0.isEnabled && !$0.isHiddenOrHasHiddenAncestor }) { window?.makeFirstResponder(entry) }
+  }
+  override var acceptsFirstResponder: Bool { true }
+  override func keyDown(with event: NSEvent) {
+    if event.keyCode == 48, !event.modifierFlags.contains(.command), !event.modifierFlags.contains(.control) {
+      focusTabEntry(reverse: event.modifierFlags.contains(.shift))
+    } else { super.keyDown(with: event) }
+  }
+  func focusEntry() {
+    guard let window, window.isKeyWindow, window.firstResponder == nil || window.firstResponder === window || window.firstResponder === self else { return }
+    focusTabEntry()
+  }
+  func windowDidBecomeKey(_ notification: Notification) { focusEntry() }
   func windowWillClose(_ notification: Notification) { timer?.invalidate(); timer = nil }
 }
