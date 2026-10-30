@@ -173,8 +173,6 @@ struct InterfaceFailure: Error { let message: String }
     let recovery = try recoveryChecks()
     let commands = try patternCommandsChecks()
     try sampleCrossfadeChecks()
-    try sampleOperationChecks()
-    try sampleLoopChecks()
     try sampleSnapChecks()
     let zoomedSample = try waveformChecks()
     let samples: [[String: Any]] = [
@@ -754,6 +752,7 @@ struct InterfaceFailure: Error { let message: String }
       ("graph-preview", graphConnectionPreviewChecks), ("sample-browser", sampleBrowserChecks),
       ("sample-recording", sampleRecordingChecks), ("plugin-recording", pluginRecordingChecks),
       ("selection-render", patternSampleRenderChecks),
+      ("sample-operation", sampleOperationChecks), ("sample-loop", sampleLoopChecks),
       ("plugin-control-delivery", pluginControlDeliveryChecks),
       ("parameter-boundary", parameterBoundaryChecks),
       ("pattern-performance", patternPerformanceChecks), ("plugin-instruments", pluginInstrumentsChecks),

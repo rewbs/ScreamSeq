@@ -1111,7 +1111,8 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     if busy || sessionReading {
       deferUntilIdle { [weak self] in self?.submitSampleSettingsRequest(method, params: params, identity: identity, reply: reply) }; return
     }
-    guard let sample = params["sample"] as? Int, model.samples.contains(where: { $0["index"] as? Int == sample && $0["id"] as? String == identity }) else {
+    let sample = (method == "sample.import" ? params["slot"] : params["sample"]) as? Int
+    guard let sample, model.samples.contains(where: { $0["index"] as? Int == sample && $0["id"] as? String == identity }) else {
       reply(AutomationServer.error(-32001, "The captured sample is unavailable. Fields kept.")); return
     }
     handleAutomation(method, params: params, reply: reply)
@@ -1363,25 +1364,16 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     DispatchQueue.main.async { [weak self] in self?.patternView.replayDeferredKeys() }
   }
   func importSample(replacing slot: Int = 0) {
-    guard !busy else { return }
+    guard !busy, window.attachedSheet == nil else { return }
     if slot == 0 { showSampleBrowser(); return }
+    guard slot == sampleEditor.index, let operation = sampleEditor.prepareSampleReplacement() else { return }
     let panel = NSOpenPanel()
     panel.title = slot > 0 ? "Replace sample \(slot)" : "Import sample"
     panel.prompt = slot > 0 ? "Replace" : "Import"
     panel.allowedContentTypes = [.wav, .aiff, .mp3]
     panel.allowsOtherFileTypes = true
     panel.beginSheetModal(for: window) { [weak self] result in
-      guard result == .OK, let self, let url = panel.url else { return }
-      var sample = 1
-      self.perform(
-        "Importing sample…", markDirty: true,
-        { sample = try self.session.importSample(url.path, slot: slot) },
-        completion: {
-          self.sampleEditor.index = sample
-          self.patternView.instrument = sample
-          self.refreshAll()
-          self.showEditor(1)
-        })
+      self?.sampleEditor.finishSampleReplacement(operation, path: result == .OK ? panel.url?.path : nil)
     }
   }
   func importInstrument() {

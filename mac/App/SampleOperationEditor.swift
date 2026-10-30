@@ -16,7 +16,7 @@ final class SampleOperation {
     settingsGeneration = editor.settingsEditGeneration; loopGeneration = editor.loopEditGeneration
     region = SampleViewRegion(editor); channels = editor.waveformChannels
     self.params["expectedRevision"] = revision
-    if method != "sample.clipboard.copy" { self.params["dryRun"] = dryRun }
+    if !["sample.clipboard.copy", "sample.import"].contains(method) { self.params["dryRun"] = dryRun }
   }
   var usesClipboard: Bool { ["sample.clipboard.copy", "sample.cut", "sample.paste"].contains(method) }
 }
@@ -55,6 +55,7 @@ extension SampleEditor {
     operationStatus.stringValue = text
     if method == "sample.process" { processingStatus.stringValue = text }
     else if method == "sample.crossfade" { crossfadeStatus.stringValue = text }
+    else if method == "sample.import" { onMessage?(text) }
     else { clipboardStatus.stringValue = text }
   }
   func finishOperationWaiters(_ accepted: Bool) {
@@ -89,12 +90,38 @@ extension SampleEditor {
     sampleOperation = operation; updateOperationActions(); operationMessage(method, dryRun ? "Calculating preview…" : "Applying sample operation…")
     return operation
   }
+  func prepareSampleReplacement() -> SampleOperation? {
+    if let retained = sampleOperation {
+      if !retained.busy && retained.submitted { reviewOperation() }
+      else { operationMessage("sample.import", "Finish the current sample operation before replacing audio.") }
+      return nil
+    }
+    return beginOperation("sample.import", params: ["slot": index])
+  }
+  func finishSampleReplacement(_ operation: SampleOperation, path: String?) {
+    guard sampleOperation === operation, operation.method == "sample.import", !operation.submitted else { return }
+    func cancel(_ message: String) {
+      sampleOperation = nil; updateOperationActions(); operationMessage(operation.method, message)
+      finishOperationWaiters(false)
+    }
+    guard let path else { cancel("Sample replacement cancelled. Existing audio and fields kept."); return }
+    // The chooser is asynchronous. Its result does not authorize a new target,
+    // a rebase, or discarding text entered while another tool was still usable.
+    guard ownsOperation(operation), operationFieldsUnchanged(operation),
+      onSampleRevision?() == operation.revision,
+      catalogue.contains(where: { $0.index == operation.sample && $0.identity == operation.identity }) else {
+      cancel("Song, sample or draft changed while choosing audio. Replacement cancelled; choose again."); return
+    }
+    guard (path as NSString).isAbsolutePath, !path.contains("\0") else { cancel("Choose an absolute audio file path."); return }
+    operation.params["path"] = path
+    submitOperation(operation)
+  }
   func requestOperation(_ operation: SampleOperation, _ method: String, _ params: [String: Any], identity: String? = nil, _ reply: @escaping ([String: Any]) -> Void) {
     guard ownsOperation(operation) else { return }
     let receive: ([String: Any]) -> Void = { [weak self] response in
       guard let self, self.ownsOperation(operation) else { return }; reply(response)
     }
-    if params["sample"] != nil, let onSettingsRequest { onSettingsRequest(method, params, identity ?? operation.identity, receive) }
+    if params["sample"] != nil || method == "sample.import", let onSettingsRequest { onSettingsRequest(method, params, identity ?? operation.identity, receive) }
     else if let onRequest { onRequest(method, params, receive) }
     else { receive(["error": ["message": "Sample requests are unavailable."]]) }
   }
@@ -262,6 +289,9 @@ extension SampleEditor {
   }
   func validOperationReport(_ operation: SampleOperation, _ data: [String: Any]) -> Bool {
     func count(_ key: String) -> Bool { (data[key] as? Int).map { $0 >= 0 } == true }
+    if operation.method == "sample.import" {
+      return SampleRecordingRead.integer(data["index"], maximum: 65535, minimum: 1) == operation.sample
+    }
     if operation.method == "sample.clipboard.copy" { return validOperationClipboard(data) && data["available"] as? Bool == true }
     if operation.method == "sample.copyToNew" { return (data["sample"] as? Int).map { $0 > 0 } == true && (data["id"] as? String)?.isEmpty == false && count("frames") }
     guard data["sample"] as? Int == operation.sample else { return false }
@@ -275,6 +305,7 @@ extension SampleEditor {
     let data = operation.result ?? [:], prefix = operation.dryRun ? "Preview" : "Applied", clipped = data["clippedSamples"] as? Int ?? 0
     let clipping = clipped > 0 ? " · \(clipped) clipped values" : ""
     switch operation.method {
+    case "sample.import": return "Replaced sample \(operation.sample). Song references kept; one Undo restores the audio."
     case "sample.crossfade":
       let before = data["loopBefore"] as? [String: Any] ?? [:], after = data["loopAfter"] as? [String: Any] ?? [:]
       return "\(prefix): loop \(before["frames"] ?? 0) → \(after["frames"] ?? 0) frames; \(data["changedFrames"] ?? 0) audio frames change." + clipping

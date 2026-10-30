@@ -56,10 +56,14 @@ final class SampleOperationFixture {
 
 extension InterfaceTests {
   static func sampleOperationChecks() throws {
-    for method in ["sample.process", "sample.crossfade", "sample.clipboard.copy", "sample.cut", "sample.delete", "sample.paste", "sample.copyToNew"] {
+    for method in ["sample.process", "sample.crossfade", "sample.clipboard.copy", "sample.cut", "sample.delete", "sample.paste", "sample.copyToNew", "sample.import"] {
       let f = SampleOperationFixture(), e = f.editor
       var report = f.processResult(), frames = 1024, finished = [Bool]()
       switch method {
+      case "sample.import":
+        let operation = e.prepareSampleReplacement()!
+        e.finishSampleReplacement(operation, path: "/tmp/replacement.wav")
+        report = ["index": 1]; frames = 2048
       case "sample.process": e.process(dryRun: false)
       case "sample.crossfade":
         e.crossfadeMode.selectItem(at: 1); e.crossfadeCurve.selectItem(at: 1); e.crossfade(dryRun: false)
@@ -80,6 +84,10 @@ extension InterfaceTests {
       }
       try require(f.calls.last?.0 == method && f.calls.last?.1["expectedRevision"] as? String == "original" && f.calls.last?.2 == "sample-one", "Every sample operation captures original revision and stable identity: \(method)")
       let count = f.calls.count, oldPeaks = e.waveform.peaks
+      if method == "sample.import" {
+        try require(f.calls.last?.1["dryRun"] == nil && f.calls.last?.1["slot"] as? Int == 1,
+          "Replacement uses its captured slot without an unsupported dryRun field")
+      }
       e.finishAutomaticEdit { finished.append($0) }; e.clipboardAction("copy"); e.process(dryRun: false); e.crossfade(dryRun: false)
       e.requestSampleSelection(2); e.reloadSample()
       try require(f.calls.count == count && finished.isEmpty && e.index == 1, "An owned operation blocks overlapping writes, departure and reload")
@@ -188,8 +196,46 @@ extension InterfaceTests {
       try require(e.waveform.selection == (trim ? 0...20 : 30...50) && e.selectionStart.stringValue == (trim ? "0" : "30"), "Verified processing adopts its submitted range, including Trim's new coordinates")
     }
     try sampleOperationKeyboardRetryChecks()
+    try sampleReplacementChecks()
     try sampleOperationFocusChecks()
     try sampleOperationFocusMovementChecks()
+  }
+  static func sampleReplacementChecks() throws {
+    for change in ["cancel", "revision", "fields", "identity"] {
+      let f = SampleOperationFixture(), e = f.editor
+      let operation = e.prepareSampleReplacement()!
+      var done = [Bool](); e.finishAutomaticEdit { done.append($0) }
+      try require(e.hasDraft && f.calls.isEmpty && e.prepareSampleReplacement() == nil,
+        "The file chooser owns the original sample before dispatch and prevents another chooser")
+      if change == "revision" { f.revision = "another-song:1" }
+      if change == "fields" { e.name.stringValue = "Newer raw name" }
+      if change == "identity" { e.updateCatalogue([["index": 1, "id": "replacement-identity", "name": "Other"]]) }
+      e.finishSampleReplacement(operation, path: change == "cancel" ? nil : "/tmp/new.wav")
+      try require(f.calls.isEmpty && e.sampleOperation == nil && done == [false],
+        "Chooser \(change) settles waiting boundaries without retargeting or submitting")
+      if change == "fields" { try require(e.name.stringValue == "Newer raw name" && e.hasDraft, "Cancelling a changed chooser retains newer input") }
+    }
+    for outcome in ["notCommitted", "unknown", "malformed", "readback"] {
+      let f = SampleOperationFixture(), e = f.editor
+      let operation = e.prepareSampleReplacement()!
+      e.finishSampleReplacement(operation, path: "/tmp/original chosen.wav")
+      let params = f.calls.last!.1 as NSDictionary
+      if outcome == "malformed" { try f.answer(["index": true]) }
+      else if outcome == "readback" { try f.answer(["index": 1], revision: "accepted"); try f.fail() }
+      else { try f.fail(outcome == "notCommitted" ? outcome : nil) }
+      let count = f.calls.count; e.retryOperation()
+      if outcome == "notCommitted" {
+        try require(f.calls.count == count + 1 && params.isEqual(to: f.calls.last!.1), "Replacement Retry uses the original path, slot and revision")
+        try f.answer(["index": 1], revision: "accepted"); try f.finishRead()
+        try require(e.sampleOperation == nil && !e.hasDraft, "Replacement retry finishes after matching readback")
+      } else {
+        try require(f.calls.count == count && e.sampleOperation != nil, "Unknown or committed replacement cannot be repeated")
+        try require(e.prepareSampleReplacement() == nil && f.calls.last?.0 == "document.get", "Replace again reviews the retained result instead of opening another chooser")
+        try f.finishRead(); e.acceptOperationReview(); try f.finishRead()
+        try require(e.sampleOperation == nil && e.operationNeedsReload && f.calls.filter { $0.0 == "sample.import" }.count == 1,
+          "Replacement acknowledgement preserves the old presentation until explicit Reload and never writes again")
+      }
+    }
   }
   static func sampleOperationFocusMovementChecks() throws {
     for stage in 0...4 {
