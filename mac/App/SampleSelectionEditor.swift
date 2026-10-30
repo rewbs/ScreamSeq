@@ -140,7 +140,8 @@ extension SampleEditor {
       focusedSampleField.flatMap({ (sampleEditingFields[$0].currentEditor() as? NSTextView)?.selectedRange() }) == query.caret
   }
   func failSampleSelection(_ message: String) {
-    cancelSampleSelection(); drawingStatus.stringValue = message + " · Previous sample and fields kept."
+    cancelSampleSelection()
+    drawingStatus.stringValue = message + (hasSamplePresentation ? " · Previous sample and fields kept." : " · Reload sample to try again.")
     onSamplePresentation?()
   }
   func continueSampleSelection(_ query: SampleSelectionQuery) -> Bool {

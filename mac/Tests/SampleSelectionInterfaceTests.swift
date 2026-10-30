@@ -126,8 +126,15 @@ extension InterfaceTests {
       "Successful document replacement clears old sample fields, region, loops and waveform")
     try require(replaced.settingsIdentity.isEmpty && replaced.sampleRevision == nil && replaced.waveformDocumentID == nil && !replaced.hasDraft && replacementRequests.count == 1 && replaced.name.currentEditor() == nil,
       "Replacement retires focused ownership and rejects old replies without issuing reads or writes for an empty song")
-    replaced.adoptDocument(samples: catalogue)
-    replaced.refreshSample(samples: catalogue)
+    let onlySample = Array(catalogue.prefix(1))
+    replaced.updateCatalogue(onlySample)
+    try require(!replaced.reloadSampleButton.isHiddenOrHasHiddenAncestor, "Importing the first sample makes retry available before its first read finishes")
+    replaced.adoptDocument(samples: onlySample)
+    replaced.refreshSample(samples: onlySample)
+    replacementReplies.removeFirst()(["error": ["message": "Read unavailable"]])
+    try require(replaced.sampleBody?.isHidden == true && !replaced.drawingStatus.isHiddenOrHasHiddenAncestor && replaced.drawingStatus.stringValue.contains("Reload sample") && !replaced.reloadSampleButton.isHiddenOrHasHiddenAncestor && replaced.reloadSampleButton.isEnabled,
+      "A failed first load exposes its error and Reload outside the empty presentation, even when the only selected slot has not changed")
+    replaced.reloadSample()
     while !replacementReplies.isEmpty {
       var reply = response(replacementRequests.last!.0, replacementRequests.last!.1, revision: replacementRevision)
       var result = reply["result"] as! [String: Any]; result["documentId"] = "new-song"; reply["result"] = result
