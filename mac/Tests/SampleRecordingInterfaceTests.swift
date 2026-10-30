@@ -62,7 +62,37 @@ extension InterfaceTests {
     try require(!view.details.stringValue.contains("frames"), "Discard removes the retired take's frame count")
     try require(!view.record.isEnabled, "Discarding a disconnected-device take cannot arm its unavailable input")
     try sampleRecordingDeviceIdentityChecks()
+    try sampleRecordingActiveNameChecks()
 
+  }
+  static func sampleRecordingActiveNameChecks() throws {
+    let view = SampleRecordingView(frame: NSRect(x: 0, y: 0, width: 650, height: 540))
+    let window = NSWindow(contentRect: view.frame, styleMask: [.titled], backing: .buffered, defer: false)
+    window.contentView = view
+    var calls = [(String, [String: Any])](), replies = [([String: Any]) -> Void]()
+    view.onRequest = { method, params, reply in calls.append((method, params)); replies.append(reply) }
+    func answer(_ data: [String: Any]) { replies.removeFirst()(["result": ["data": data]]) }
+    window.makeFirstResponder(view.name)
+    guard let editor = view.name.currentEditor() as? NSTextView else { throw InterfaceFailure(message: "Recorder name field editor did not attach") }
+    editor.insertText("Retained live name", replacementRange: NSRange(location: 0, length: editor.string.count))
+    editor.setSelectedRange(NSRange(location: 9, length: 4))
+    view.loadDevices()
+    try require(view.name.currentEditor() === editor && editor.string == "Retained live name" && editor.selectedRange() == NSRange(location: 9, length: 4),
+      "Refreshing inputs preserves the active name field editor, text and selection")
+    answer(["devices": [["id": "input", "name": "Test input", "channels": 2, "default": true]]])
+    answer(["take": "", "capturing": false, "frames": 0])
+    try require(view.name.currentEditor() === editor && editor.string == "Retained live name", "Refresh and its take poll never cancel name editing")
+    editor.setMarkedText("draft", selectedRange: NSRange(location: 5, length: 0), replacementRange: NSRange(location: 0, length: editor.string.count))
+    view.apply(["take": "take", "capturing": false, "frames": 32]); let count = calls.count
+    view.commit()
+    try require(editor.hasMarkedText() && calls.count == count && view.take == "take", "Adding a take waits for name composition to finish")
+    editor.unmarkText(); editor.insertText("Captured live name", replacementRange: NSRange(location: 0, length: editor.string.count))
+    view.commit()
+    try require(calls.last?.0 == "sample.recording.commit" && calls.last?.1["name"] as? String == "Captured live name", "Add captures the active field editor's latest text")
+    editor.insertText("Newer setup name", replacementRange: NSRange(location: 0, length: editor.string.count))
+    answer(["sample": 4, "instrument": 0])
+    try require(view.take.isEmpty && view.name.currentEditor() === editor && editor.string == "Newer setup name", "A delayed Add completion preserves newer setup input")
+    window.makeFirstResponder(nil)
   }
   static func sampleRecordingDeviceIdentityChecks() throws {
     let view = SampleRecordingView(frame: .zero)

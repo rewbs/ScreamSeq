@@ -13,6 +13,12 @@ extension AppController {
       }
       return true
     }
+    if sampleEditor.hasDraft {
+      sampleEditor.finishAutomaticEdit { [weak self] accepted in
+        if accepted { action() } else { self?.statusLabel.stringValue = "Finish or reload the retained sample edit before continuing." }
+      }
+      return true
+    }
     if instrumentEditor.hasDraft {
       instrumentEditor.finishAutomaticEdit {[weak self] accepted in
         if accepted {action()} else {self?.statusLabel.stringValue="Finish or reload the retained instrument edit before continuing."}

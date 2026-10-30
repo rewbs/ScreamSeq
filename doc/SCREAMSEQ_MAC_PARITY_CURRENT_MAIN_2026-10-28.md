@@ -421,6 +421,45 @@ instrument checkbox and Refresh directly from active editing. Both presentation
 and active-field retention issues remain open; no performance qualification is
 claimed from this pass.
 
+## Sample completion and recorder focus follow-up — 2026-10-30
+
+The sample name/rate/volume/pan form now uses guarded `sample.patch` requests
+instead of an unguarded direct bridge callback. Valid edits save automatically;
+Save/export/history/departure wait for successful same-revision readback before
+continuing. Requests capture both the slot and stable sample identity. Invalid
+batches, composition, newer input and failed readback retain their raw fields
+and original revision. Untouched fields stay absent from the patch, preserving
+sample panning inheritance and legacy tuning semantics. Explicit Reload stages
+the current fields before replacing a draft; Discard drafts releases local work
+when its original sample has disappeared. Native numeric displays use plain
+integer text rather than locale grouping that the strict parser cannot accept.
+
+Sample settings and loops complete in order. Only a verified owned settings
+write advances an unchanged loop draft. Definite busy loop retries now retain
+the exact submitted payload; newer typed fields and uncertain outcomes cannot
+be automatically replayed or rebased. Loop Reload reads current state and keeps
+the draft on missing fields, read failure or newer input. This ports the settings
+and loop portions of the Windows automatic-edit and staged-readback changes;
+other sample audio workflows, particularly refused drawing strokes, remain open.
+
+Recorder setup fields now stay editable while device/status requests and capture
+run. Add captures the current native field-editor text, refuses active input
+composition and preserves newer setup text if the result arrives later. A real
+AppKit field-editor regression first reproduced build 8's name loss and passes
+after the fix. Startup assembly also defers context-panel layout until the root
+stack is complete and preserves the chosen/restored window frame; this geometry
+change still requires desktop confirmation.
+
+Focused sample settings, recorder and core-layout checks pass, including actual
+native typing, caret/selection preservation, waiting Save, settings-plus-loops
+ordering, changed-target completion, malformed readback and exact busy retry.
+All 43 native interface groups and complete application Swift type checking pass.
+Evidence: `interface-sample-completion-final.log`,
+`interface-sample-completion-all.log`, `typecheck-sample-completion-final.log`,
+and the reproduced recorder failure in `interface-recorder-name-red.log`.
+This source follow-up is newer
+than build 8 and awaits the next hourly packaged build and computer-use pass.
+
 ## Remaining parity work
 
 These items are deliberately outside this checkpoint and must be resolved before
@@ -430,8 +469,9 @@ claiming complete Windows parity:
   keyboard settings, rack editor APIs and retained Song Settings.
 - Additional composing departure, panel-close and newer-input guards in other
   editors.
-- Packaged qualification of the two Mixer review fixes newer than build 8;
-  sample-setting completion and retained refused waveform strokes.
+- Packaged qualification of the Mixer, sample completion, recorder focus and
+  startup-frame fixes newer than build 8; retained refused waveform strokes and
+  broader sample-operation outcome/readback handling.
 - Remaining recorder/review focus, root keyboard traversal, paging and endpoint
   presentation, including the source-tested input identity changes above.
 - Further source-by-source review of plugin/routing controls, instrument-envelope

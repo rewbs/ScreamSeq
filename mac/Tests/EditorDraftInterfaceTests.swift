@@ -24,11 +24,73 @@ extension InterfaceTests {
   private static func wait(_ seconds: Double) { pumpMainRunLoop(seconds) }
 
   static var editorDraftGroups: [(String, () throws -> Void)] {
-    [("draft-assets", assetCatalogueChecks), ("draft-text-history", textHistoryChecks),
+    [("draft-assets", assetCatalogueChecks), ("draft-sample", sampleSettingsChecks), ("draft-text-history", textHistoryChecks),
      ("draft-popups", popupIdentityChecks), ("draft-mixer", mixerDraftChecks),
      ("draft-graph", graphDraftChecks), ("draft-song-envelope", songGraphEnvelopeChecks),
      ("draft-automation", automationDraftChecks), ("draft-plugin", pluginDraftChecks),
      ("draft-envelope-bank", envelopeBankDraftChecks)]
+  }
+  static func sampleSettingsChecks() throws {
+    let editor = SampleEditor(frame: NSRect(x: 0, y: 0, width: 1000, height: 1800))
+    let inventory: [[String: Any]] = [["index": 1, "id": "s1", "name": "Kick"], ["index": 2, "id": "s2", "name": "Snare"]]
+    var info: [String: Any] = ["index": 1, "name": "Kick", "frames": 1000, "rate": 44100, "volume": 64, "pan": 128]
+    editor.update(info, samples: inventory, revision: "sample:0"); editor.settingsDelay = 0.01
+    var calls = [(String, [String: Any], String)](), replies = [([String: Any]) -> Void](), boundaries = [Bool]()
+    editor.onSettingsRequest = { method, params, identity, reply in calls.append((method, params, identity)); replies.append(reply) }
+    editor.onRequest = { method, params, reply in calls.append((method, params, "s1")); replies.append(reply) }
+    func answer(_ revision: String, _ data: [String: Any] = [:]) { replies.removeFirst()(["result": ["revision": revision, "data": data]]) }
+    editor.name.stringValue = "New kick"; editor.rate.stringValue = "44.1k"
+    editor.finishAutomaticEdit { boundaries.append($0) }; editor.picker.selectItem(withTag: 2); editor.selectSample()
+    try require(calls.isEmpty && boundaries == [false] && editor.index == 1 && editor.name.stringValue == "New kick", "Invalid sample batches block Save and selection without discarding valid fields")
+    editor.rate.stringValue = "48001"; boundaries = []; editor.finishAutomaticEdit { boundaries.append($0) }
+    let values = calls[0].1["values"] as! [String: Any]
+    try require(calls.count == 1 && calls[0].0 == "sample.patch" && calls[0].2 == "s1" && calls[0].1["expectedRevision"] as? String == "sample:0" && Set(values.keys) == ["name", "rate"], "Sample completion captures stable identity/revision and sends only changed fields")
+    answer("sample:1"); try require(boundaries.isEmpty && calls.last?.0 == "sample.get", "Save waits for accepted settings readback")
+    replies.removeFirst()(["error": ["message": "Read failed"]])
+    try require(boundaries == [false] && editor.settingsNeedsReload && editor.settingsRevision == "sample:0" && editor.name.stringValue == "New kick", "Failed readback retains the accepted write's raw fields without rebasing or retrying it")
+    editor.reloadSettings(); editor.name.stringValue = "Newer during reload"; info["name"] = "New kick"; info["rate"] = 48001; answer("sample:1", info)
+    try require(editor.name.stringValue == "Newer during reload" && editor.settingsRevision == "sample:0" && editor.settingsNeedsReload, "Reload cannot replace newer raw fields")
+    editor.reloadSettings(); answer("sample:1", info)
+    try require(!editor.hasDraft && editor.settingsRevision == "sample:1" && editor.rate.stringValue == "48001", "Explicit successful Reload adopts current settings: draft=\(editor.hasDraft), settings=\(editor.settingsDraft.hasDraft), loops=\(editor.hasLoopDraft), revision=\(editor.settingsRevision ?? "nil"), rate=\(editor.rate.stringValue), status=\(editor.settingsStatus.stringValue)")
+
+    func expand(_ view: NSView) { if let section = view as? ToolSection, section.preference == "toolSection.sample.settings" { section.setExpanded(true, persist: false) }; for child in view.subviews { expand(child) } }
+    expand(editor)
+    let window = NSWindow(contentRect: editor.frame, styleMask: [.titled], backing: .buffered, defer: false); window.contentView = editor
+    window.makeFirstResponder(editor.volume)
+    guard let text = editor.volume.currentEditor() as? NSTextView else { throw InterfaceFailure(message: "Sample settings field editor did not attach") }
+    text.insertText("55", replacementRange: NSRange(location: 0, length: text.string.count)); text.setSelectedRange(NSRange(location: 1, length: 1))
+    let deadline = Date(timeIntervalSinceNow: 2)
+    while !editor.settingsPending && Date() < deadline { wait(0.01) }
+    try require(calls.last?.0 == "sample.patch" && (calls.last?.1["values"] as? [String: Any])?["volume"] as? Int == 55, "A native typed sample setting saves automatically: \(calls.last?.0 ?? "none"), raw=\(editor.volume.stringValue), draft=\(editor.settingsDraft.hasDraft), status=\(editor.settingsStatus.stringValue)")
+    editor.update(info, samples: inventory, revision: "sample:2")
+    try require(editor.volume.currentEditor() === text && text.string == "55" && text.selectedRange() == NSRange(location: 1, length: 1), "Refresh preserves active sample text, caret and selection through a write")
+    boundaries = []; editor.finishAutomaticEdit { boundaries.append($0) }; answer("sample:2"); info["volume"] = 55; answer("sample:2", info)
+    try require(boundaries == [true] && !editor.hasDraft && editor.volume.currentEditor() === text && text.selectedRange() == NSRange(location: 1, length: 1), "Confirmed automatic completion preserves native focus and resumes waiting Save")
+    text.setMarkedText("5", selectedRange: NSRange(location: 1, length: 0), replacementRange: NSRange(location: 0, length: text.string.count))
+    boundaries = []; let count = calls.count; editor.finishAutomaticEdit { boundaries.append($0) }; editor.reloadSettings()
+    try require(boundaries == [false] && text.hasMarkedText() && calls.count == count, "Composition blocks Save and Reload without cancelling the input method")
+    text.unmarkText(); window.makeFirstResponder(nil)
+    if editor.settingsPending { answer("sample:3"); info["volume"] = 5; answer("sample:3", info) }
+    editor.reloadSettings(); answer("sample:3", info)
+    editor.name.stringValue = "Before write"; editor.finishAutomaticEdit { _ in }; editor.name.stringValue = "Newer name"; answer("sample:4")
+    try require(editor.settingsNeedsReload && editor.settingsRevision == "sample:3" && editor.name.stringValue == "Newer name" && replies.isEmpty, "Newer text during a successful write retains its older revision without automatic replay")
+    info["name"] = "Before write"; editor.reloadSettings(); answer("sample:4", info)
+    editor.name.stringValue = "Settings and loops"; editor.looping.state = .on; editor.loopStart.stringValue = "10"; editor.loopEnd.stringValue = "100"
+    boundaries = []; editor.finishAutomaticEdit { boundaries.append($0) }; answer("sample:5"); info["name"] = "Settings and loops"; answer("sample:5", info)
+    try require(boundaries.isEmpty && calls.last?.0 == "sample.loops.set" && calls.last?.1["expectedRevision"] as? String == "sample:5", "Only verified settings carry the unchanged loop draft forward to the owned revision")
+    answer("sample:6", ["loopsChanged": true])
+    try require(boundaries == [true] && !editor.hasDraft && editor.settingsRevision == "sample:6", "Save drains sample settings and loops in order")
+    editor.loopNeedsReload = true; editor.name.stringValue = "Blocked by retained loop result"; let beforeReview = calls.count
+    boundaries = []; editor.finishAutomaticEdit { boundaries.append($0) }
+    try require(boundaries == [false] && calls.count == beforeReview && editor.name.stringValue == "Blocked by retained loop result", "An unresolved loop outcome blocks other sample writes before they are submitted")
+    editor.loopNeedsReload = false; editor.name.stringValue = "Settings and loops"
+    editor.name.stringValue = "Old sample"; editor.finishAutomaticEdit { boundaries.append($0) }
+    editor.index = 2; editor.update(["index": 2, "name": "Snare", "frames": 100], samples: inventory, revision: "other:0"); answer("old:9")
+    try require(editor.name.stringValue == "Snare" && editor.settingsRevision == "other:0" && !editor.settingsPending && boundaries.last == false, "Retired sample replies cannot adopt a new target or release an old waiting Save")
+    editor.name.stringValue = "Removed sample draft"; editor.update([:], samples: [], revision: "other:1")
+    try require(editor.settingsNeedsReload && editor.name.stringValue == "Removed sample draft", "Removing the original sample preserves its pending fields")
+    let beforeDiscard = calls.count; editor.discardSampleDrafts()
+    try require(!editor.hasDraft && calls.count == beforeDiscard, "Explicit Discard releases an unavailable target without submitting or repeating a write")
   }
   static func assetCatalogueChecks() throws {
     var model=PatternModel(["format":"MPTM","samples":[["index":1,"id":"s1","name":"Kick"],["index":2,"id":"s2","name":"Snare"]]])

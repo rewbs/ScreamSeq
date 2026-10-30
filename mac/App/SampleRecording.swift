@@ -206,7 +206,11 @@ final class SampleRecordingView: NSView, NSWindowDelegate {
   }
   func commit() {
     guard !pending, !capturing, !take.isEmpty, frames > 0 else { return }
-    request("sample.recording.commit", ["take": take, "name": name.stringValue, "createInstrument": instrument.state == .on,
+    let editor = name.currentEditor() as? NSTextView
+    guard editor?.hasMarkedText() != true else {
+      status.stringValue = "Finish composing the sample name before adding the take."; return
+    }
+    request("sample.recording.commit", ["take": take, "name": editor?.string ?? name.stringValue, "createInstrument": instrument.state == .on,
       "expectedRevision": onRevision?() ?? ""]) { [weak self] data in
       guard let self, let sample = data["sample"] as? Int else { return }
       self.take = ""; self.frames = 0; self.meter.doubleValue = 0
@@ -226,7 +230,9 @@ final class SampleRecordingView: NSView, NSWindowDelegate {
     stop.isEnabled = idle && capturing; add.isEnabled = idle && !capturing && frames > 0 && !take.isEmpty
     discard.isEnabled = idle && !capturing && !take.isEmpty
     for control in [devices, channels, limit] { control.isEnabled = idle && take.isEmpty }
-    name.isEnabled = idle && !capturing; instrument.isEnabled = idle && !capturing
+    // These are local setup fields until Add captures them. Disabling an active
+    // NSTextField for a device read aborts its field editor and loses raw text.
+    // Keep setup editable through reads/capture; an in-flight Add owns its copy.
   }
   func windowShouldClose(_ sender: NSWindow) -> Bool {
     guard !pending && !permissionPending else { status.stringValue = "Finishing the recording operation…"; return false }

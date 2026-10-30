@@ -42,7 +42,12 @@ extension InterfaceTests {
     editor.update(info,samples:inventory,revision:"external")
     replies.removeFirst()(["error":["message":"Song changed"]])
     try require(editor.loopDraftRevision=="seventh" && editor.loopStart.integerValue==72 && editor.loopsStatus.stringValue.contains("Reload loops"),"External conflicts keep the local intent and require explicit reload")
-    editor.reloadLoops();try require(editor.loopDraftRevision=="external" && editor.loopStart.integerValue==64,"Reload retires conflicting edits")
+    editor.reloadLoops()
+    try require(editor.loopStart.integerValue==72 && editor.loopsBusy, "Reload retains conflicting edits until its read succeeds")
+    var readback = info; readback["index"] = 1
+    for key in ["pingpong", "sustainPingpong", "reverseLoop", "sustainReverse"] { readback[key] = false }
+    replies.removeFirst()(["result": ["revision": "external", "data": readback]])
+    try require(editor.loopDraftRevision=="external" && editor.loopStart.integerValue==64,"Successful readback retires conflicting edits")
     editor.waveform.moveLoopMarker(.end,to:1200,finished:true)
     editor.index=2
     try require(editor.loopDraftRevision==nil,"Changing sample retires the previous loop draft")
@@ -59,6 +64,10 @@ extension InterfaceTests {
     try require(calls.count==uncertainCount && !editor.loopsBusy && editor.loopSaveWork==nil && editor.loopStart.integerValue==160 && editor.loopDraftRevision=="new-saved" && editor.loopsStatus.stringValue.contains("Unknown outcome"),
       "An uncertain sample loop write keeps its original draft/revision and cancels automatic replay")
     editor.setLoops(dryRun:false)
+    try require(calls.count == uncertainCount, "Unknown outcomes cannot be resent before explicit readback")
+    editor.reloadLoops(); readback["index"] = 2; readback["loopStart"] = 150
+    replies.removeFirst()(["result": ["revision": "new-saved", "data": readback]])
+    editor.loopStart.stringValue = "160"; editor.setLoops(dryRun: false)
     let firstRetryCount=calls.count
     for _ in 0..<6 {
       try require(!replies.isEmpty,"Expected one bounded loop request")
@@ -68,6 +77,20 @@ extension InterfaceTests {
     pumpMainRunLoop(0.2)
     try require(calls.count==firstRetryCount+5 && replies.isEmpty && !editor.loopsBusy && editor.loopSaveWork==nil && editor.loopStart.integerValue==160 && editor.loopsStatus.stringValue.contains("Still busy"),
       "Loop retry exhaustion is bounded and keeps the editable draft without another automatic write")
+    editor.reloadLoops()
+    replies.removeFirst()(["error": ["message": "Read failed"]])
+    try require(editor.loopStart.integerValue == 160 && editor.loopNeedsReload && editor.loopDraftRevision == "new-saved", "Failed loop reload keeps fields and their captured revision")
+    editor.reloadLoops(); replies.removeFirst()(["result": ["revision": "incomplete", "data": ["index": 2, "frames": 2048]]])
+    try require(editor.loopStart.integerValue == 160 && editor.loopDraftRevision == "new-saved" && editor.loopNeedsReload, "Incomplete readback cannot silently replace loop fields with defaults")
+    editor.reloadLoops(); replies.removeFirst()(["result": ["revision": "reviewed", "data": readback]])
+    editor.loopStart.stringValue = "170"; editor.setLoops(dryRun: false)
+    let captured = calls.last!.1 as NSDictionary
+    replies.removeFirst()(["error": ["code": -32002, "message": "Busy", "data": ["writeOutcome": "notCommitted"]]])
+    editor.loopStart.stringValue = "180"; editor.controlTextDidChange(Notification(name: NSControl.textDidChangeNotification, object: editor.loopStart))
+    waitForSave()
+    try require(captured.isEqual(to: calls.last!.1), "A definite busy retry sends the original loop payload, not newer text")
+    try answer("accepted")
+    try require(editor.loopStart.integerValue == 180 && editor.loopDraftRevision == "reviewed" && editor.loopNeedsReload, "A later loop write completion cannot authorize newer text at its revision")
     editor.loopSaveWork?.cancel();editor.onRequest=nil
   }
 }

@@ -303,6 +303,10 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     if CommandLine.arguments.contains("--automation") || automationTest { toggleAutomation() }
   }
   func createContent() {
+    // Auto Layout can resize the window to an incomplete stack while its docks
+    // are being attached. Preserve the chosen/restored frame through assembly.
+    let initialFrame = window.frame
+    defer { window.setFrame(initialFrame, display: false) }
     let root = Panel(Theme.bg)
     window.contentView = root
     let vertical = NSStackView()
@@ -441,7 +445,6 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     editor.addArrangedSubview(gridRule)
     editor.addArrangedSubview(editorHost)
     installWorkspace()
-    installContextPanel()
     let gridFooter = Panel(Theme.panel)
     gridFooter.fixed(height: 27)
     commandHelpLabel.lineBreakMode = .byTruncatingTail
@@ -479,6 +482,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     editor.stretchAcrossAxis()
     workspace.stretchAcrossAxis()
     vertical.stretchAcrossAxis()
+    installContextPanel()
   }
   func refreshPattern() {
     guard !busy else { return }
@@ -1094,6 +1098,15 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
       }
     }
   }
+  func submitSampleSettingsRequest(_ method: String, params: [String: Any], identity: String, reply: @escaping ([String: Any]) -> Void) {
+    if busy || sessionReading {
+      deferUntilIdle { [weak self] in self?.submitSampleSettingsRequest(method, params: params, identity: identity, reply: reply) }; return
+    }
+    guard let sample = params["sample"] as? Int, model.samples.contains(where: { $0["index"] as? Int == sample && $0["id"] as? String == identity }) else {
+      reply(AutomationServer.error(-32001, "The captured sample is unavailable. Fields kept.")); return
+    }
+    handleAutomation(method, params: params, reply: reply)
+  }
   func connectEditors() {
     sampleEditor.onSelect = { [weak self] index in
       self?.patternView.instrument = index
@@ -1113,19 +1126,15 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
     sampleEditor.onRequest = { [weak self] method, params, reply in
       guard let self else { return }
+      if !method.hasSuffix(".get"), self.sampleEditor.settingsDraft.hasDraft || self.sampleEditor.settingsPending || self.sampleEditor.settingsNeedsReload {
+        reply(AutomationServer.notAdmittedBusy("Finish or reload the retained sample settings before editing audio.")); return
+      }
       if method.hasSuffix(".get") { self.handleAutomation(method, params: params, reply: reply) }
       else { self.runPatternCommand(method, params: params, reply: reply) }
     }
     sampleEditor.canBeginDrawing = { [weak self] in guard let self else { return false }; return !self.busy && self.model.editable }
-    sampleEditor.onSettings = { [weak self] values in
-      guard let self else { return }
-      let sample = self.sampleEditor.index
-      self.perform(
-        "Updating sample…", refresh: false, markDirty: true,
-        { try self.session.sampleSettings(sample, values: values) }, completion: {
-          if self.sampleEditor.index==sample {self.sampleEditor.settingsDraft.accept(values.keys)}
-          self.refreshAll()
-        })
+    sampleEditor.onSettingsRequest = { [weak self] method, params, identity, reply in
+      self?.submitSampleSettingsRequest(method, params: params, identity: identity, reply: reply)
     }
     sampleEditor.onMessage = { [weak self] message in self?.statusLabel.stringValue = message }
     instrumentEditor.onMessage = { [weak self] message in self?.statusLabel.stringValue = message }
