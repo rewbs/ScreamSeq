@@ -1165,7 +1165,11 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
       self?.submitSampleSettingsRequest(method, params: params, identity: identity, reply: reply)
     }
     sampleEditor.onMessage = { [weak self] message in self?.statusLabel.stringValue = message }
-    instrumentEditor.onMessage = { [weak self] message in self?.statusLabel.stringValue = message }
+    instrumentEditor.onMessage = { [weak self] message in
+      guard let self else { return }; self.statusLabel.stringValue = message
+      WorkspaceAssetContext.updateCaption(self.workspace?.panels["instruments"], index: self.instrumentEditor.index, hasDraft: self.instrumentEditor.hasDraft)
+    }
+    configureInstrumentCreation()
     sampleEditor.onInstrument = { [weak self] in self?.addInstrument() }
     instrumentEditor.onPluginAssignment = {[weak self] in self?.showInstrumentPluginAssignment()}
     instrumentEditor.onNewPluginInstrument = {[weak self] in self?.showNewPluginInstrument()}
@@ -1181,7 +1185,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     instrumentEditor.onEnvelopeBank = { [weak self] kind in self?.showInstrumentEnvelopeBank(kind) }
     instrumentEditor.onEnvelopeTools = { [weak self] kind in self?.showInstrumentEnvelopeTools(kind) }
     instrumentEditor.envelope.canEdit = { [weak self] in
-      self.map { !$0.busy && $0.model.editable } ?? false
+      self.map { !$0.busy && $0.model.editable && !$0.instrumentEditor.creation.needsCompletion && !$0.instrumentEditor.hasInstrumentComposition } ?? false
     }
     instrumentEditor.onSelect = { [weak self] index in
       self?.patternView.instrument = index
@@ -1381,39 +1385,6 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
         self?.sampleEditor.finishSampleReplacement(operation, path: path)
       }
     }
-  }
-  func importInstrument() {
-    guard !busy else { return }
-    let panel = NSOpenPanel()
-    panel.title = "Import instrument"
-    panel.allowedContentTypes = ["iti", "xi", "pat", "sfz"].compactMap {
-      UTType(filenameExtension: $0)
-    }
-    panel.allowsOtherFileTypes = true
-    panel.beginSheetModal(for: window) { [weak self] result in
-      guard result == .OK, let self, let url = panel.url else { return }
-      var index = 1
-      self.perform(
-        "Importing instrument…", markDirty: true,
-        { index = try self.session.importInstrument(url.path, slot: 0) },
-        completion: {
-          self.instrumentEditor.index = index
-          self.patternView.instrument = index
-          self.refreshAll()
-          self.showEditor(2)
-        })
-    }
-  }
-  func addInstrument() {
-    let sample = sampleEditor.index
-    var index = 1
-    perform(
-      "Creating instrument…", markDirty: true, { index = try self.session.addInstrument(sample) },
-      completion: {
-        self.instrumentEditor.index = index
-        self.refreshAll()
-        self.showEditor(2)
-      })
   }
   func addPattern(_ duplicate: Bool) {
     let rows = model.rows

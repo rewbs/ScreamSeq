@@ -560,6 +560,7 @@ final class EnvelopeView: NSView {
     }
   }
   private var dragged: Int?
+  var isDragging: Bool { dragged != nil }
   var maximumPoints = 25
   override var acceptsFirstResponder: Bool { true }
   override var isFlipped: Bool { true }
@@ -709,7 +710,15 @@ final class InstrumentEditor: NSView, NSTextFieldDelegate {
   override func mouseDown(with event: NSEvent) { window?.makeFirstResponder(self); super.mouseDown(with:event) }
 
   lazy var settingsDraft = AssetFieldDraft(["name":name,"volume":volume,"pan":pan,"fadeout":fade,"nna":nna,"dct":dct,"dna":dna,"enabled":enabled,"sustain":sustain,"sustainPoint":sustainPoint,"sustainEnd":sustainEnd,"loop":looping,"loopStart":loopStart,"loopEnd":loopEnd,"filter":filter,"carry":carry,"releaseNode":releaseNode])
-  var hasDraft: Bool { settingsDraft.hasDraft || nodeFieldsDirty || envelope.points != loadedPoints || keymap != loadedMapping || pending }
+  var hasEditingDraft: Bool { settingsDraft.hasDraft || nodeFieldsDirty || envelope.points != loadedPoints || keymap != loadedMapping || pending || commitFailed || reloadOwner != nil || hasInstrumentComposition || envelope.isDragging }
+  var hasDraft: Bool { hasEditingDraft || creation.needsCompletion }
+  let creation = InstrumentCreationWorkflow()
+  var creationGeneration: UInt64 = 0
+  var reloadOwner: InstrumentReloadOperation?
+  var onReloadInstrument: (() -> Void)?
+  let creationStatus = NSTextField(wrappingLabelWithString: "")
+  lazy var reviewCreationButton = ActionButton("Review creation") { [weak self] in self?.creation.review() }
+  lazy var acceptCreationButton = ActionButton("Accept observed state") { [weak self] in self?.creation.accept() }
   private(set) var pending=false,capturedRevision="",capturedInstrument=""
   var onCommit:(([String:Any],String,Int,String,@escaping([String:Any])->Void)->Void)?
   private var nodeFieldsDirty=false,commitFailed=false,saveWork:DispatchWorkItem?,completionWaiters=[(Bool)->Void]()
@@ -735,7 +744,8 @@ final class InstrumentEditor: NSView, NSTextFieldDelegate {
   let envelope = EnvelopeView(frame: .zero), mapping = NSTextField(wrappingLabelWithString: ""),
     mapFrom = numberField(0, label: "Keymap first note"),
     mapTo = numberField(119, label: "Keymap last note"), mapSample = NSPopUpButton()
-  var index = 1, keymap = [Int](repeating: 0, count: 128)
+  var index = 1 { didSet { if index != oldValue { creationGeneration &+= 1 } } }
+  var keymap = [Int](repeating: 0, count: 128) { didSet { if keymap != oldValue { creationGeneration &+= 1 } } }
   var onEnvelopeTools: ((Int) -> Void)?
   var onEnvelopeBank: ((Int) -> Void)?
   var onPluginAssignment: (() -> Void)?
@@ -748,6 +758,12 @@ final class InstrumentEditor: NSView, NSTextFieldDelegate {
   var onMessage: ((String) -> Void)?
   override init(frame: NSRect) {
     super.init(frame: frame)
+    creation.onDraft = { [weak self] in self?.creationDraft ?? .init(index: 0, identity: "", generation: 0, fields: [:], points: [], mapping: []) }
+    creation.composing = { [weak self] in self?.hasInstrumentComposition == true }
+    creation.onChange = { [weak self] in self?.updateCreationControls() }
+    creationStatus.font = .systemFont(ofSize: 12); creationStatus.textColor = Theme.muted
+    creationStatus.preferredMaxLayoutWidth = 620
+    creationStatus.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
     picker.target = self
     picker.action = #selector(selectInstrument)
     picker.fixed(width: 230)
@@ -827,7 +843,10 @@ final class InstrumentEditor: NSView, NSTextFieldDelegate {
         stack(.horizontal,[ActionButton("New sample instrument",prominent:true){[weak self] in self?.onCreate?()},
           ActionButton("New plugin instrument…",prominent:true){[weak self] in self?.onNewPluginInstrument?()},
           ActionButton("Import…"){[weak self] in self?.onImport?()},
+          ActionButton("Reload instrument"){[weak self] in self?.onReloadInstrument?()},
           ActionButton("Record…",symbol:"mic"){[weak self] in self?.onRecord?()},NSView()],spacing:8),
+        stack(.horizontal, [reviewCreationButton, acceptCreationButton, NSView()], spacing: 8),
+        creationStatus,
         stack(.horizontal, [ActionButton("Play instrument with keys") { [weak self] in guard let self else{return};self.window?.makeFirstResponder(self) }, pluginSummary, NSView(), ActionButton("Assign instrument plugin…") { [weak self] in self?.onPluginAssignment?() }], spacing: 8),
         Theme.label("Z–M / Q–U preview this instrument with its keymap and enabled envelopes. Sample inspector previews raw samples.", size: 11, color: Theme.muted),
         stack(.horizontal, [envelopeType, envelopeToolsButton!, ActionButton("Envelope bank…"){[weak self] in guard let self,self.envelope.canEdit() else{return};self.onEnvelopeBank?(self.envelopeType.indexOfSelectedItem)}, NSView(), filter], spacing: 8),
@@ -860,9 +879,10 @@ final class InstrumentEditor: NSView, NSTextFieldDelegate {
     }
     envelope.onChange = { [weak self] points in
       guard let self else { return }
+      self.creationGeneration &+= 1
       self.submit(["envelope": self.envelopeType.indexOfSelectedItem, "points": points])
     }
-    envelope.onSelect = { [weak self] _ in self?.updateNodeFields() }
+    envelope.onSelect = { [weak self] _ in guard let self else { return }; self.creationGeneration &+= 1; self.updateNodeFields() }
     envelope.onRemove = { [weak self] removed, points in
       guard let self else { return }
       func shifted(_ index: Int) -> Int {
@@ -882,6 +902,8 @@ final class InstrumentEditor: NSView, NSTextFieldDelegate {
     }
     for control in [nna, dct, dna] { control.target = self; control.action = #selector(commitControl(_:)) }
     for control in [sustain, looping, filter, carry] { control.target = self; control.action = #selector(commitControl(_:)) }
+    mapFrom.delegate = self; mapTo.delegate = self
+    updateCreationControls()
   }
   required init?(coder: NSCoder) { fatalError() }
   @objc func selectInstrument() {
@@ -897,7 +919,8 @@ final class InstrumentEditor: NSView, NSTextFieldDelegate {
     if let control = notification.object as? NSControl { commitControl(control) }
   }
   @objc private func commitControl(_ control: NSControl) {
-    guard envelope.canEdit() else { return }
+    creationGeneration &+= 1
+    guard !creation.needsCompletion, !hasInstrumentComposition, envelope.canEdit() else { return }
     if control === nodeTick || control === nodeValue {
       guard let tick = Int(nodeTick.stringValue), let value = Int(nodeValue.stringValue),(0...65535).contains(tick),(0...64).contains(value) else {nodeFieldsDirty=true;onMessage?("Use a whole tick from 0 to 65535 and value from 0 to 64; your draft is retained.");return}
       nodeFieldsDirty=false
@@ -944,7 +967,7 @@ final class InstrumentEditor: NSView, NSTextFieldDelegate {
     }
   }
   func update(_ info: [AnyHashable: Any], model: PatternModel) {
-    if pending || nodeFieldsDirty || envelope.points != loadedPoints || keymap != loadedMapping {updateCatalogue(model);return}
+    if creation.needsCompletion || reloadOwner != nil || hasInstrumentComposition || envelope.isDragging || pending || nodeFieldsDirty || envelope.points != loadedPoints || keymap != loadedMapping {updateCatalogue(model);return}
     if !settingsDraft.hasDraft {capturedRevision=model.revisionToken;capturedInstrument=model.instruments.first{$0["index"] as? Int==index}?["id"] as? String ?? ""}
     let restoreDraft = settingsDraft.begin(index: index); defer { restoreDraft() }
     updateCatalogue(model)
@@ -968,6 +991,7 @@ final class InstrumentEditor: NSView, NSTextFieldDelegate {
     }.joined(separator: "   ")
   }
   @objc func selectEnvelope() {
+    guard !creation.needsCompletion, !hasInstrumentComposition else { if let displayedEnvelope { envelopeType.selectItem(at: displayedEnvelope) }; return }
     if nodeFieldsDirty || pending {if let displayedEnvelope{envelopeType.selectItem(at:displayedEnvelope)};onMessage?("Finish the pending envelope point before switching envelopes.");return}
     let kind = max(0, envelopeType.indexOfSelectedItem)
     let info: [String: Any] = kind < envelopeData.count ? envelopeData[kind] : [:]
@@ -1045,16 +1069,18 @@ final class InstrumentEditor: NSView, NSTextFieldDelegate {
   }
 
   func controlTextDidChange(_ notification:Notification){
+    creationGeneration &+= 1
     if notification.object as? NSTextField === nodeTick || notification.object as? NSTextField === nodeValue{nodeFieldsDirty=true}
     commitFailed=false;scheduleAutomaticEdit()
   }
   private func scheduleAutomaticEdit(){
-    guard onCommit != nil,!commitFailed else{return};saveWork?.cancel()
+    guard onCommit != nil,!commitFailed,!creation.needsCompletion,!hasInstrumentComposition else{return};saveWork?.cancel()
     let task=DispatchWorkItem{[weak self] in self?.saveWork=nil;self?.finishAutomaticEdit{_ in}}
     saveWork=task;DispatchQueue.main.asyncAfter(deadline:.now()+0.5,execute:task)
   }
   private func finishWaiters(_ accepted:Bool){let callbacks=completionWaiters;completionWaiters=[];for callback in callbacks{callback(accepted)}}
   func finishAutomaticEdit(_ done:@escaping(Bool)->Void){
+    guard !creation.needsCompletion, reloadOwner == nil, !hasInstrumentComposition else { onMessage?("Finish composing, wait for Reload or review the retained instrument creation before continuing."); done(false); return }
     guard !commitFailed else{done(false);return};if pending{completionWaiters.append(done);return}
     if !hasDraft{done(true);return}
     do {
@@ -1069,6 +1095,7 @@ final class InstrumentEditor: NSView, NSTextFieldDelegate {
     }catch{onMessage?(error.localizedDescription);done(false)}
   }
   private func submit(_ values:[String:Any]){
+    guard !creation.needsCompletion, reloadOwner == nil, !hasInstrumentComposition else { onMessage?("Review the retained instrument creation, wait for Reload or finish composing before editing."); return }
     guard let onCommit else{onApply?(values);return}
     guard !pending else{return}
     saveWork?.cancel();saveWork=nil;pending=true;commitFailed=false
@@ -1082,5 +1109,10 @@ final class InstrumentEditor: NSView, NSTextFieldDelegate {
       if self.hasDraft {let callbacks=self.completionWaiters;self.completionWaiters=[];self.finishAutomaticEdit{accepted in for callback in callbacks{callback(accepted)}}}
       else{self.finishWaiters(true)}
     }
+  }
+  func adoptInstrumentReload(_ info: [String: Any], model: PatternModel) {
+    saveWork?.cancel(); saveWork = nil; nodeFieldsDirty = false; commitFailed = false
+    settingsDraft.reset(); envelope.points = loadedPoints; keymap = loadedMapping
+    update(info, model: model); creationGeneration &+= 1
   }
 }
