@@ -118,6 +118,9 @@ extension InterfaceTests {
     try require(replacementReplies.count == 1, "Replacement fixture has an old-document metadata read in flight")
     replacementRevision = "new-song:0"
     replaced.adoptDocument(samples: [])
+    replaced.requestSampleSelection(1, selectInput: true)
+    try require(replaced.drawingStatus.stringValue.isEmpty,
+      "Cursor following after New does not claim that an empty song kept the previous sample")
     replaced.refreshSample(samples: [])
     replacementReplies.removeFirst()(response(replacementRequests[0].0, replacementRequests[0].1))
     try require(!replaced.hasSamplePresentation && replaced.sampleBody?.isHidden == true && replaced.sampleTargetActions.isHidden && !replaced.emptySample.isHidden,

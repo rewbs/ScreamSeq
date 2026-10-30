@@ -259,6 +259,21 @@ final class SampleRecordingView: NSView, NSWindowDelegate, NSTextFieldDelegate {
     return true
   }
   var keyboardOrder: [NSControl] { [devices, refresh, channels, limit, name, instrument, review, acceptState, record, stop, add, discard, discardSetup] }
+  @discardableResult func advanceKeyboardFocus(reverse: Bool) -> Bool {
+    guard let window, !composingName else { return false }
+    let order = keyboardOrder, responder = window.firstResponder
+    let current = order.firstIndex { control in
+      responder === control || (responder != nil && responder === control.currentEditor()) ||
+        (responder as? NSView)?.isDescendant(of: control) == true
+    }
+    let start = current ?? (reverse ? 0 : order.count - 1)
+    for offset in 1...order.count {
+      let index = (start + (reverse ? -offset : offset) + order.count) % order.count
+      let control = order[index]
+      if control.isEnabled, !control.isHiddenOrHasHiddenAncestor, window.makeFirstResponder(control) { return true }
+    }
+    return false
+  }
   func focusTabEntry(reverse: Bool = false) {
     let order = reverse ? Array(keyboardOrder.reversed()) : keyboardOrder
     if let entry = order.first(where: { $0.isEnabled && !$0.isHiddenOrHasHiddenAncestor }) { window?.makeFirstResponder(entry) }
@@ -275,4 +290,16 @@ final class SampleRecordingView: NSView, NSWindowDelegate, NSTextFieldDelegate {
   }
   func windowDidBecomeKey(_ notification: Notification) { focusEntry() }
   func windowWillClose(_ notification: Notification) { timer?.invalidate(); timer = nil }
+}
+
+/// AppKit's default key loop can skip every non-text control when macOS full
+/// keyboard navigation is off. This tool still exposes its complete workflow.
+final class SampleRecordingWindow: NSWindow {
+  override func sendEvent(_ event: NSEvent) {
+    if event.type == .keyDown, event.keyCode == 48,
+      event.modifierFlags.intersection([.command, .control, .option]).isEmpty,
+      let recorder = contentView as? SampleRecordingView,
+      recorder.advanceKeyboardFocus(reverse: event.modifierFlags.contains(.shift)) { return }
+    super.sendEvent(event)
+  }
 }

@@ -119,6 +119,9 @@ extension SampleEditor {
     startSampleSelection(index, kind: .refresh)
   }
   func startSampleSelection(_ sample: Int, kind: SampleSelectionQuery.Kind, selectInput: Bool = false) {
+    // Cursor following may ask for the input slot immediately after New. An
+    // empty adopted song has no old presentation or failed load to report.
+    if catalogue.isEmpty, !hasSamplePresentation { drawingStatus.stringValue = ""; return }
     guard !sampleOperationPending, !waveform.draggingLoop, !hasSampleComposition, let target = catalogue.first(where: { $0.index == sample }), !target.identity.isEmpty,
       onSettingsRequest != nil else { drawingStatus.stringValue = "Sample unavailable · Previous sample and fields kept."; return }
     if kind != .select, !settingsIdentity.isEmpty, target.identity != settingsIdentity,

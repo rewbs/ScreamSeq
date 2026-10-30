@@ -31,7 +31,7 @@ extension AppController {
       default: reply("Microphone access is unavailable. Enable ScreamSeq in System Settings → Privacy & Security → Microphone, then Record again.")
       }
     }
-    let win = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 650, height: 600), styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
+    let win = SampleRecordingWindow(contentRect: NSRect(x: 0, y: 0, width: 650, height: 600), styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
     win.title = "Record sample"; win.contentMinSize = NSSize(width: 610, height: 580)
     win.isReleasedWhenClosed = false; win.contentView = view; win.delegate = view
     win.autorecalculatesKeyViewLoop = false; win.initialFirstResponder = view.name

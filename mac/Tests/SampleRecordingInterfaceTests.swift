@@ -231,7 +231,7 @@ extension InterfaceTests {
       try require(v.take == "take", "Background readback cannot silently replace a retained take")
       v.poll(adopt: true); h.answer(h.take("external"))
       try require(v.take == "external", "Explicit reopening can inspect an externally replaced take")
-      let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 650, height: 600), styleMask: [.titled], backing: .buffered, defer: false)
+      let window = SampleRecordingWindow(contentRect: NSRect(x: 0, y: 0, width: 650, height: 600), styleMask: [.titled], backing: .buffered, defer: false)
       window.contentView = v; window.autorecalculatesKeyViewLoop = false
       window.makeFirstResponder(v)
       let tab = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0,
@@ -246,6 +246,19 @@ extension InterfaceTests {
       let editor = v.name.currentEditor() as? NSTextView
       editor?.setSelectedRange(NSRange(location: 2, length: 3)); v.focusEntry()
       try require(v.name.currentEditor() === editor && editor?.selectedRange() == NSRange(location: 2, length: 3), "Reopen focus entry leaves a child field editor and selection alone")
+      window.sendEvent(tab)
+      try require(window.firstResponder === v.instrument, "Window Tab reaches the output checkbox even when system key loops skip buttons")
+      window.sendEvent(tab)
+      try require(window.firstResponder === v.add, "Window Tab skips hidden Review and disabled capture actions")
+      let reverseTab = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [.shift], timestamp: 0,
+        windowNumber: window.windowNumber, context: nil, characters: "\t", charactersIgnoringModifiers: "\t", isARepeat: false, keyCode: 48)!
+      window.sendEvent(reverseTab)
+      try require(window.firstResponder === v.instrument, "Window Shift-Tab returns through the same complete control order")
+      window.makeFirstResponder(v.name)
+      let composing = v.name.currentEditor() as! NSTextView
+      composing.setMarkedText("draft", selectedRange: NSRange(location: 5, length: 0), replacementRange: NSRange(location: 0, length: composing.string.count))
+      try require(!v.advanceKeyboardFocus(reverse: false) && composing.hasMarkedText(), "Recorder navigation yields Tab to an active input-method composition")
+      composing.unmarkText()
       window.makeFirstResponder(nil)
     }
   }
