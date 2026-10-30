@@ -130,6 +130,7 @@ final class SampleEditor: NSView, NSTextFieldDelegate {
     sustainReverse = NSButton(checkboxWithTitle: "Reverse", target: nil, action: nil)
   let loopsStatus = Theme.label("Sustain loops repeat while a note is held; normal loops follow release.", size: 11, color: Theme.muted)
   var loopsBusy = false
+  var loopReloadQuery: SampleSelectionQuery?
   var loopNeedsReload = false
   var loopEditGeneration = 0
   var loopCompletionWaiters = [(Bool) -> Void]()
@@ -409,7 +410,7 @@ final class SampleEditor: NSView, NSTextFieldDelegate {
   }
   func update(_ info: [AnyHashable: Any], samples: [[String: Any]], revision: String? = nil, loaded: SampleSelectionRead? = nil) {
     let identity = samples.first { $0["index"] as? Int == index }?["id"] as? String ?? ""
-    if protectsSampleOperation { updateCatalogue(samples); return }
+    if protectsSampleOperation || loopReloadQuery != nil { updateCatalogue(samples); return }
     if let draft = drawingDraft, draft.submitted || draft.numeric {
       updateCatalogue(samples)
       if identity != draft.identity { drawingStatus.stringValue = "The captured sample is unavailable. Stroke kept for review or discard." }

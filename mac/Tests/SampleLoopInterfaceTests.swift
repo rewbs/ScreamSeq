@@ -2,12 +2,21 @@ import AppKit
 extension InterfaceTests {
   static func sampleLoopChecks() throws {
     let editor=SampleEditor(frame:NSRect(x:0,y:0,width:729,height:1400))
-    let info:[String:Any]=["frames":2048,"loop":true,"loopStart":64,"loopEnd":1024,"sustainLoop":false,"sustainStart":0,"sustainEnd":0]
-    let inventory:[[String:Any]]=[["index":1,"name":"Loops"]]
+    let info:[String:Any]=["index":1,"name":"Loops","channels":2,"rate":44100,"volume":64,"pan":128,"pingpong":false,"sustainPingpong":false,"reverseLoop":false,"sustainReverse":false,"frames":2048,"loop":true,"loopStart":64,"loopEnd":1024,"sustainLoop":false,"sustainStart":0,"sustainEnd":0]
+    let inventory:[[String:Any]]=[["index":1,"id":"loop-one","name":"Loops"],["index":2,"id":"loop-two","name":"Other"]]
     editor.update(info,samples:inventory,revision:"source")
+    var currentRevision = "source"
+    editor.onSampleRevision = { currentRevision }; editor.waveformDocumentID = "loop-song"
     var calls=[(String,[String:Any])](),replies=[([String:Any])->Void]()
     editor.onRequest={method,params,reply in calls.append((method,params));replies.append(reply)}
     func answer(_ revision:String) throws {try require(!replies.isEmpty,"Expected loop save before reply \(revision): \(editor.loopsStatus.stringValue)");replies.removeFirst()(["result":["revision":revision,"data":["loopsChanged":true]]])}
+    func reloadAnswer(_ revision: String, _ data: [String: Any]) throws {
+      try require(!replies.isEmpty, "Expected metadata request before loop readback")
+      replies.removeFirst()(["result": ["revision": revision, "documentId": "loop-song", "data": data]])
+      try require(calls.last?.0 == "sample.waveform.get" && !replies.isEmpty, "Loop reload stages matching waveform after metadata")
+      var wave = calls.last!.1; wave["peaks"] = Array(repeating: 0.5, count: (wave["bins"] as! Int) * 2)
+      replies.removeFirst()(["result": ["revision": revision, "documentId": "loop-song", "data": wave]])
+    }
     func waitForSave(){let deadline=Date(timeIntervalSinceNow:2);while editor.loopSaveWork != nil && Date()<deadline {_ = RunLoop.main.run(mode:.default,before:Date(timeIntervalSinceNow:0.01))}}
     editor.waveform.moveLoopMarker(.start,to:100,finished:false)
     waitForSave()
@@ -42,11 +51,11 @@ extension InterfaceTests {
     editor.update(info,samples:inventory,revision:"external")
     replies.removeFirst()(["error":["message":"Song changed"]])
     try require(editor.loopDraftRevision=="seventh" && editor.loopStart.integerValue==72 && editor.loopsStatus.stringValue.contains("Reload loops"),"External conflicts keep the local intent and require explicit reload")
-    editor.reloadLoops()
+    currentRevision = "external"; editor.waveformDocumentID = "loop-song"; editor.reloadLoops()
     try require(editor.loopStart.integerValue==72 && editor.loopsBusy, "Reload retains conflicting edits until its read succeeds")
     var readback = info; readback["index"] = 1
     for key in ["pingpong", "sustainPingpong", "reverseLoop", "sustainReverse"] { readback[key] = false }
-    replies.removeFirst()(["result": ["revision": "external", "data": readback]])
+    try reloadAnswer("external", readback)
     try require(editor.loopDraftRevision=="external" && editor.loopStart.integerValue==64,"Successful readback retires conflicting edits")
     editor.waveform.moveLoopMarker(.end,to:1200,finished:true)
     editor.index=2
@@ -65,8 +74,8 @@ extension InterfaceTests {
       "An uncertain sample loop write keeps its original draft/revision and cancels automatic replay")
     editor.setLoops(dryRun:false)
     try require(calls.count == uncertainCount, "Unknown outcomes cannot be resent before explicit readback")
-    editor.reloadLoops(); readback["index"] = 2; readback["loopStart"] = 150
-    replies.removeFirst()(["result": ["revision": "new-saved", "data": readback]])
+    currentRevision = "new-saved"; editor.waveformDocumentID = "loop-song"; editor.reloadLoops(); readback["index"] = 2; readback["loopStart"] = 150
+    try reloadAnswer("new-saved", readback)
     editor.loopStart.stringValue = "160"; editor.setLoops(dryRun: false)
     let firstRetryCount=calls.count
     for _ in 0..<6 {
@@ -82,7 +91,7 @@ extension InterfaceTests {
     try require(editor.loopStart.integerValue == 160 && editor.loopNeedsReload && editor.loopDraftRevision == "new-saved", "Failed loop reload keeps fields and their captured revision")
     editor.reloadLoops(); replies.removeFirst()(["result": ["revision": "incomplete", "data": ["index": 2, "frames": 2048]]])
     try require(editor.loopStart.integerValue == 160 && editor.loopDraftRevision == "new-saved" && editor.loopNeedsReload, "Incomplete readback cannot silently replace loop fields with defaults")
-    editor.reloadLoops(); replies.removeFirst()(["result": ["revision": "reviewed", "data": readback]])
+    currentRevision = "reviewed"; editor.reloadLoops(); try reloadAnswer("reviewed", readback)
     editor.loopStart.stringValue = "170"; editor.setLoops(dryRun: false)
     let captured = calls.last!.1 as NSDictionary
     replies.removeFirst()(["error": ["code": -32002, "message": "Busy", "data": ["writeOutcome": "notCommitted"]]])
@@ -93,6 +102,7 @@ extension InterfaceTests {
     try require(editor.loopStart.integerValue == 180 && editor.loopDraftRevision == "reviewed" && editor.loopNeedsReload, "A later loop write completion cannot authorize newer text at its revision")
     editor.loopSaveWork?.cancel();editor.onRequest=nil
     try sampleLoopRetryCompletionChecks()
+    try sampleLoopReloadChecks()
   }
   static func sampleLoopRetryCompletionChecks() throws {
     for action in ["Return", "checkbox", "handle release"] {

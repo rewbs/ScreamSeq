@@ -23,7 +23,7 @@ extension SampleEditor {
   func resetSettingsContext() {
     settingsWork?.cancel(); settingsWork = nil; settingsEditGeneration += 1
     settingsPending = false; settingsNeedsReload = false; settingsRevision = nil; settingsIdentity = ""
-    loopNeedsReload = false; loopEditGeneration += 1
+    loopReloadQuery = nil; loopNeedsReload = false; loopEditGeneration += 1
     loopSaveWork?.cancel(); loopSaveWork = nil; loopsBusy = false
     settingsDraft.reset(); finishSettingsWaiters(false); finishLoopWaiters(false)
   }

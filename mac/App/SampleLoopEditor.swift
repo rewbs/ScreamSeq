@@ -69,7 +69,7 @@ extension SampleEditor {
       loadLoopFields(info); loopDraftRevision = revision; loopDraftBaseline = rawLoopDraft
     }
   }
-  private func loadLoopFields(_ info: [AnyHashable: Any]) {
+  func loadLoopFields(_ info: [AnyHashable: Any]) {
     loopStart.stringValue = String(info["loopStart"] as? Int ?? 0); loopEnd.stringValue = String(info["loopEnd"] as? Int ?? 0)
     sustainStart.stringValue = String(info["sustainStart"] as? Int ?? 0); sustainEnd.stringValue = String(info["sustainEnd"] as? Int ?? 0)
     looping.state = info["loop"] as? Bool == true ? .on : .off
@@ -78,35 +78,6 @@ extension SampleEditor {
     sustainPingpong.state = info["sustainPingpong"] as? Bool == true ? .on : .off
     loopReverse.state = info["reverseLoop"] as? Bool == true ? .on : .off
     sustainReverse.state = info["sustainReverse"] as? Bool == true ? .on : .off
-  }
-  func reloadLoops() {
-    guard !protectsSampleOperation else { operationStatus.stringValue = "Review the sample operation before reloading loops."; return }
-    if drawingDraft?.numeric == true || hasNumericDrawingInput { drawingStatus.stringValue = "Save or discard drawing input before reloading loops."; return }
-    guard !loopsBusy, !settingsPending, !hasSampleComposition, let onRequest else { return }
-    loopSaveWork?.cancel();loopSaveWork=nil
-    let sample = index, generation = sampleGeneration, signature = rawLoopDraft, edited = loopEditGeneration
-    let settings = settingsDraft.snapshot, settingsGeneration = settingsEditGeneration
-    loopsBusy = true
-    let receive: ([String: Any]) -> Void = { [weak self] response in
-      guard let self, self.index == sample, self.sampleGeneration == generation else { return }
-      self.loopsBusy = false
-      guard !self.hasSampleComposition, edited == self.loopEditGeneration, self.rawLoopDraft.isEqual(signature),
-        let result = response["result"] as? [String: Any], let revision = result["revision"] as? String,
-        let info = result["data"] as? [String: Any], info["index"] as? Int == sample,
-        ["frames", "loopStart", "loopEnd", "sustainStart", "sustainEnd", "loop", "pingpong", "sustainLoop", "sustainPingpong", "reverseLoop", "sustainReverse"].allSatisfy({ info[$0] is NSNumber }) else {
-        self.loopNeedsReload = true; self.loopsStatus.stringValue = "Loop readback failed or newer fields arrived. Draft kept."; self.finishLoopWaiters(false); return
-      }
-      self.loadLoopFields(info); self.loopDraftBaseline = self.rawLoopDraft; self.loopDraftRevision = revision
-      self.loopPreviewSignature = nil; self.loopPreviewRevision = nil; self.loopNeedsReload = false
-      self.savedLoopInfo = info; self.sampleRevision = revision
-      if !self.settingsDraft.hasDraft, !self.settingsNeedsReload, self.settingsEditGeneration == settingsGeneration,
-        self.settingsDraft.snapshot == settings, !self.settingsFields.contains(where: { $0.currentEditor() != nil }), self.validSettingsRead(info, sample: sample) {
-        self.adoptSettingsRead(info, revision: revision)
-      }
-      self.syncLoopMarkers(); self.loopsStatus.stringValue = "Loaded current loop settings."; self.finishLoopWaiters(true)
-    }
-    if let onSettingsRequest { onSettingsRequest("sample.get", ["sample": sample], settingsIdentity, receive) }
-    else { onRequest("sample.get", ["sample": sample], receive) }
   }
   func setLoops(dryRun: Bool, attempt: Int = 0) {
     guard !loopsBusy else { return }
