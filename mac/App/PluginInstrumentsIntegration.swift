@@ -2,7 +2,7 @@ import AppKit
 extension AppController {
   var instrumentPluginEditor: InstrumentPluginEditor? { instrumentPluginWindow?.contentView as? InstrumentPluginEditor }
   func retainInstrumentPluginWindow(creating: Bool, identity: String = "") -> Bool {
-    guard let window = instrumentPluginWindow, let editor = instrumentPluginEditor else { return false }
+    guard let window = instrumentPluginWindow, let editor = instrumentPluginEditor, !editor.workflow.retired else { return false }
     let document = String(model.revisionToken.split(separator: ":").first ?? "")
     if editor.needsCompletion || (editor.workflow.target.context.document == document &&
       (creating ? editor.isCreating && editor.instrument == 0 : editor.workflow.target.identity == identity)) {
@@ -45,6 +45,10 @@ extension AppController {
     instrumentPluginWindow?.close(); instrumentPluginWindow = win; win.center(); win.makeKeyAndOrderFront(nil)
   }
   func configureInstrumentPluginBridge(_ editor: InstrumentPluginEditor) {
+    editor.workflow.onRetired = { [weak self, weak editor] in
+      guard let self, let editor, self.instrumentPluginEditor === editor else { return }
+      self.instrumentPluginWindow?.close(); self.instrumentPluginWindow = nil
+    }
     editor.workflow.onContext = { [weak self] in
       guard let self, !self.shuttingDown else { return nil }
       return .init(document: String(self.model.revisionToken.split(separator: ":").first ?? ""), revision: self.model.revisionToken)

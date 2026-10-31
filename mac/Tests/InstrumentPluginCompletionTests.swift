@@ -53,6 +53,20 @@ final class InstrumentPluginFixture {
 
 extension InterfaceTests {
   static func instrumentPluginCompletionChecks() throws {
+    for name in [String(repeating: "a", count: 32), String(repeating: "é", count: 16), String(repeating: "🎹", count: 8)] {
+      let f = InstrumentPluginFixture(creating: true)
+      f.input = .init(generation: 1, fields: .init(name: name, plugin: "synth", channel: 3))
+      f.owner.apply()
+      try require(f.calls.isEmpty && !f.owner.needsCompletion && f.owner.status.contains("31 UTF-8 bytes"),
+        "An overlong stored name is rejected before creation without losing its text")
+    }
+    for name in [String(repeating: "a", count: 31), String(repeating: "é", count: 15) + "a"] {
+      let f = InstrumentPluginFixture(creating: true)
+      f.input = .init(generation: 1, fields: .init(name: name, plugin: "synth", channel: 3))
+      f.prepare(); f.completeCreation(); f.completeAssignment()
+      try require(!f.owner.needsCompletion && f.names[3] == name && f.routes[3]?.plugin == "synth",
+        "An exact 31-byte name completes creation and assignment")
+    }
     for creating in [false, true] {
       let f = InstrumentPluginFixture(creating: creating); f.prepare()
       if creating {
@@ -87,6 +101,23 @@ extension InterfaceTests {
     try require(partial.writes.filter { $0.0 == "instrument.create" }.count == 1 && partial.writes.last?.1["instrument"] as? Int == 3,
       "After uncertain assignment, a new explicit Apply reuses the verified created instrument")
     partial.completeAssignment(changed: false)
+
+    for creating in [false, true] {
+      let f = InstrumentPluginFixture(creating: creating); f.prepare()
+      if creating { f.completeCreation() }
+      f.answer([:]); let slot = f.owner.target.slot
+      f.identities[slot] = "replacement-at-same-slot"; f.advance()
+      var retired = 0; f.owner.onRetired = { retired += 1 }
+      f.owner.review(); f.answer(f.document())
+      try require(f.owner.canAccept && f.owner.observedRemoval && f.replies.isEmpty,
+        "Review can acknowledge removal by stable identity without reading a replacement slot")
+      f.advance(); f.owner.accept()
+      try require(retired == 0 && f.owner.needsCompletion && !f.owner.canAccept, "Stale removal evidence cannot discard the retained owner")
+      f.owner.review(); f.answer(f.document()); let writes = f.writes.count
+      f.owner.accept(); f.owner.accept(); f.owner.apply(); f.owner.reload()
+      try require(retired == 1 && f.owner.retired && !f.owner.needsCompletion && f.writes.count == writes && f.replies.isEmpty,
+        "Explicit removal acknowledgement retires once without replay, retargeting or future writes")
+    }
 
     for stage in ["catalogue", "mapping", "created-catalogue", "created-mapping", "assigned-catalogue", "assigned-mapping"] {
       let f = InstrumentPluginFixture(creating: stage.hasPrefix("created")); f.owner.apply()
@@ -172,6 +203,13 @@ extension InterfaceTests {
     try require(!editor.hasDraft && !editor.needsCompletion && editor.rawFields.plugin.isEmpty, "Explicit Reload adopts current routing and clears the discarded draft")
     let menu = ContextActions.controls(in: editor, title: "Plugin instrument")
     try require(menu.items.contains { $0.title == "Review assignment" }, "Assignment recovery is exposed to command search")
+    editor.plugin.selectItem(at: 1); editor.apply(); native.answer(native.document()); native.answer(native.metadata()); native.answer([:])
+    native.identities[1] = nil; native.advance(); editor.workflow.review(); native.answer(native.document())
+    try require(editor.acceptButton.title == "Discard removed assignment" && editor.needsCompletion,
+      "The native removal action explicitly names discarded work before releasing it")
+    editor.workflow.accept()
+    try require(!editor.needsCompletion && !editor.hasDraft && editor.workflow.retired,
+      "Discarding a removed assignment releases native Save/history/departure admission")
     host.makeFirstResponder(nil); host.orderOut(nil)
 
     let creator = InstrumentPluginEditor(instrument: 0, model: seed.model), typed = InstrumentPluginFixture(creating: true, workflow: creator.workflow)

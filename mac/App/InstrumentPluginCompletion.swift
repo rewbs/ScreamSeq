@@ -51,7 +51,8 @@ final class InstrumentPluginOperation {
   let revealContext: String
   var target: InstrumentPluginTarget, phase: Phase = .preparing, params = [String: Any]()
   var wrote = false, before: InstrumentPluginSnapshot?, mapping: [Int]?
-  var observation: (snapshot: InstrumentPluginSnapshot, slot: Int, name: String)?
+  // nil slot is a verified removal; zero is an unattributed creation.
+  var observation: (snapshot: InstrumentPluginSnapshot, slot: Int?, name: String)?
   init(target: InstrumentPluginTarget, draft: InstrumentPluginDraft, revealContext: String = "") { self.target = target; original = target; self.draft = draft; self.revealContext = revealContext }
 }
 
@@ -61,12 +62,15 @@ final class InstrumentPluginWorkflow {
   var canBegin: (() -> Bool)?, canReveal: (() -> Bool)?, composing: (() -> Bool)?
   var onRequest: ((String, [String: Any], @escaping ([String: Any]) -> Void) -> Void)?
   var onObserved: ((InstrumentPluginSnapshot, Int, String, Bool) -> Void)?, onSaved: ((Int, String) -> Void)?, onChange: (() -> Void)?
+  var onRetired: (() -> Void)?
+  private(set) var retired = false
   private(set) var target: InstrumentPluginTarget, operation: InstrumentPluginOperation?, status = ""
   init(target: InstrumentPluginTarget) { self.target = target }
   var needsCompletion: Bool { operation != nil }
   var pending: Bool { operation.map { $0.phase != .retained } ?? false }
   var canReview: Bool { operation?.phase == .retained }
   var canAccept: Bool { canReview && operation?.observation != nil }
+  var observedRemoval: Bool { operation?.observation.map { $0.slot == nil } ?? false }
   private func show(_ message: String) { status = message; onChange?() }
   private func current(_ owner: InstrumentPluginOperation) -> Bool {
     operation === owner && onContext?() == owner.target.context
@@ -75,7 +79,11 @@ final class InstrumentPluginWorkflow {
     current(owner) && onDraft?() == owner.draft && composing?() != true && canBegin?() == true
   }
   func apply() {
+    guard !retired else { return }
     if operation != nil { if canReview { review() }; return }
+    if target.slot == 0, let name = onDraft?().fields.name, name.utf8.count > 31 {
+      show("Instrument names can use at most 31 UTF-8 bytes. Shorten the name before creating; nothing was submitted."); return
+    }
     guard onContext?() == target.context, !target.context.document.isEmpty, !target.context.revision.isEmpty,
       canBegin?() == true, composing?() != true, let draft = onDraft?(), let onRequest,
       (1...16).contains(draft.fields.channel), draft.fields.name.count <= 200, !draft.fields.name.contains("\0"),
@@ -194,7 +202,7 @@ final class InstrumentPluginWorkflow {
     owner.observation = nil; inspect(owner, context: context, reload: false)
   }
   func reload() {
-    guard operation == nil, composing?() != true, let context = onContext?(), context.document == target.context.document, let draft = onDraft?() else { return }
+    guard !retired, operation == nil, composing?() != true, let context = onContext?(), context.document == target.context.document, let draft = onDraft?() else { return }
     let owner = InstrumentPluginOperation(target: target, draft: draft); operation = owner; inspect(owner, context: context, reload: true)
   }
   private func inspect(_ owner: InstrumentPluginOperation, context: SampleRecordingContext, reload: Bool) {
@@ -206,7 +214,10 @@ final class InstrumentPluginWorkflow {
         self.refuse(owner, "Catalogue readback failed or changed. Fields and retained result kept."); return
       }
       let slot = self.target.identity.isEmpty ? 0 : snapshot.instruments.first(where: { $0.value == self.target.identity })?.key
-      guard let slot else { self.refuse(owner, "The captured instrument was removed. Its retained result and fields are kept."); return }
+      guard let slot else {
+        owner.observation = (snapshot, nil, owner.draft.fields.name); owner.phase = .retained
+        self.show("The captured instrument was removed. Discard removed assignment to release this editor and its unsaved fields. No instrument will be created or changed."); return
+      }
       func observed(_ name: String) {
         guard self.onContext?() == context, self.composing?() != true else { self.refuse(owner, "Song changed while reading. Review again."); return }
         if reload {
@@ -234,8 +245,13 @@ final class InstrumentPluginWorkflow {
     guard onContext?() == observed.snapshot.context, composing?() != true else {
       owner.observation = nil; show("Song changed since Review. Review again before accepting."); return
     }
-    target = .init(context: observed.snapshot.context, slot: observed.slot, identity: observed.slot == 0 ? "" : target.identity)
-    operation = nil; onObserved?(observed.snapshot, observed.slot, observed.name, false)
+    guard let slot = observed.slot else {
+      operation = nil; retired = true
+      show("Removed instrument assignment discarded. No creation or assignment repeated.")
+      onRetired?(); return
+    }
+    target = .init(context: observed.snapshot.context, slot: slot, identity: slot == 0 ? "" : target.identity)
+    operation = nil; onObserved?(observed.snapshot, slot, observed.name, false)
     show("Earlier result acknowledged. No creation or assignment repeated; current fields and focus kept.")
   }
 }

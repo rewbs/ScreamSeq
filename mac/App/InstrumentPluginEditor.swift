@@ -22,10 +22,11 @@ final class InstrumentPluginEditor: NSView, NSTextFieldDelegate {
   var draft: InstrumentPluginDraft { .init(generation: generation, fields: rawFields) }
   var composing: Bool { (name.currentEditor() as? NSTextView)?.hasMarkedText() == true }
   var hasDraft: Bool {
+    guard !workflow.retired else { return false }
     let fields = rawFields
     return fields.name != baseline.name || fields.plugin != baseline.plugin || (!fields.plugin.isEmpty && fields.channel != baseline.channel)
   }
-  var needsCompletion: Bool { workflow.needsCompletion || hasDraft || composing }
+  var needsCompletion: Bool { !workflow.retired && (workflow.needsCompletion || hasDraft || composing) }
   init(instrument: Int, model: PatternModel, selectedPlugin: String? = nil) {
     isCreating = instrument == 0
     let context = SampleRecordingContext(document: String(model.revisionToken.split(separator: ":").first ?? ""), revision: model.revisionToken)
@@ -68,6 +69,7 @@ final class InstrumentPluginEditor: NSView, NSTextFieldDelegate {
     workflow.onChange = { [weak self] in guard let self else { return }; self.status.stringValue = self.workflow.status; self.updateControls() }
     workflow.onObserved = { [weak self] snapshot, slot, observedName, replace in self?.adopt(snapshot, slot: slot, name: observedName, replace: replace) }
     workflow.onSaved = { [weak self] slot, _ in self?.onSaved?(slot) }
+    workflow.onRetired = { [weak self] in self?.window?.close() }
     updateControls()
   }
   required init?(coder: NSCoder) { fatalError() }
@@ -114,6 +116,7 @@ final class InstrumentPluginEditor: NSView, NSTextFieldDelegate {
     updateControls()
   }
   private func updateControls() {
+    acceptButton?.title = workflow.observedRemoval ? "Discard removed assignment" : "Accept observed assignment"
     func enabled(_ control: NSControl?, _ available: Bool) {
       guard let control else { return }; control.isEnabled = available || window?.firstResponder === control || (control as? NSTextField)?.currentEditor() != nil
     }
