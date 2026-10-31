@@ -757,7 +757,7 @@ struct InterfaceFailure: Error { let message: String }
       ("sample-operation", sampleOperationChecks), ("sample-loop", sampleLoopChecks),
       ("plugin-control-delivery", pluginControlDeliveryChecks),
       ("parameter-boundary", parameterBoundaryChecks),
-      ("pattern-performance", patternPerformanceChecks), ("plugin-instruments", pluginInstrumentsChecks),
+      ("pattern-performance", patternPerformanceChecks), ("plugin-instruments", pluginInstrumentsChecks), ("plugin-instrument-completion", instrumentPluginCompletionChecks),
       ("instrument-envelope", instrumentEnvelopeChecks), ("envelope-bank", envelopeBankChecks),
       ("scratch", scratchGestureChecks), ("gate", gateInspectorChecks), ("navigation", navigationChecks),
       ("pattern-grid", patternGridChecks), ("note-tracks", noteTrackChecks),

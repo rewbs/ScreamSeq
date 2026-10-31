@@ -1,6 +1,10 @@
 import AppKit
 extension AppController {
   func finishPendingNotes(_ action:@escaping ()->Void)->Bool {
+    if instrumentPluginEditor?.needsCompletion == true {
+      statusLabel.stringValue = "Finish, review or reload the retained plugin instrument before saving, changing history or replacing the song."
+      instrumentPluginWindow?.makeKeyAndOrderFront(nil); return true
+    }
     if sampleBrowser?.needsDocumentCompletion == true {
       statusLabel.stringValue = "Review the retained sample-library import before saving, changing history or replacing the song."
       showSampleBrowser(); return true

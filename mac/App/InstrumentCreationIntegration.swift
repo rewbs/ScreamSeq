@@ -15,7 +15,7 @@ extension AppController {
     return !busy && !shuttingDown && model.editable && !instrumentEditor.hasEditingDraft && !sampleEditor.hasDraft &&
       !instrumentCreationBanks.contains { $0.dirty || $0.pending || $0.workbench?.hasDraft == true || ($0.window?.firstResponder as? NSTextView)?.hasMarkedText() == true } &&
       tools?.pending != true && tools?.preview == nil && (tools?.window?.firstResponder as? NSTextView)?.hasMarkedText() != true &&
-      (instrumentPluginWindow?.contentView as? InstrumentPluginEditor)?.pending != true
+      instrumentPluginEditor?.needsCompletion != true
   }
   var instrumentCreationCanBegin: Bool { assetCreationCanBegin && sampleBrowser?.imports.needsCompletion != true }
   func configureInstrumentCreation() {

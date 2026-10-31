@@ -548,6 +548,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     refreshSidebar()
     refreshOrders()
     refreshAssets()
+    instrumentPluginEditor?.refreshIfClean()
     window.title = "\(model.title) — ScreamSeq"
     updateRecoveryStatus()
   }

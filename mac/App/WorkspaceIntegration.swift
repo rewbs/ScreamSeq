@@ -140,6 +140,9 @@ extension AppController {
         menus.append(menu)
       }
       menus.append(ContextActions.controls(in: self.orderEditor, title: "Arrangement"))
+      if let window = self.instrumentPluginWindow, window.isVisible, let content = window.contentView {
+        menus.append(ContextActions.controls(in: content, title: "Plugin instrument"))
+      }
       if let window = self.sampleBrowserWindow, window.isVisible, let content = window.contentView {
         menus.append(ContextActions.controls(in: content, title: "Sample library"))
       }
