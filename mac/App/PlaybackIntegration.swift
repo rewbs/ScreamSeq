@@ -6,24 +6,26 @@ extension AppController {
   }
   func handlePlaybackKey(_ event: NSEvent) -> Bool {
     guard NSApp.isActive, event.type == .keyDown,
-      event.keyCode == 49 || event.keyCode == KeyboardSettings.transportKey,
       commandPalette.window?.isKeyWindow != true else { return false }
+    let modifiers = event.modifierFlags.intersection(WorkspaceStroke.mask)
+    let binding=KeyboardSettings.playStopKeys.compactMap(WorkspaceStroke.init)
+    let exact=binding.count==1 && WorkspaceStroke(event)==binding.first
+    let boundedShortcut=(event.keyCode==49 || event.keyCode==KeyboardSettings.transportKey) && !modifiers.isEmpty && modifiers.isSubset(of:[.control,.shift])
+    guard exact || boundedShortcut else{return false}
     KeyboardSettings.traceInput("transport.key.consider",event:event)
     // Space belongs to an open dialog or sheet (file lists, buttons), not the transport.
     let target = KeyboardSettings.focusWindow(for: event, keyWindow: NSApp.keyWindow)
     guard NSApp.modalWindow == nil, window.attachedSheet == nil, target?.attachedSheet == nil, target?.sheetParent == nil else { return false }
-    let modifiers = event.modifierFlags.intersection([.command, .control, .option, .shift])
-    guard !modifiers.contains(.command), !modifiers.contains(.option) else { return false }
     if KeyboardSettings.menuFocus.ownsUnmodifiedKey(event) {
       KeyboardSettings.traceInput("transport.key.menu-owned",event:event)
       return false
     }
     let focus = focusedView(event)
-    if event.keyCode==36,let grid=focus as? PatternView,grid.column==1 {return false}
+    if modifiers.isEmpty,event.keyCode==36,let grid=focus as? PatternView,grid.column==1 {return false}
     if focus is FormulaCodeView, modifiers == [.control], event.keyCode == 49 { return false }
     // These responders have an actual local binding: text insertion, sample preview,
     // control activation, or Return's default action. Modified Space remains global.
-    if !modifiers.contains(.control) {
+    if modifiers.isEmpty || modifiers == [.shift] {
       if let text = focus as? NSTextView, text.isEditable { return false }
       if focus is NSTextField { return false }
       if modifiers.isEmpty && (focus is SampleBrowserTable || focus is NSButton || focus is NSPopUpButton) { return false }
@@ -31,7 +33,7 @@ extension AppController {
     }
     guard !event.isARepeat else { return true }
     KeyboardSettings.traceInput("transport.key.dispatch",event:event,detail:modifiers.isEmpty ? "toggle":"bounded=\(modifiers.contains(.control)) cursor=\(modifiers.contains(.shift))")
-    if modifiers.isEmpty { togglePlayback() }
+    if exact { togglePlayback() }
     else { startPlayback(fromCursor: modifiers.contains(.shift), bounded: modifiers.contains(.control)) }
     return true
   }

@@ -2,7 +2,7 @@ import AppKit
 
 final class MatrixBlock: NSButton, NSDraggingSource {
   static let dragType = NSPasteboard.PasteboardType("org.resonance.arrangement-block")
-  var bins = [Int](), notes = 0, rows = 64, selectedBlock = false
+  var bins = [Int](), notes = 0, events = 0, rows = 64, selectedBlock = false
   var onChoose: (() -> Void)?
   var onDrag: (() -> String?)?
   var onDrop: ((String, Bool) -> Bool)?
@@ -59,31 +59,42 @@ final class MatrixBlock: NSButton, NSDraggingSource {
       let height = max(2, min(22, 22 * CGFloat(count) / CGFloat(max(1, (rows + 15) / 16))))
       NSRect(x: 7 + CGFloat(index) * width, y: 21, width: max(1, width - 1), height: height).fill()
     }
-    (notes == 0 ? "—" : "\(notes) notes").draw(at: NSPoint(x: 8, y: 5), withAttributes: [
+    (events == 0 ? "—" : "\(notes)n · \(events)e").draw(at: NSPoint(x: 8, y: 5), withAttributes: [
       .font: NSFont.monospacedSystemFont(ofSize: 10, weight: .regular),
       .foregroundColor: selectedBlock ? Theme.accent : Theme.muted,
     ])
   }
 }
 
+final class ArrangementTable: NSTableView {
+  var onKey: ((NSEvent) -> Bool)?
+  override func keyDown(with event: NSEvent) {
+    if onKey?(event) != true { super.keyDown(with: event) }
+  }
+}
+
 final class ArrangementMatrix: NSView, NSTableViewDataSource, NSTableViewDelegate {
   typealias Reply = ([String: Any]) -> Void
-  let table = NSTableView(), status = Theme.label("", size: 12, color: Theme.muted)
+  let table = ArrangementTable(), status = Theme.label("", size: 12, color: Theme.muted)
   let page = Theme.label("", size: 12)
   let mode = NSPopUpButton()
   var onRequest: ((String, [String: Any], @escaping Reply) -> Void)?
   var onNavigate: ((Int, Int) -> Void)?
+  var onReturn: (() -> Void)?
+  var currentRevision: (() -> String)?
   var orders = [[String: Any]](), tracks = [[String: Any]]()
   var startOrder = 0, startChannel = 0, totalOrders = 0, totalChannels = 1
   var selectedOrder = 0, selectedChannel = 0, revision = "", loading = false
   var copied: (order: Int, channel: Int, revision: String)?
   private let dragOrigin = UUID().uuidString
+  private var selecting = false
   override init(frame: NSRect) {
     super.init(frame: frame)
     table.delegate = self; table.dataSource = self
     table.rowHeight = 50
     table.target = self; table.doubleAction = #selector(openSelection)
     table.setAccessibilityLabel("Arrangement matrix")
+    table.onKey = { [weak self] event in self?.handleKey(event) ?? false }
     table.usesAlternatingRowBackgroundColors = true
     let scroll = NSScrollView()
     scroll.documentView = table; scroll.hasVerticalScroller = true; scroll.hasHorizontalScroller = true
@@ -103,7 +114,7 @@ final class ArrangementMatrix: NSView, NSTableViewDataSource, NSTableViewDelegat
         ActionButton("Copy block") { [weak self] in self?.copyBlock() }, mode,
         ActionButton("Paste block") { [weak self] in self?.pasteBlock() }, NSView(),
       ]), status,
-      Theme.label("Drag or paste to copy a block. Shared destinations become independent. One Undo restores the operation.", size: 11, color: Theme.muted),
+      Theme.label("Arrows select · Return opens · ⌘C / ⌘V copy / paste · F5 refreshes · Escape returns · n = notes, e = all events", size: 11, color: Theme.muted),
     ], spacing: 12)
     content.fill(self, inset: 20); content.stretchAcrossAxis()
   }
@@ -115,9 +126,9 @@ final class ArrangementMatrix: NSView, NSTableViewDataSource, NSTableViewDelegat
     load()
   }
   func load() {
-    guard !loading else { return }
+    guard !loading, let request = onRequest else { return }
     loading = true
-    onRequest?("arrangement.matrix", ["startOrder": startOrder, "orderCount": 64,
+    request("arrangement.matrix", ["startOrder": startOrder, "orderCount": 64,
       "startChannel": startChannel, "channelCount": min(12, max(1, totalChannels - startChannel))]) { [weak self] reply in
       guard let self else { return }
       self.loading = false
@@ -130,6 +141,9 @@ final class ArrangementMatrix: NSView, NSTableViewDataSource, NSTableViewDelegat
       self.tracks = data["tracks"] as? [[String: Any]] ?? []
       self.totalOrders = data["totalOrders"] as? Int ?? 0
       self.totalChannels = data["totalChannels"] as? Int ?? 1
+      self.selectedOrder = max(0, min(self.selectedOrder, self.totalOrders - 1))
+      self.selectedChannel = max(0, min(self.selectedChannel, self.totalChannels - 1))
+      self.selecting = true
       for column in self.table.tableColumns { self.table.removeTableColumn(column) }
       let order = NSTableColumn(identifier: .init("order")); order.title = "Order / section"; order.width = 165
       self.table.addTableColumn(order)
@@ -142,8 +156,10 @@ final class ArrangementMatrix: NSView, NSTableViewDataSource, NSTableViewDelegat
         self.table.addTableColumn(column)
       }
       self.table.reloadData()
+      self.revealSelection()
+      self.selecting = false
       self.page.stringValue = "Orders \(self.startOrder + 1)–\(self.startOrder + self.orders.count) of \(self.totalOrders)  ·  Tracks \(self.startChannel + 1)–\(self.startChannel + self.tracks.count) of \(self.totalChannels)"
-      self.status.stringValue = self.copied == nil ? "Choose a block to edit or copy." : "Choose a destination block, then Paste block."
+      self.status.stringValue = self.copied == nil ? "Choose a block to edit or copy." : self.copied?.revision == self.revision ? "Choose a destination block, then Paste block." : "Copied block is stale. Copy it again before pasting."
     }
   }
   func numberOfRows(in tableView: NSTableView) -> Int { orders.count }
@@ -155,7 +171,9 @@ final class ArrangementMatrix: NSView, NSTableViewDataSource, NSTableViewDelegat
       text.identifier = column.identifier
       let section = entry["name"] as? String ?? ""
       let pattern = entry["patternName"] as? String ?? ""
-      text.stringValue = String(format: "%03d · P%03d", order, entry["pattern"] as? Int ?? 0) + "\n" + (section.isEmpty ? pattern : section)
+      let index = entry["pattern"] as? Int ?? 65535
+      let name = index == 65535 ? "End" : index == 65534 ? "Skip" : String(format: "P%03d", index)
+      text.stringValue = String(format: "%03d · ", order) + name + "\n" + (section.isEmpty ? pattern : section)
       text.maximumNumberOfLines = 2
       return text
     }
@@ -164,10 +182,12 @@ final class ArrangementMatrix: NSView, NSTableViewDataSource, NSTableViewDelegat
     let view = tableView.makeView(withIdentifier: .init("block"), owner: self) as? MatrixBlock ?? MatrixBlock(frame: .zero)
     view.identifier = .init("block")
     view.bins = block["bins"] as? [Int] ?? []; view.notes = block["notes"] as? Int ?? 0
+    view.events = block["events"] as? Int ?? view.notes
     view.rows = entry["rows"] as? Int ?? 64
     view.selectedBlock = order == selectedOrder && channel == selectedChannel
-    view.setAccessibilityLabel("Order \(order + 1), track \(channel + 1), \(view.notes) notes")
-    view.onChoose = { [weak self] in self?.choose(order: order, channel: channel) }
+    let summary = "Order \(order + 1), track \(channel + 1), \(view.notes) notes, \(view.events) events · \(block["trackerEvents"] as? Int ?? 0) tracker, \(block["preciseEvents"] as? Int ?? 0) precise, \(block["nativeFxEvents"] as? Int ?? 0) native FX"
+    view.setAccessibilityLabel(summary); view.toolTip = summary
+    view.onChoose = { [weak self] in guard let self else{return};self.window?.makeFirstResponder(self.table);self.choose(order: order, channel: channel) }
     view.onDrag = { [weak self] in self?.dragPayload(order: order, channel: channel) }
     view.onDrop = { [weak self] payload, apply in
       self?.drop(payload, order: order, channel: channel, apply: apply) ?? false
@@ -176,24 +196,70 @@ final class ArrangementMatrix: NSView, NSTableViewDataSource, NSTableViewDelegat
     return view
   }
   func choose(order: Int, channel: Int) {
+    guard !loading, (0..<totalOrders).contains(order), (0..<totalChannels).contains(channel) else { return }
     selectedOrder = order; selectedChannel = channel
+    let orderPage = order / 64 * 64, trackPage = channel / 12 * 12
+    if orderPage != startOrder || trackPage != startChannel {
+      startOrder = orderPage; startChannel = trackPage; load(); return
+    }
+    selecting = true
     table.reloadData()
+    revealSelection()
+    selecting = false
     status.stringValue = "Selected order \(order + 1), track \(channel + 1)."
   }
-  @objc func openSelection() { onNavigate?(selectedOrder, selectedChannel) }
+  private func revealSelection() {
+    guard let row = orders.firstIndex(where: { $0["order"] as? Int == selectedOrder }) else { return }
+    table.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
+    table.scrollRowToVisible(row)
+    if let column=table.tableColumns.firstIndex(where:{$0.identifier.rawValue==String(selectedChannel)}) {table.scrollColumnToVisible(column)}
+    if let column = table.tableColumns.firstIndex(where: { $0.identifier.rawValue == String(selectedChannel) }) { table.scrollColumnToVisible(column) }
+  }
+  func tableViewSelectionDidChange(_ notification: Notification) {
+    guard !selecting, !loading, orders.indices.contains(table.selectedRow), let order = orders[table.selectedRow]["order"] as? Int else { return }
+    choose(order: order, channel: selectedChannel)
+  }
+  func handleKey(_ event: NSEvent) -> Bool {
+    let flags = event.modifierFlags.intersection([.command, .control, .option, .shift])
+    if flags == .command {
+      if event.charactersIgnoringModifiers?.lowercased() == "c" { copyBlock(); return true }
+      if event.charactersIgnoringModifiers?.lowercased() == "v" { pasteBlock(); return true }
+    }
+    guard flags.isEmpty else { return false }
+    switch event.keyCode {
+    case 123: choose(order: selectedOrder, channel: max(0, selectedChannel - 1))
+    case 124: choose(order: selectedOrder, channel: min(totalChannels - 1, selectedChannel + 1))
+    case 125: choose(order: min(totalOrders - 1, selectedOrder + 1), channel: selectedChannel)
+    case 126: choose(order: max(0, selectedOrder - 1), channel: selectedChannel)
+    case 36, 76: openSelection()
+    case 96: load()
+    case 53, 97: onReturn?()
+    default: return false
+    }
+    return true
+  }
+  private func musical(_ order: Int) -> Bool {
+    guard let entry = orders.first(where: { $0["order"] as? Int == order }) else { return false }
+    return (entry["rows"] as? Int ?? 0) > 0
+  }
+  private var fresh: Bool { !revision.isEmpty && (currentRevision?() ?? revision) == revision }
+  @objc func openSelection() {
+    guard !loading, fresh, musical(selectedOrder) else { status.stringValue = "Refresh and select a musical block to open."; return }
+    onNavigate?(selectedOrder, selectedChannel)
+  }
   func copyBlock() {
-    guard !revision.isEmpty else { return }
+    guard !loading, fresh, musical(selectedOrder) else { status.stringValue = "Refresh and select a musical block to copy."; return }
     copied = (selectedOrder, selectedChannel, revision)
     status.stringValue = "Copied order \(selectedOrder + 1), track \(selectedChannel + 1). Choose a destination."
   }
   func dragPayload(order: Int, channel: Int) -> String? {
-    guard !loading, !revision.isEmpty else { return nil }
+    guard !loading, fresh, musical(order), (0..<totalChannels).contains(channel) else { return nil }
     let payload: [String: Any] = ["origin": dragOrigin, "revision": revision, "order": order, "channel": channel]
     guard let data = try? JSONSerialization.data(withJSONObject: payload) else { return nil }
     return String(data: data, encoding: .utf8)
   }
   func drop(_ payload: String, order: Int, channel: Int, apply: Bool) -> Bool {
-    guard !loading, payload.utf8.count < 2048, let data = payload.data(using: .utf8),
+    guard !loading, fresh, musical(order), payload.utf8.count < 2048, let data = payload.data(using: .utf8),
       let item = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
       item["origin"] as? String == dragOrigin, let token = item["revision"] as? String,
       token == revision, let sourceOrder = item["order"] as? Int, let sourceChannel = item["channel"] as? Int,
@@ -208,9 +274,11 @@ final class ArrangementMatrix: NSView, NSTableViewDataSource, NSTableViewDelegat
     return true
   }
   func pasteBlock() {
-    guard !loading, let copied else { return }
+    guard !loading, let copied, let request = onRequest else { return }
+    guard copied.revision == revision, fresh else { status.stringValue = "Copied block is stale. Refresh and copy it again."; return }
+    guard musical(selectedOrder) else { status.stringValue = "Select a musical destination block."; return }
     loading = true
-    onRequest?("arrangement.copyBlock", ["sourceOrder": copied.order, "sourceChannel": copied.channel,
+    request("arrangement.copyBlock", ["sourceOrder": copied.order, "sourceChannel": copied.channel,
       "targetOrder": selectedOrder, "targetChannel": selectedChannel, "expectedRevision": copied.revision,
       "mode": ["overwrite", "merge", "mix"][max(0, mode.indexOfSelectedItem)], "makeUnique": true]) { [weak self] reply in
       guard let self else { return }

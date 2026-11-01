@@ -26,7 +26,6 @@ final class GraphTrimControls:NSStackView,NSTextFieldDelegate {
   func context(graph:String?,node:String?,revision:String){
     guard let node else{identity="";target=[:];isHidden=true;return}
     let key="\(graph ?? "song")/\(node)"
-    if identity != key {window?.makeFirstResponder(nil)}
     if identity==key && self.revision==revision{return}
     if hasDraft && identity==key{return}
     identity=key;self.revision=revision;target=["graph":graph as Any? ?? NSNull(),"node":node];request+=1;let generation=request

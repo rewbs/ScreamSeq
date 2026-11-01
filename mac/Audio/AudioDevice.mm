@@ -22,6 +22,9 @@ std::vector<DeviceInfo> AudioDevice::devices() {
   check(AudioObjectGetPropertyData(kAudioObjectSystemObject, &address, 0, nullptr, &size, ids.data()),
         "Cannot read audio devices");
   std::vector<DeviceInfo> result;
+  AudioDeviceID defaultID=0;UInt32 defaultSize=sizeof(defaultID);
+  AudioObjectPropertyAddress defaultAddress{kAudioHardwarePropertyDefaultOutputDevice,kAudioObjectPropertyScopeGlobal,kAudioObjectPropertyElementMain};
+  AudioObjectGetPropertyData(kAudioObjectSystemObject,&defaultAddress,0,nullptr,&defaultSize,&defaultID);
   for (auto id : ids) {
     AudioObjectPropertyAddress streams{kAudioDevicePropertyStreams, kAudioObjectPropertyScopeOutput,
                                        kAudioObjectPropertyElementMain};
@@ -33,7 +36,11 @@ std::vector<DeviceInfo> AudioDevice::devices() {
     AudioObjectPropertyAddress label{kAudioObjectPropertyName, kAudioObjectPropertyScopeGlobal,
                                      kAudioObjectPropertyElementMain};
     if (!AudioObjectGetPropertyData(id, &label, 0, nullptr, &size, &name) && name) {
-      result.push_back({id, std::string([(__bridge NSString *)name UTF8String])});
+      CFStringRef uid=nullptr;UInt32 uidSize=sizeof(uid);
+      AudioObjectPropertyAddress uidAddress{kAudioDevicePropertyDeviceUID,kAudioObjectPropertyScopeGlobal,kAudioObjectPropertyElementMain};
+      AudioObjectGetPropertyData(id,&uidAddress,0,nullptr,&uidSize,&uid);
+      result.push_back({id,std::string([(__bridge NSString *)name UTF8String]),uid ? std::string([(__bridge NSString *)uid UTF8String]):std::to_string(id),id==defaultID});
+      if(uid)CFRelease(uid);
       CFRelease(name);
     }
   }
@@ -48,14 +55,7 @@ AudioDevice::~AudioDevice() {
     AudioComponentInstanceDispose(unit_);
 }
 void AudioDevice::configure(uint32_t deviceID, uint32_t frames) {
-  removeListeners();
-  deviceChanged_ = false;
-  usesDefault_ = deviceID == 0;
-  stop();
-  if (unit_) {
-    AudioComponentInstanceDispose(unit_);
-    unit_ = nullptr;
-  }
+  const bool followsDefault = deviceID == 0;
   if (!deviceID) {
     UInt32 size = sizeof(deviceID);
     AudioObjectPropertyAddress p{kAudioHardwarePropertyDefaultOutputDevice, kAudioObjectPropertyScopeGlobal,
@@ -63,41 +63,59 @@ void AudioDevice::configure(uint32_t deviceID, uint32_t frames) {
     check(AudioObjectGetPropertyData(kAudioObjectSystemObject, &p, 0, nullptr, &size, &deviceID),
           "No default audio device");
   }
-  deviceID_ = deviceID;
+  const auto outputs=devices();
+  if(std::none_of(outputs.begin(),outputs.end(),[&](const auto &output){return output.id==deviceID;}))
+    throw std::runtime_error("Selected output is unavailable; refresh the output list");
   AudioObjectPropertyAddress rate{kAudioDevicePropertyNominalSampleRate, kAudioObjectPropertyScopeGlobal,
                                   kAudioObjectPropertyElementMain};
-  UInt32 size = sizeof(sampleRate_);
-  check(AudioObjectGetPropertyData(deviceID, &rate, 0, nullptr, &size, &sampleRate_), "Cannot read sample rate");
+  double sampleRate=0;
+  UInt32 size = sizeof(sampleRate);
+  check(AudioObjectGetPropertyData(deviceID, &rate, 0, nullptr, &size, &sampleRate), "Cannot read sample rate");
+  if(!std::isfinite(sampleRate)||sampleRate<=0)throw std::runtime_error("Invalid output sample rate");
   AudioObjectPropertyAddress buffer{kAudioDevicePropertyBufferFrameSize, kAudioObjectPropertyScopeGlobal,
                                     kAudioObjectPropertyElementMain};
-  AudioObjectSetPropertyData(deviceID, &buffer, 0, nullptr, sizeof(frames), &frames);
-  size = sizeof(bufferSize_);
-  check(AudioObjectGetPropertyData(deviceID, &buffer, 0, nullptr, &size, &bufferSize_), "Cannot read buffer size");
+  UInt32 actualFrames=0;size=sizeof(actualFrames);
+  check(AudioObjectGetPropertyData(deviceID, &buffer, 0, nullptr, &size, &actualFrames), "Cannot read buffer size");
+  AudioValueRange range{};size=sizeof(range);
+  AudioObjectPropertyAddress rangeAddress{kAudioDevicePropertyBufferFrameSizeRange,kAudioObjectPropertyScopeGlobal,kAudioObjectPropertyElementMain};
+  check(AudioObjectGetPropertyData(deviceID,&rangeAddress,0,nullptr,&size,&range),"Cannot read supported buffer range");
+  if(!std::isfinite(range.mMinimum)||!std::isfinite(range.mMaximum)||range.mMinimum<1||range.mMaximum<range.mMinimum||range.mMaximum>UINT32_MAX)
+    throw std::runtime_error("Invalid output buffer range");
+  frames=uint32_t(std::clamp(double(frames ? frames:range.mMinimum),range.mMinimum,range.mMaximum));
   AudioComponentDescription desc{kAudioUnitType_Output, kAudioUnitSubType_HALOutput, kAudioUnitManufacturer_Apple, 0,
                                  0};
   auto component = AudioComponentFindNext(nullptr, &desc);
   if (!component)
     throw std::runtime_error("Core Audio output is unavailable.");
-  check(AudioComponentInstanceNew(component, &unit_), "Cannot create audio output");
+  AudioUnit prepared=nullptr;
+  check(AudioComponentInstanceNew(component, &prepared), "Cannot create audio output");
   try {
-    configureUnit(deviceID);
+    configureUnit(prepared,deviceID,sampleRate);
   } catch (...) {
-    // Never retain a half-built output: play() reconfigures only without one.
-    AudioComponentInstanceDispose(unit_);
-    unit_ = nullptr;
+    AudioComponentInstanceDispose(prepared);
     throw;
   }
+  // Prepare the complete replacement before touching the current transport.
+  // A driver may negotiate a different period; report the period it accepted.
+  if(!AudioObjectSetPropertyData(deviceID,&buffer,0,nullptr,sizeof(frames),&frames)) {
+    UInt32 negotiated=actualFrames;size=sizeof(negotiated);
+    if(!AudioObjectGetPropertyData(deviceID,&buffer,0,nullptr,&size,&negotiated))actualFrames=negotiated;
+  }
+  removeListeners();stop();
+  if(unit_)AudioComponentInstanceDispose(unit_);
+  unit_=prepared;deviceID_=deviceID;sampleRate_=sampleRate;bufferSize_=actualFrames;
+  usesDefault_=followsDefault;deviceChanged_=false;
   mach_timebase_info_data_t timebase;
   mach_timebase_info(&timebase);
   nanosPerTick_ = double(timebase.numer) / timebase.denom;
   addListeners();
 }
-void AudioDevice::configureUnit(uint32_t deviceID) {
-  check(AudioUnitSetProperty(unit_, kAudioOutputUnitProperty_CurrentDevice, kAudioUnitScope_Global, 0, &deviceID,
+void AudioDevice::configureUnit(AudioUnit unit, uint32_t deviceID, double sampleRate) {
+  check(AudioUnitSetProperty(unit, kAudioOutputUnitProperty_CurrentDevice, kAudioUnitScope_Global, 0, &deviceID,
                              sizeof(deviceID)),
         "Cannot select output device");
   AudioStreamBasicDescription format{};
-  format.mSampleRate = sampleRate_;
+  format.mSampleRate = sampleRate;
   format.mFormatID = kAudioFormatLinearPCM;
   format.mFormatFlags = kAudioFormatFlagIsFloat | kAudioFormatFlagIsPacked;
   format.mBytesPerPacket = 8;
@@ -105,12 +123,12 @@ void AudioDevice::configureUnit(uint32_t deviceID) {
   format.mBytesPerFrame = 8;
   format.mChannelsPerFrame = 2;
   format.mBitsPerChannel = 32;
-  check(AudioUnitSetProperty(unit_, kAudioUnitProperty_StreamFormat, kAudioUnitScope_Input, 0, &format, sizeof(format)),
+  check(AudioUnitSetProperty(unit, kAudioUnitProperty_StreamFormat, kAudioUnitScope_Input, 0, &format, sizeof(format)),
         "Cannot set float audio format");
   AURenderCallbackStruct cb{callback, this};
-  check(AudioUnitSetProperty(unit_, kAudioUnitProperty_SetRenderCallback, kAudioUnitScope_Input, 0, &cb, sizeof(cb)),
+  check(AudioUnitSetProperty(unit, kAudioUnitProperty_SetRenderCallback, kAudioUnitScope_Input, 0, &cb, sizeof(cb)),
         "Cannot set render callback");
-  check(AudioUnitInitialize(unit_), "Cannot initialize output");
+  check(AudioUnitInitialize(unit), "Cannot initialize output");
 }
 void AudioDevice::addListeners() {
   for (auto selector : std::array<AudioObjectPropertySelector, 3>{kAudioDevicePropertyNominalSampleRate,

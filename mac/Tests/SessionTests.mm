@@ -15,6 +15,7 @@ static void require(bool value, const char *context) {
     throw std::runtime_error(context);
 }
 #include "ParameterRecordingAPITests.inc"
+#include "PluginEditorAPITests.inc"
 int main(int argc, char **argv) {
   @autoreleasepool {
     try {
@@ -54,6 +55,7 @@ int main(int argc, char **argv) {
       {
         const auto baseline=session.serializedData;NSString *revision=session.automationRevision;
         NSString *identity=[session snapshot:0][@"nativePlugins"][0][@"instanceID"];
+        pluginEditorAPIAdmission(session);
         parameterRecordingAPIAdmission(session,identity);
         for(NSArray *requested in @[@[],@[identity,identity],@[@"missing"],@[identity]]) {
           bool refused=false;

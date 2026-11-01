@@ -49,5 +49,14 @@
       replacePreciseNotesForPattern(native.preciseNotes,pattern,std::move(replacement));
       try{native.validate(song);_document->validateEdits(edits);}catch(const std::invalid_argument &e){throw Error(-32602,e.what());}
       const bool changed=native!=_document->native()||std::any_of(edits.begin(),edits.end(),[&](const auto &e){return _document->cell(e.pattern,e.row,e.channel)!=e.after;});
-      if(changed&&!dry){_audio->stop();_document->editNative(std::move(native),edits);}
+      if(changed&&!dry){
+        // Stage the immutable schedule and companion ordinary-cell conversion
+        // before history. The renderer orders both at one FIFO boundary; a
+        // refused publication leaves the song, history and transport intact.
+        auto prepared=_audio->preparePreciseUpdate(native,edits);
+        _document->editNative(std::move(native),edits,[&]{
+          if(prepared&&!_audio->publishPreciseUpdate(prepared))
+            throw Error(-32002,"Precise-note publication is busy; retry the same revision");
+        });
+      }
       result=@{@"dryRun":@(dry),@"wouldChange":@(changed),@"events":@([p[@"events"] count]),@"clearedRows":@(cells.size())};

@@ -13,12 +13,18 @@ final class OrderEditor: NSView, NSTableViewDataSource, NSTableViewDelegate, NST
   var onSelect: ((Int) -> Void)?, onChange: ((Int, Int, String) -> Void)?
   var onSequence: ((Int) -> Void)?
   var onMatrix: (() -> Void)?
-  var onAnnotate: (([String: Any]) -> Void)?
+  var onAnnotate: (([String: Any], @escaping ([String: Any]) -> Void) -> Void)?
   let sectionName = NSTextField(), patternName = NSTextField(), patternNotes = NSTextField()
-  // The value last written into each detail field and the order/pattern it
-  // belonged to. Text that differs from it is an uncommitted edit and survives
-  // refreshes for that same target.
-  private var shownDetails = [ObjectIdentifier: (target: String, text: String)]()
+  private struct AnnotationDraft {
+    var id: String, revision: String, name: String, notes: String
+    var savedName: String, savedNotes: String
+    var dirty: Bool { name != savedName || notes != savedNotes }
+  }
+  private var annotationDrafts = [String: AnnotationDraft]()
+  private var sectionTarget: String?, patternTarget: String?
+  private var annotationPending = Set<String>()
+  let detailStatus = Theme.label("", size: 11, color: Theme.muted)
+  private var documentIdentity = ""
   override init(frame: NSRect) {
     super.init(frame: frame)
     for (id, title, width) in [
@@ -85,6 +91,7 @@ final class OrderEditor: NSView, NSTableViewDataSource, NSTableViewDelegate, NST
         stack(.horizontal, [Theme.label("Section", size: 12), sectionName]),
         stack(.horizontal, [Theme.label("Pattern", size: 12), patternName]),
         patternNotes,
+        stack(.horizontal, [detailStatus, NSView(), ActionButton("Reload details") { [weak self] in self?.reloadDetails() }]),
         Theme.label(
           "Sections move with their first order. An empty section name removes that marker. Pattern details are shared.",
           size: 11, color: Theme.muted),
@@ -95,6 +102,12 @@ final class OrderEditor: NSView, NSTableViewDataSource, NSTableViewDelegate, NST
   required init?(coder: NSCoder) { fatalError() }
   func update(_ model: PatternModel, selected: Int) {
     updating = true
+    retainDetails()
+    let document = String(model.revisionToken.split(separator: ":").first ?? "")
+    if document != documentIdentity {
+      annotationDrafts.removeAll(); sectionTarget = nil; patternTarget = nil
+      documentIdentity = document
+    }
     self.model = model
     self.selected = max(0, min(selected, model.orders.count - 1))
     count.stringValue = "\(model.orders.count) orders"
@@ -153,31 +166,69 @@ final class OrderEditor: NSView, NSTableViewDataSource, NSTableViewDelegate, NST
   }
   func tableViewSelectionDidChange(_ notification: Notification) {
     guard !updating, table.selectedRow >= 0 else { return }
+    retainDetails()
     selected = table.selectedRow
     picker.selectItem(withTag: model.orders[selected]); shownAssignment = model.orders[selected]
     updateDetails()
     onSelect?(selected)
   }
   private var shownAssignment: Int?
-  private func show(_ field: NSTextField, _ text: String, target: String) {
-    let key = ObjectIdentifier(field)
-    let edited = shownDetails[key].map { $0.target == target && field.stringValue != $0.text } ?? false
-    shownDetails[key] = (target, text)
-    if !edited && field.stringValue != text { field.stringValue = text }
+  private func retainDetails() {
+    if let key = sectionTarget { annotationDrafts[key]?.name = sectionName.stringValue }
+    if let key = patternTarget {
+      annotationDrafts[key]?.name = patternName.stringValue
+      annotationDrafts[key]?.notes = patternNotes.stringValue
+    }
   }
-  /// True while a detail field holds text that has not been saved for its target.
   var hasUncommittedDetails: Bool {
-    [sectionName, patternName, patternNotes].contains { field in shownDetails[ObjectIdentifier(field)].map { field.stringValue != $0.text } ?? false }
+    retainDetails()
+    return annotationDrafts.values.contains { $0.dirty }
+  }
+  private func captureDetails(_ entity: [String: Any]?, kind: String) -> String? {
+    guard let entity, let id = entity["id"] as? String else { return nil }
+    let key = "\(documentIdentity):\(kind):\(id)"
+    if annotationDrafts[key]?.dirty != true && !annotationPending.contains(key) {
+      let name = entity["name"] as? String ?? "", notes = entity["annotation"] as? String ?? ""
+      annotationDrafts[key] = AnnotationDraft(id: id, revision: model.revisionToken, name: name, notes: notes, savedName: name, savedNotes: notes)
+    }
+    return key
   }
   private func updateDetails() {
-    let section = selected < model.orderMetadata.count ? model.orderMetadata[selected] : nil
-    show(sectionName, section?["name"] as? String ?? "", target: section?["id"] as? String ?? "order \(selected)")
-    let pattern = selected < model.orders.count ? model.patterns.first { $0["index"] as? Int == model.orders[selected] } : nil
-    let identity = pattern?["id"] as? String ?? "pattern \(pattern?["index"] as? Int ?? -1)"
-    show(patternName, pattern?["name"] as? String ?? "", target: identity)
-    show(patternNotes, pattern?["annotation"] as? String ?? "", target: identity)
-    patternName.isEnabled = pattern != nil
-    patternNotes.isEnabled = pattern != nil
+    let section = model.orderMetadata.indices.contains(selected) ? model.orderMetadata[selected] : nil
+    let pattern = model.orders.indices.contains(selected) ? model.patterns.first { $0["index"] as? Int == model.orders[selected] } : nil
+    sectionTarget = captureDetails(section, kind: "order")
+    patternTarget = captureDetails(pattern, kind: "pattern")
+    let sectionDraft = sectionTarget.flatMap { annotationDrafts[$0] }
+    let patternDraft = patternTarget.flatMap { annotationDrafts[$0] }
+    if sectionName.stringValue != sectionDraft?.name ?? "" { sectionName.stringValue = sectionDraft?.name ?? "" }
+    if patternName.stringValue != patternDraft?.name ?? "" { patternName.stringValue = patternDraft?.name ?? "" }
+    if patternNotes.stringValue != patternDraft?.notes ?? "" { patternNotes.stringValue = patternDraft?.notes ?? "" }
+    sectionName.isEnabled = section != nil; patternName.isEnabled = pattern != nil; patternNotes.isEnabled = pattern != nil
+    let stale = [sectionDraft, patternDraft].compactMap { $0 }.contains { $0.dirty && $0.revision != model.revisionToken }
+    detailStatus.stringValue = stale ? "Draft retained · song changed · Reload details to recapture" : "Return saves · drafts follow their original section or pattern"
+  }
+  func reloadDetails() {
+    for key in [sectionTarget, patternTarget].compactMap({ $0 }) where !annotationPending.contains(key) { annotationDrafts.removeValue(forKey: key) }
+    updateDetails()
+  }
+  private func saveDetails(_ key: String?, pattern: Bool) {
+    retainDetails()
+    guard let key, let draft = annotationDrafts[key], draft.dirty, !annotationPending.contains(key), let request = onAnnotate else { return }
+    var params: [String: Any] = ["id": draft.id, "name": draft.name, "expectedRevision": draft.revision]
+    if pattern { params["annotation"] = draft.notes }
+    annotationPending.insert(key)
+    request(params) { [weak self] reply in
+      guard let self else { return }; self.annotationPending.remove(key)
+      self.retainDetails()
+      if let result = reply["result"] as? [String: Any], let revision = result["revision"] as? String {
+        self.annotationDrafts[key]?.savedName = draft.name
+        self.annotationDrafts[key]?.savedNotes = draft.notes
+        self.annotationDrafts[key]?.revision = revision
+        self.detailStatus.stringValue = "Details saved · Undo restores the previous text"
+      } else {
+        self.detailStatus.stringValue = (reply["error"] as? [String: Any])?["message"] as? String ?? "Could not save details; draft retained"
+      }
+    }
   }
   func navigateSection(_ direction: Int) {
     let markers = model.orderMetadata.indices.filter { !(model.orderMetadata[$0]["name"] as? String ?? "").isEmpty }
@@ -186,16 +237,8 @@ final class OrderEditor: NSView, NSTableViewDataSource, NSTableViewDelegate, NST
     table.selectRowIndexes(IndexSet(integer: target), byExtendingSelection: false)
     table.scrollRowToVisible(target)
   }
-  func saveSection() {
-    guard selected < model.orderMetadata.count, let id = model.orderMetadata[selected]["id"] as? String else { return }
-    onAnnotate?(["id": id, "name": sectionName.stringValue, "expectedRevision": model.revisionToken])
-  }
-  func savePatternDetails() {
-    guard selected < model.orders.count,
-      let pattern = model.patterns.first(where: { $0["index"] as? Int == model.orders[selected] }),
-      let id = pattern["id"] as? String else { return }
-    onAnnotate?(["id": id, "name": patternName.stringValue, "annotation": patternNotes.stringValue, "expectedRevision": model.revisionToken])
-  }
+  func saveSection() { saveDetails(sectionTarget, pattern: false) }
+  func savePatternDetails() { saveDetails(patternTarget, pattern: true) }
   private func change(_ operation: String) { onChange?(selected, picker.selectedTag(), operation) }
   func actionMenu() -> NSMenu {
     let menu = NSMenu(title: "Orders"); menu.autoenablesItems=false
@@ -222,10 +265,7 @@ final class OrderEditor: NSView, NSTableViewDataSource, NSTableViewDelegate, NST
   @objc private func assignPattern() { if !updating { change("assign") } }
   @objc private func commitDetails(_ field: NSTextField) {
     guard !updating else { return }
-    if field === sectionName {
-      if selected < model.orderMetadata.count, sectionName.stringValue != model.orderMetadata[selected]["name"] as? String ?? "" { saveSection() }
-    } else if selected < model.orders.count, let pattern = model.patterns.first(where: { $0["index"] as? Int == model.orders[selected] }),
-      patternName.stringValue != pattern["name"] as? String ?? "" || patternNotes.stringValue != pattern["annotation"] as? String ?? "" { savePatternDetails() }
+    if field === sectionName { saveSection() } else { savePatternDetails() }
   }
   func controlTextDidEndEditing(_ notification: Notification) { if let field = notification.object as? NSTextField { commitDetails(field) } }
   @objc private func selectSequence() { guard let item = sequencePicker.selectedItem else { return }; onSequence?(item.tag) }

@@ -1,6 +1,12 @@
 import AppKit
 extension AppController {
+  func submitInstrumentEdit(_ values:[String:Any],revision:String,index:Int,identity:String,reply:@escaping([String:Any])->Void){
+    if busy || sessionReading {deferUntilIdle{[weak self] in self?.submitInstrumentEdit(values,revision:revision,index:index,identity:identity,reply:reply)};return}
+    guard model.instruments.contains(where:{$0["id"] as? String==identity && $0["index"] as? Int==index}) else{reply(AutomationServer.error(-32001,"Captured instrument is unavailable; draft retained."));return}
+    handleAutomation("instrument.patch",params:["instrument":index,"values":values,"expectedRevision":revision],reply:reply)
+  }
   func showInstrumentEnvelopeBank(_ kind:Int){
+    if instrumentEditor.hasDraft{instrumentEditor.finishAutomaticEdit{[weak self] accepted in if accepted{self?.showInstrumentEnvelopeBank(kind)}};return}
     // Without a resolvable target the only safe action is to show the bank that is already open.
     guard (0...2).contains(kind),let item=model.instruments.first(where:{$0["index"] as? Int==instrumentEditor.index}),let identity=item["id"] as? String else{
       if let instrumentEnvelopeBank,instrumentEnvelopeBank.window?.isVisible==true{instrumentEnvelopeBank.window?.makeKeyAndOrderFront(nil)};return}

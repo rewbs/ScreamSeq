@@ -209,6 +209,7 @@ final class PluginEditor: NSView, NSTableViewDataSource, NSTableViewDelegate, NS
   var programsButton: ActionButton!
   var onSavePreset: ((Int) -> Void)?, onLoadPreset: ((Int) -> Void)?
   var savePresetButton: ActionButton!, loadPresetButton: ActionButton!
+  var onLocation:((String)->Void)?
   var onActivity:(()->Void)?
   var onRecordingTake: (() -> Void)?
   private(set) var recordingReviewButton: ActionButton!
@@ -274,7 +275,7 @@ final class PluginEditor: NSView, NSTableViewDataSource, NSTableViewDelegate, NS
     menu.addItem(ContextAction("Add built-in effect…") { [weak self] in self?.onAddBuiltIn?() })
     menu.addItem(ContextAction("Plugin automation take…") { [weak self] in self?.onRecordingTake?() })
     guard let id = identity ?? selectedIdentity, let slot = plugins.firstIndex(where: { $0["instanceID"] as? String == id }) else {
-      for title in ["Open interface / controls", "Bypass / enable plugin", "Show in Graph…", "Audio buses…", "Programs…", "Save preset…", "Load preset…", "Automation envelopes…", "Parameter activity…", "New trigger instrument…", "Assign tracker instruments…", "Move earlier", "Move later", "Remove plugin"] {
+      for title in ["Open interface / controls", "Bypass / enable plugin", "Show in Graph…", "Audio buses…", "Plugin location…", "Programs…", "Save preset…", "Load preset…", "Automation envelopes…", "Parameter activity…", "New trigger instrument…", "Assign tracker instruments…", "Move earlier", "Move later", "Remove plugin"] {
         let item=ContextAction(title,enabled:false){};item.toolTip="Select a plugin in Plugin controls first";menu.addItem(item)
       }
       return menu
@@ -285,6 +286,7 @@ final class PluginEditor: NSView, NSTableViewDataSource, NSTableViewDelegate, NS
     action("Bypass / enable plugin", { [weak self] index in guard let self else { return }; self.onBypass?(index, !(self.plugins[index]["bypass"] as? Bool ?? false)) })
     menu.addItem(ContextAction("Show in Graph…") { [weak self] in self?.onGraph?(id) })
     action("Audio buses…", { [weak self] in self?.onPorts?($0) })
+    menu.addItem(ContextAction("Plugin location…",enabled:plugins[slot]["format"] as? String=="VST3"){[weak self] in self?.onLocation?(id)})
     action("Programs…", { [weak self] in self?.onPrograms?($0) })
     action("Save preset…", { [weak self] in self?.onSavePreset?($0) })
     action("Load preset…", { [weak self] in self?.onLoadPreset?($0) })

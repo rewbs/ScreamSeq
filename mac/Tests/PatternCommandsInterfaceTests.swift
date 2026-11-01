@@ -66,7 +66,11 @@ extension InterfaceTests {
     var typedEdits=0
     grid.onTypedNativeEffect={_ in typedEdits += 1};grid.onTrackerEffect={_,_,_,_,_ in typedEdits+=1}
     key(grid,35,"p");try require(grid.effectPrefix=="P" && typedEdits==0,"First letter waits without writing a stray P command")
-    key(grid,1,"s");try require(grid.nudgeEditor?.kind=="parameter-set" && typedEdits==0,"PS opens parameter set directly inline");grid.nudgeEditor?.onFinish?(false);grid.column=3
+    key(grid,1,"s");try require(grid.nudgeEditor?.kind=="parameter-set" && typedEdits==0,"PS opens parameter set directly inline")
+    try require(grid.nudgeEditor?.needsCompletion == true,"A new command retains its captured document even before its default fields are changed")
+    grid.nudgeEditor?.fields.first?.stringValue="-"
+    try require(grid.nudgeEditor?.needsCompletion == true,"Invalid in-grid command text cannot be discarded by document replacement")
+    grid.nudgeEditor?.onFinish?(false);grid.column=3
     key(grid,35,"p");key(grid,37,"l");try require(grid.nudgeEditor?.kind=="parameter-slide" && typedEdits==0,"PL opens parameter slide directly inline");grid.nudgeEditor?.onFinish?(false);grid.column=3
     key(grid,11,"b");key(grid,37,"l");try require(grid.nudgeEditor?.kind=="pitch-slide","BL opens pitch slide directly inline");grid.nudgeEditor?.onFinish?(false);grid.column=3
     var changedCell=[UInt8]();grid.onTrackerEffect={row,ch,_,effect,parameter in changedCell=grid.model.cell(row,ch);changedCell[4]=UInt8(effect);changedCell[5]=UInt8(parameter)}

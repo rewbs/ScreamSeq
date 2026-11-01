@@ -27,6 +27,7 @@ extension AppController {
     menu.addItem(ContextAction("Copy selection",key:"c",modifiers:.command){[weak self] in self?.patternView.copy(nil)})
     menu.addItem(ContextAction("Record selection to sample",enabled:!busy){[weak self] in self?.recordSelectionToSample()})
     menu.addItem(ContextAction("Record selection to instrument",enabled:!busy){[weak self] in self?.recordSelectionToInstrument()})
+    menu.addItem(ContextAction("Render selection options…",enabled:!busy){[weak self] in self?.showSelectionRenderOptions()})
     menu.addItem(ContextAction("Paste",key:"v",modifiers:.command,enabled:!busy){[weak self] in self?.patternView.paste(nil)})
     menu.addItem(ContextAction("Clear field under cursor",key:".",enabled:!busy){[weak self] in self?.patternView.clearCursorField(nil)})
     menu.addItem(ContextAction("Delete channel row",key:"\u{7f}",modifiers:.shift,enabled:!busy){[weak self] in self?.patternView.deleteChannelRow(nil)})

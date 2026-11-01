@@ -60,7 +60,7 @@ enum InspectorTabs {
   static let items: [(id:String, label:String, key:String)] = [
     ("notes","Notes","1"), ("samples","Samples","2"), ("instruments","Instruments","3"),
     ("plugins","Plugins","4"), ("mixer","Mixer","5"), ("graph","Graph","6"),
-    ("graphPlugins","FX library","7"), ("graphCommands","Graph lanes","8"), ("automation","Automation","9"), ("parameterActivity","Param activity","0"), ("gate","Gate inspector","g")]
+    ("graphPlugins","FX library","7"), ("graphCommands","Graph lanes","8"), ("automation","Automation","9"), ("parameterActivity","Param activity","0"), ("graphCurve","Graph curve","c"), ("gate","Gate inspector","g")]
 }
 final class WorkspaceTabs: NSView {
   let tabScroll = NSScrollView(), tabRow = NSView(), host = NSView()
@@ -117,6 +117,16 @@ final class DockWorkspace: NSView, NSWindowDelegate {
   // preset or restored layout has replaced it.
   private var layoutGeneration = 0
   var onSelection: ((String) -> Void)?, onLayout: (() -> Void)?
+  private(set) var contextPanelVisible = true
+  var onContextVisibility: ((Bool) -> Void)?
+  func setContextPanelVisible(_ visible: Bool) {
+    guard visible != contextPanelVisible else { return }
+    contextPanelVisible = visible; onContextVisibility?(visible); onLayout?()
+  }
+  static func validContextVisibility(_ state: [String:Any]) -> Bool {
+    guard let value=state["contextPanelVisible"] else {return true}
+    return (value as? NSNumber).map{CFGetTypeID($0)==CFBooleanGetTypeID()} ?? false
+  }
   init(patternView: NSView) {
     super.init(frame: .zero)
     vertical.isVertical = false; upper.isVertical = true; lower.isVertical = true
@@ -212,6 +222,14 @@ final class DockWorkspace: NSView, NSWindowDelegate {
     if focusLayout { onLayout?(); return }
     if name == "Sound design" { show("samples"); show("automation") }
     if name == "Compose" { show("notes"); lower.isHidden = true }
+    if name == "Connected" {
+      place("notes",at:"right");place("graph",at:"bottom");place("automation",at:"secondary")
+      show("notes");show("graph");show("automation")
+    }
+    if name == "Graph editing" {
+      place("graph",at:"bottom");place("graphCurve",at:"right");place("automation",at:"secondary")
+      show("graph");show("graphCurve");show("automation")
+    }
     vertical.adjustSubviews(); upper.adjustSubviews(); lower.adjustSubviews()
     layoutGeneration += 1; let generation = layoutGeneration
     DispatchQueue.main.async { [weak self] in
@@ -222,9 +240,11 @@ final class DockWorkspace: NSView, NSWindowDelegate {
     onLayout?()
   }
   var state: [String: Any] { ["locations":locations,"right":right.selected ?? "","bottom":bottom.selected ?? "","secondary":secondary.selected ?? "",
-    "pins":panels.mapValues(\.pinned),"focusLayout":focusLayout,"bottomHidden":lower.isHidden,
+    "contextPanelVisible":contextPanelVisible,"pins":panels.mapValues(\.pinned),"focusLayout":focusLayout,"bottomHidden":lower.isHidden,
     "vertical":upper.frame.height/max(1,vertical.bounds.height),"upper":pattern.frame.width/max(1,upper.bounds.width),"lower":bottom.frame.width/max(1,lower.bounds.width)] }
-  func restore(_ state: [String: Any]) {
+  @discardableResult func restore(_ state: [String: Any]) -> Bool {
+    guard Self.validContextVisibility(state) else {return false}
+    setContextPanelVisible(state["contextPanelVisible"] as? Bool ?? true)
     layoutGeneration += 1
     if let places = state["locations"] as? [String:String] { for (id,place) in places where ["right","bottom","secondary","float","hide"].contains(place) { self.place(id,at:place,select:false) } }
     for (id,pin) in state["pins"] as? [String:Bool] ?? [:] { panels[id]?.pinned = pin }
@@ -234,6 +254,7 @@ final class DockWorkspace: NSView, NSWindowDelegate {
     vertical.adjustSubviews(); upper.adjustSubviews(); lower.adjustSubviews()
     for (split,key) in [(vertical,"vertical"),(upper,"upper"),(lower,"lower")] where split.arrangedSubviews.count > 1 { let value = max(0.15,min(0.85,state[key] as? Double ?? 0.6)); split.setPosition((split.isVertical ? split.bounds.width : split.bounds.height) * value,ofDividerAt:0) }
     for win in floating.values where win.contentView != nil { win.orderFront(nil) }
+    return true
   }
   func windowShouldClose(_ sender: NSWindow) -> Bool { if let id = floating.first(where: { $0.value === sender })?.key { place(id,at:"right",select:false) }; return false }
 }

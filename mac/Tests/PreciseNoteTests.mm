@@ -8,6 +8,7 @@
 #include "soundlib/ModInstrument.h"
 #include <iostream>
 #include <dlfcn.h>
+#include <thread>
 using namespace Tracker;using namespace OpenMPT;
 std::vector<PluginDescriptor> registerFixtureAUs();
 #ifdef TRACKER_SANITIZER
@@ -47,6 +48,35 @@ static void liveSchedulePublicationTest() {
     check(live.telemetry().frames==rate,"Precise schedule replacement restarted transport");
   }
   std::cout<<"PASS shared live precise schedule publication, PCM partitions and realtime audit\n";
+}
+static void liveSessionPublicationTest(const char *deviceName) {
+  if(!deviceName)return; // Device execution is explicit; ordinary CTest remains offline.
+  TrackerSession *session=[TrackerSession new];NSError *error=nil;NSNumber *device=nil;
+  for(NSDictionary *entry in [session devices])if([entry[@"name"] isEqual:@(deviceName)])device=entry[@"id"];
+  check(device!=nil,"Explicit live precise-note test output device is unavailable");
+  check([session configureDevice:device.unsignedIntegerValue buffer:128 error:&error],"Configure isolated precise-note test device");
+  auto call=[&](NSString *method,NSDictionary *params,bool write=true){
+    NSMutableDictionary *request=[params mutableCopy];if(write)request[@"expectedRevision"]=session.automationRevision;
+    auto result=[session automationMethod:method params:request error:&error];
+    if(!result)throw std::runtime_error(error.localizedDescription.UTF8String);return result;
+  };
+  [session setPlaybackLoop:YES];check([session playOrder:0 error:&error],"Start live precise-note session");
+  std::this_thread::sleep_for(std::chrono::milliseconds(100));
+  auto frames=[[session telemetry][@"frames"] unsignedLongLongValue];check(frames>0,"Live precise-note callbacks started");
+  const auto oldAudio=[session audioOutputInformation];
+  check(![session configureDevice:UINT32_MAX buffer:128 error:&error]&&session.playing&&[oldAudio isEqual:[session audioOutputInformation]],"Unavailable output must preserve the active device and playing transport");
+  NSArray *events=@[@{@"channel":@0,@"position":@16384,@"note":@61,@"velocity":@93}];
+  auto set=call(@"pattern.notes.set",@{@"pattern":@0,@"events":events,@"clearRows":@[@{@"row":@0,@"channel":@0}]});
+  check(session.playing&&![set[@"playbackStopped"] boolValue],"Precise conversion must preserve playing transport");
+  auto accepted=call(@"pattern.notes.get",@{@"pattern":@0},false)[@"data"];
+  call(@"history.undo",@{});check(session.playing&&[call(@"pattern.notes.get",@{@"pattern":@0},false)[@"data"][@"events"] count]==0,"Live precise Undo restores notes without stopping");
+  call(@"history.redo",@{});check(session.playing&&[accepted isEqual:call(@"pattern.notes.get",@{@"pattern":@0},false)[@"data"]],"Live precise Redo restores exact notes");
+  NSString *revision=session.automationRevision;
+  check(![session automationMethod:@"pattern.notes.set" params:@{@"pattern":@0,@"events":@[@{@"channel":@0,@"position":@-1,@"note":@61}],@"expectedRevision":revision} error:&error]&&[revision isEqual:session.automationRevision]&&session.playing,"Invalid live notes preserve revision and transport");
+  std::this_thread::sleep_for(std::chrono::milliseconds(100));
+  check([[session telemetry][@"frames"] unsignedLongLongValue]>frames,"Live precise edit/history does not reset the renderer clock");
+  [session stop];[session shutdown];
+  std::cout<<"PASS Mac session live precise publication, Undo/Redo, refusal and continuous transport on "<<deviceName<<'\n';
 }
 static void voiceIsolationTest() {
   auto doc=Document::demo();configure(*doc,false);
@@ -410,5 +440,5 @@ int main(int argc,char **argv){ trustFixtureArguments(argc, argv);@autoreleasepo
   check(fixtureBundle,"Open repeat velocity fixture");auto velocityMode=reinterpret_cast<void(*)(bool)>(dlsym(fixtureBundle,"ResonanceFixtureVelocityMode"));check(velocityMode,"Fixture velocity PCM mode");
   velocityMode(true);setFixtureAUVelocityMode(true);nativeRepeatTest(vst[1]);nativeRepeatTest(au[1]);velocityMode(false);setFixtureAUVelocityMode(false);
   cutCommandTest(vst[1]);cutCommandTest(au[1]);cutAndInstrumentAPITest(vst[1]);
-  liveSchedulePublicationTest();voiceIsolationTest();forwardJumpTest();recordingTest();apiTest();offsetWorkflowTest();beatAndEffectTest();std::cout<<"PASS sample/AU/VST3 precise note timing, same-row releases, repeat, tempo/groove, callback partitions, timestamp capture, realtime audit, beat offsets, per-hit effects and project recall\n";return 0;
+  liveSchedulePublicationTest();liveSessionPublicationTest(std::getenv("SCREAMSEQ_TEST_OUTPUT_DEVICE"));voiceIsolationTest();forwardJumpTest();recordingTest();apiTest();offsetWorkflowTest();beatAndEffectTest();std::cout<<"PASS sample/AU/VST3 precise note timing, same-row releases, repeat, tempo/groove, callback partitions, timestamp capture, realtime audit, beat offsets, per-hit effects and project recall\n";return 0;
 }catch(const std::exception &e){std::cerr<<"FAIL "<<e.what()<<'\n';return 1;}}}

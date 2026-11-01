@@ -13,6 +13,7 @@ final class GraphPluginControls: NSView, NSTextFieldDelegate {
   var onRequest:((String,[String:Any],@escaping ([String:Any])->Void)->Void)?
   var onChanged:(()->Void)?,onParameter:((UInt32)->Void)?
   var onActivity:((String,String,UInt32)->Void)?
+  var onLocation:((String,String)->Void)?
   var onCatalog:((String,String,[String:Any])->Void)?
   var currentRevision:(()->String)?
   private var graph="",node="",revision="",pending=false,gesture:String?
@@ -23,6 +24,7 @@ final class GraphPluginControls: NSView, NSTextFieldDelegate {
     super.init(frame:frame)
     parametersView.recipeMode=true
     parametersView.currentRevision={[weak self] in self?.currentRevision?() ?? self?.revision ?? ""}
+    parametersView.onLocation={[weak self] _ in guard let self,!self.graph.isEmpty,!self.node.isEmpty else{return};self.onLocation?(self.graph,self.node)}
     parametersView.onOpen={[weak self] _ in self?.openEditor()}
     parametersView.onAutomate={[weak self] _,parameter in self?.onParameter?(parameter)}
     parametersView.onExpose=parametersView.onAutomate
@@ -109,6 +111,7 @@ final class GraphRackControls: NSView, NSTableViewDataSource, NSTableViewDelegat
   let search=NSSearchField(),table=NSTableView(),message=Theme.label("",size:10,color:Theme.muted)
   let enabled=NSButton(checkboxWithTitle:"Bypass",target:nil,action:nil)
   var onRequest:((String,[String:Any],@escaping([String:Any])->Void)->Void)?
+  var onLocation:((String)->Void)?
   var onOpen:((String)->Void)?,onAutomate:((String,UInt32)->Void)?,onActivity:((String,UInt32)->Void)?
   var onGesture:((Bool)->Void)?,onChanged:(()->Void)?,onExpose:((String,UInt32)->Void)?,onSources:((String,UInt32)->Void)?
   var currentRevision:(()->String)?
@@ -139,7 +142,12 @@ final class GraphRackControls: NSView, NSTableViewDataSource, NSTableViewDelegat
     enabled.target=self;enabled.action=#selector(toggleBypass);enabled.toolTip="Host bypass · M on the graph · processing keeps running with latency preserved"
     enabled.identifier=NSUserInterfaceItemIdentifier(GraphCommand.bypass.id)
     message.lineBreakMode = .byWordWrapping;message.maximumNumberOfLines=0;message.preferredMaxLayoutWidth=240
-    let content=stack(.vertical,[stack(.horizontal,[enabled,NSView(),ActionButton("Open interface"){[weak self] in guard let self,let id=self.identity else{return};self.onOpen?(id)}]),search,scroll,message],spacing:6)
+    let more=ActionMenuButton{[weak self] in
+      let menu=NSMenu(title:"Plugin");menu.autoenablesItems=false
+      menu.addItem(ContextAction("Plugin location…",enabled:self?.identity != nil){[weak self] in guard let self,let id=self.identity else{return};self.onLocation?(id)})
+      return menu
+    }
+    let content=stack(.vertical,[stack(.horizontal,[enabled,more,NSView(),ActionButton("Open interface"){[weak self] in guard let self,let id=self.identity else{return};self.onOpen?(id)}]),search,scroll,message],spacing:6)
     content.stretchAcrossAxis();content.fill(self)
   }
   required init?(coder:NSCoder){fatalError()}

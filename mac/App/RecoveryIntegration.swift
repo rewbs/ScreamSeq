@@ -197,7 +197,11 @@ extension AppController {
         }
       } catch {
         DispatchQueue.main.async {
-          self.busy = false; reply(AutomationServer.error(-32003, error.localizedDescription)); self.drainNotes()
+          self.busy = false
+          let failure = error as NSError
+          let data = (failure.userInfo["writeOutcome"] as? String).map { ["writeOutcome": $0] }
+          reply(AutomationServer.error(data == nil ? -32003 : failure.code, error.localizedDescription, data: data ?? [:]))
+          self.drainNotes()
         }
       }
     }

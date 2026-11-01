@@ -29,14 +29,34 @@ final class MixerStrip: NSView, NSTextFieldDelegate {
   let counts = Theme.label("", size: 10, color: Theme.muted)
   var onControl: ((String, String, Any, Bool) -> Void)?
   var onFinish: ((String) -> Void)?, onInspect: ((String) -> Void)?
+  var onRawChange: ((String) -> Void)?, onRawEnter: ((String) -> Void)?
+  var canBeginRawEdit: ((String) -> Bool)?
+  var canAdjust: (() -> Bool)?
+  var rawChanges: [String: String] {
+    var values = [String: String]()
+    for (key, field) in [("gainDB", gain), ("preGainDB", preGain)] {
+      if let baseline = shownText[ObjectIdentifier(field)], field.stringValue != baseline { values[key] = field.stringValue }
+    }
+    return values
+  }
+  var hasDraft: Bool { !rawChanges.isEmpty }
+  func acceptRaw(_ submitted: [String: String]) {
+    for (key, field) in [("gainDB", gain), ("preGainDB", preGain)] {
+      if let value = submitted["strip:\(busID):\(key)"] { shownText[ObjectIdentifier(field)] = value }
+    }
+  }
+  private var forceFields = false
+  func discardRaw() { shownText = [:]; forceFields = true }
   // The text each gain field last displayed. Ending an edit without typing
   // must not commit that rounded display as a new value.
   private var shownText = [ObjectIdentifier: String]()
+  private var displayed = [String: Any]()
   private func show(_ field: NSTextField, _ text: String) {
+    if let baseline = shownText[ObjectIdentifier(field)], field.stringValue != baseline { return }
     shownText[ObjectIdentifier(field)] = text
     if field.stringValue != text { field.stringValue = text }
   }
-  var isTracking: Bool { fader.trackingGesture || pan.trackingGesture || width.trackingGesture || prePan.trackingGesture || gain.currentEditor() != nil || preGain.currentEditor() != nil }
+  var isTracking: Bool { hasDraft || fader.trackingGesture || pan.trackingGesture || width.trackingGesture || prePan.trackingGesture || gain.currentEditor() != nil || preGain.currentEditor() != nil }
   override init(frame: NSRect) {
     super.init(frame: frame)
     wantsLayer = true; layer?.cornerRadius = 6; layer?.borderWidth = 1
@@ -49,7 +69,7 @@ final class MixerStrip: NSView, NSTextFieldDelegate {
     pan.minValue = -1; pan.maxValue = 1; width.minValue = 0; width.maxValue = 2
     prePan.minValue = -1; prePan.maxValue = 1
     meter.fixed(width: 34, height: 132)
-    gain.delegate = self; preGain.delegate = self
+    for field in [gain, preGain] { field.delegate = self; field.target = self; field.action = #selector(entered(_:)) }
     for button in [mute, solo] { button.target = self; button.action = #selector(toggle(_:)); button.font = .systemFont(ofSize: 11) }
     let meters = stack(.horizontal, [NSView(), fader, meter, NSView()], spacing: 8)
     let content = stack(.vertical, [title, kind, peak, meters,
@@ -66,7 +86,8 @@ final class MixerStrip: NSView, NSTextFieldDelegate {
   required init?(coder: NSCoder) { fatalError() }
   func update(_ bus: [String: Any], selected: Bool) {
     if isTracking && busID != bus["id"] as? String { return }
-    busID = bus["id"] as? String ?? ""
+    if busID != bus["id"] as? String { discardRaw() }
+    busID = bus["id"] as? String ?? ""; displayed = bus
     let name = bus["name"] as? String ?? "Bus"
     title.stringValue = name; kind.stringValue = (bus["kind"] as? String ?? "bus").capitalized
     layer?.backgroundColor = Theme.panel.cgColor; layer?.borderColor = (selected ? Theme.accent : Theme.border).cgColor
@@ -76,11 +97,12 @@ final class MixerStrip: NSView, NSTextFieldDelegate {
     prePan.setAccessibilityLabel("\(name) balance before effects")
     mute.setAccessibilityLabel("Mute \(name)"); solo.setAccessibilityLabel("Solo \(name)")
     if !fader.trackingGesture { fader.doubleValue = (bus["gainDB"] as? NSNumber)?.doubleValue ?? 0 }
-    if gain.currentEditor() == nil && !fader.trackingGesture { show(gain, String(format: "%.1f", fader.doubleValue)) }
+    if (forceFields || gain.currentEditor() == nil) && !fader.trackingGesture { show(gain, String(format: "%.1f", fader.doubleValue)) }
     if !pan.trackingGesture { pan.doubleValue = (bus["pan"] as? NSNumber)?.doubleValue ?? 0 }
     if !width.trackingGesture { width.doubleValue = (bus["width"] as? NSNumber)?.doubleValue ?? 1 }
     if !prePan.trackingGesture { prePan.doubleValue = (bus["prePan"] as? NSNumber)?.doubleValue ?? 0 }
-    if preGain.currentEditor() == nil { show(preGain, String(format: "%.1f", (bus["preGainDB"] as? NSNumber)?.doubleValue ?? 0)) }
+    if forceFields || preGain.currentEditor() == nil { show(preGain, String(format: "%.1f", (bus["preGainDB"] as? NSNumber)?.doubleValue ?? 0)) }
+    forceFields = false
     mute.state = bus["mute"] as? Bool == true ? .on : .off; solo.state = bus["solo"] as? Bool == true ? .on : .off
     counts.stringValue = "\((bus["inserts"] as? [String] ?? []).count) effects · \((bus["sends"] as? [[String: Any]] ?? []).count) sends"
   }
@@ -98,21 +120,24 @@ final class MixerStrip: NSView, NSTextFieldDelegate {
   }
   @objc func slide(_ sender: MixerSlider) {
     let key = sender === fader ? "gainDB" : sender === pan ? "pan" : sender === prePan ? "prePan" : "width"
+    guard canAdjust?() != false else { sender.doubleValue = (displayed[key] as? NSNumber)?.doubleValue ?? (key == "width" ? 1 : 0); return }
     if sender === fader { show(gain, String(format: "%.1f", sender.doubleValue)) }
     onControl?(busID, key, sender.doubleValue, !sender.trackingGesture)
   }
-  private func enter(_ field: NSTextField, key: String) {
-    guard field.stringValue != shownText[ObjectIdentifier(field)] else { return }
-    guard let value = Double(field.stringValue), value.isFinite, (-96...24).contains(value) else { return }
-    if key == "gainDB" { fader.doubleValue = value }
-    shownText[ObjectIdentifier(field)] = field.stringValue
-    onControl?(busID, key, value, true)
+  @objc func entered(_ sender: NSTextField) { if hasDraft { onRawEnter?(busID) } }
+  func control(_ control: NSControl, textShouldBeginEditing fieldEditor: NSText) -> Bool {
+    canBeginRawEdit?(busID) != false
   }
+  func controlTextDidChange(_ notification: Notification) { onRawChange?(busID) }
   func controlTextDidEndEditing(_ notification: Notification) {
-    if let field = notification.object as? NSTextField { enter(field, key: field === gain ? "gainDB" : "preGainDB") }
-    onFinish?(busID)
+    if let field = notification.object as? NSTextField { entered(field) }
   }
-  @objc func toggle(_ sender: NSButton) { onControl?(busID, sender === mute ? "mute" : "solo", sender.state == .on, true) }
+  @objc func toggle(_ sender: NSButton) {
+    let key = sender === mute ? "mute" : "solo"
+    guard canAdjust?() != false else { sender.state = displayed[key] as? Bool == true ? .on : .off; return }
+    onControl?(busID, key, sender.state == .on, true)
+  }
+
 }
 
 private final class MixerStripDocument: NSView { override var isFlipped: Bool { true } }
@@ -128,6 +153,9 @@ final class MixerStrips: NSView {
   var selectedID: String?
   var onControl: ((String, String, Any, Bool) -> Void)?
   var onFinish: ((String) -> Void)?, onInspect: ((String) -> Void)?
+  var onRawChange: ((String) -> Void)?, onRawEnter: ((String) -> Void)?
+  var canBeginRawEdit: ((String) -> Bool)?
+  var canAdjust: (() -> Bool)?
   private var updating = false
   let stripWidth: CGFloat = 160, stripHeight: CGFloat = 508
   override init(frame: NSRect) {
@@ -170,6 +198,10 @@ final class MixerStrips: NSView {
     for index in first..<last where visible[index] == nil {
       let strip: MixerStrip
       if let reused = spare.popLast() { strip = reused } else { strip = MixerStrip(frame: .zero); createdCount += 1 }
+      strip.onRawChange = { [weak self] id in self?.onRawChange?(id) }
+      strip.onRawEnter = { [weak self] id in self?.onRawEnter?(id) }
+      strip.canBeginRawEdit = { [weak self] id in self?.canBeginRawEdit?(id) != false }
+      strip.canAdjust = { [weak self] in self?.canAdjust?() != false }
       strip.onControl = { [weak self] id, key, value, final in self?.onControl?(id, key, value, final) }
       strip.onFinish = { [weak self] id in
         guard let self else { return }; self.onFinish?(id)

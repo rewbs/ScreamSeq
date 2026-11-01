@@ -769,7 +769,7 @@ final class PatternView: MTKView, MTKViewDelegate {
     // that navigation key until the resulting transaction has completed too.
     if deferringEffectKeys { deferKey(event); return }
     if event.characters == "?" || (ch=="/" && event.modifierFlags.contains(.shift)),column>=2,!event.modifierFlags.contains(.command) {onEffectPicker?();return}
-    if event.keyCode == KeyboardSettings.transportKey && !event.modifierFlags.contains(.command) {
+    if event.keyCode == KeyboardSettings.transportKey && event.modifierFlags.intersection(WorkspaceStroke.mask).isEmpty {
       if !event.isARepeat { onTransport?() }
       return
     }

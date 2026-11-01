@@ -2,7 +2,7 @@ import AppKit
 
 extension AppController {
   var sampleLibraryDirectory: URL {
-    if automationTest, let root = ProcessInfo.processInfo.environment["RESONANCE_AUTOMATION_TEST_DIRECTORY"] {
+    if automationTest || inspectionTest, let root = ProcessInfo.processInfo.environment["RESONANCE_AUTOMATION_TEST_DIRECTORY"] {
       return URL(fileURLWithPath: root, isDirectory: true).appendingPathComponent("SampleLibrary", isDirectory: true)
     }
     return FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("Resonance/SampleLibrary", isDirectory: true)
@@ -13,7 +13,7 @@ extension AppController {
       guard let self else { return }; (self.sampleBrowserWindow?.contentView as? SampleBrowser)?.updateLibrary(self.sampleLibrary.status)
     }
     let standard = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("samples", isDirectory: true).path
-    sampleLibrary.load(defaultRoots: !automationTest && FileManager.default.fileExists(atPath: standard) ? [standard] : [])
+    sampleLibrary.load(defaultRoots: !automationTest && !inspectionTest && FileManager.default.fileExists(atPath: standard) ? [standard] : [])
   }
   @objc func showSampleBrowser() {
     guard !busy else { return }; prepareSampleLibrary()
@@ -30,27 +30,18 @@ extension AppController {
       self.sampleAudition.prepare(path: path, audible: audible && !self.automationTest && !self.inspectionTest,
         decoder: { try TrackerSession.inspectSampleFile($0) as! [String: Any] }, completion: reply)
     }
-    browser.onImport = { [weak self] paths, instruments, reply in self?.loadSamplePaths(paths, instruments: instruments, reply: reply) }
-    browser.onAddFolder = { [weak self, weak browser] in
-      guard let self else { return }; let panel = NSOpenPanel()
-      panel.title = "Add sample folders"; panel.canChooseDirectories = true; panel.canChooseFiles = false; panel.allowsMultipleSelection = true
-      panel.beginSheetModal(for: self.sampleBrowserWindow!) { response in
-        guard response == .OK else { return }
-        do { try self.sampleLibrary.setRoots(self.sampleLibrary.roots + panel.urls.map(\.path)) }
-        catch { browser?.status.stringValue = error.localizedDescription }
-      }
-    }
+    configureSampleBrowserCompletion(browser)
+    browser.onAddFolder = { [weak self, weak browser] in guard let browser else { return }; self?.chooseSampleLibraryFolders(browser) }
     browser.onRemoveFolder = { [weak self, weak browser] path in
-      guard let self else { return }
-      do { try self.sampleLibrary.setRoots(self.sampleLibrary.roots.filter { $0 != path }) }
-      catch { browser?.status.stringValue = error.localizedDescription }
+      guard let self, let browser,
+        let owner = browser.libraryChanges.begin("sample.library.roots.set", params: ["roots": self.sampleLibrary.roots.filter { $0 != path }]) else { return }
+      browser.libraryChanges.submit(owner)
     }
-    browser.onRescan = { [weak self] in self?.sampleLibrary.rescan() }
+    browser.onRescan = { [weak browser] in
+      guard let browser, let owner = browser.libraryChanges.begin("sample.library.rescan") else { return }; browser.libraryChanges.submit(owner)
+    }
     browser.onChooseFiles = { [weak self, weak browser] in
-      guard let self else { return }; let panel = NSOpenPanel()
-      panel.title = "Load samples"; panel.allowsMultipleSelection = true; panel.allowsOtherFileTypes = true
-      panel.allowedContentTypes = [.wav, .aiff, .mp3]
-      panel.beginSheetModal(for: self.sampleBrowserWindow!) { response in if response == .OK { browser?.loadPaths(panel.urls.map(\.path)) } }
+      guard let self, let browser else { return }; self.chooseSampleLibraryFiles(browser)
     }
     let win = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1140, height: 820), styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
     win.title = "Sample library"; win.contentMinSize = NSSize(width: 980, height: 770); win.isReleasedWhenClosed = false; win.delegate = self; win.contentView = browser
@@ -58,7 +49,8 @@ extension AppController {
     win.center(); win.makeKeyAndOrderFront(nil); win.makeFirstResponder(browser.search)
   }
   func showMultisampleImport(_ group: MultisampleGroup) {
-    guard !busy, let parent = sampleBrowserWindow, parent.attachedSheet == nil else { return }
+    guard !busy, let parent = sampleBrowserWindow, parent.attachedSheet == nil,
+      (parent.contentView as? SampleBrowser)?.retainedWork != true else { return }
     let view = MultisampleImportView(group: group, revision: session.automationRevision)
     let sheet = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 820, height: 720), styleMask: [.titled], backing: .buffered, defer: false)
     sheet.title = "Import multi-sample instrument"; sheet.contentView = view; sheet.isReleasedWhenClosed = false
@@ -81,18 +73,6 @@ extension AppController {
       (parent.contentView as? SampleBrowser)?.status.stringValue = "Loaded \(group.name) as instrument \(instrument) · \(group.members.count) samples · one Undo step"
     }
     if !automationTest && !inspectionTest { parent.beginSheet(sheet) }
-  }
-  func loadSamplePaths(_ paths: [String], instruments: Bool, reply: @escaping (Result<Int, Error>) -> Void) {
-    guard !busy else { reply(.failure(sampleLibraryError(-32002, "The song is busy; try loading again shortly"))); return }
-    handleAutomation("sample.importMany", params: ["paths": paths, "createInstruments": instruments, "expectedRevision": session.automationRevision]) { [weak self] response in
-      guard let self else { return }
-      if let error = response["error"] as? [String: Any] { reply(.failure(self.sampleLibraryError(error["code"] as? Int ?? -32003, error["message"] as? String ?? "Import failed"))); return }
-      guard let data = (response["result"] as? [String: Any])?["data"] as? [String: Any], let samples = data["samples"] as? [[String: Any]], let first = samples.first, let sample = first["sample"] as? Int else { reply(.failure(self.sampleLibraryError(-32003, "No imported samples returned"))); return }
-      self.sampleEditor.index = sample
-      if let instrument = first["instrument"] as? Int, instrument > 0 { self.patternView.instrument = instrument }
-      else if self.model.instruments.isEmpty { self.patternView.instrument = sample }
-      self.showEditor(1); self.refreshAssets(); reply(.success(samples.count))
-    }
   }
   private func sampleLibraryError(_ code: Int, _ message: String) -> NSError { NSError(domain: "SampleLibrary", code: code, userInfo: [NSLocalizedDescriptionKey: message]) }
   func handleSampleLibraryAutomation(_ method: String, params p: [String: Any], reply: @escaping AutomationServer.Reply) -> Bool {
@@ -162,7 +142,13 @@ extension AppController {
       case "sample.library.preview.stop": try keys([]); sampleAudition.stop(); finish(["playing": false])
       default: throw sampleLibraryError(-32601, "Unknown sample library method")
       }
-    } catch { reply(AutomationServer.error((error as NSError).code, error.localizedDescription)) }
+    } catch {
+      let error = error as NSError
+      // Our validation errors precede publication. A filesystem error can have
+      // an ambiguous persistence outcome and must not authorize another write.
+      reply(AutomationServer.error(error.code, error.localizedDescription,
+        data: error.domain == "SampleLibrary" ? ["writeOutcome": "notCommitted"] : [:]))
+    }
     return true
   }
 }

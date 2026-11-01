@@ -80,6 +80,7 @@ final class GateInspector:NSView {
   let linked=NSButton(checkboxWithTitle:"Link rise and fall",target:nil,action:nil)
   private(set) var controls=[String:GateValueControl]()
   private(set) var hasDraft=false,pending=false
+  var needsCompletion:Bool { hasDraft || pending || controls.values.contains { ($0.value.currentEditor() as? NSTextView)?.hasMarkedText() == true } }
   private var generation=0,captureGeneration=0
   private var model=GateShapeModel(),context:PatternModel?,revision:String?,pattern=0,row=0,channel=0,column=0
   private var commands=[[String:Any]](),bindings=[[String:Any]](),plugins=[[String:Any]](),parameters=[[String:Any]]()

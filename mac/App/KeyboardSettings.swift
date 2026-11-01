@@ -62,14 +62,18 @@ final class KeyboardSettings {
       FileHandle.standardError.write(Data(("KEYBOARD_TRACE "+line+"\n").utf8))
     }
   }
+  static var volatileMapping: (lower:String,upper:String)?
+  static var playStopKeysProvider: (() -> [String])?
+  static var legacyPlayStopKeys:[String] {UserDefaults.standard.bool(forKey:"returnStartsPlayback") ? ["return"]:["space"]}
+  static var playStopKeys:[String] {playStopKeysProvider?() ?? legacyPlayStopKeys}
   static var lowKeys: String {
-    UserDefaults.standard.string(forKey: "noteKeysLow") ?? "zsxdcvgbhnjm"
+    volatileMapping?.lower ?? (UserDefaults.standard.dictionary(forKey:"musicalNoteKeys")?["lower"] as? String) ?? UserDefaults.standard.string(forKey:"noteKeysLow") ?? "zsxdcvgbhnjm"
   }
   static var highKeys: String {
-    UserDefaults.standard.string(forKey: "noteKeysHigh") ?? "q2w3er5t6y7u"
+    volatileMapping?.upper ?? (UserDefaults.standard.dictionary(forKey:"musicalNoteKeys")?["upper"] as? String) ?? UserDefaults.standard.string(forKey: "noteKeysHigh") ?? "q2w3er5t6y7u"
   }
   static var transportKey: UInt16 {
-    UserDefaults.standard.bool(forKey: "returnStartsPlayback") ? 36 : 49
+    playStopKeys == ["space"] ? 49 : playStopKeys == ["return"] ? 36 : UInt16.max
   }
   static var rowHeight: Float {
     let value = UserDefaults.standard.float(forKey: "patternRowHeight")
@@ -91,60 +95,64 @@ final class KeyboardSettings {
     if let index = Array(highKeys).firstIndex(where: { String($0) == key }) { return index + 12 }
     return nil
   }
-  var window: NSWindow?
-  func show(onApply: @escaping () -> Void) {
-    if let window {
-      window.makeKeyAndOrderFront(nil)
-      return
+  struct Failure:Error {let code:Int,message:String}
+  static func validated(_ lower:String,_ upper:String) throws -> (lower:String,upper:String) {
+    let a=lower.lowercased(),b=upper.lowercased(),allowed=Set("abcdefghijklmnopqrstuvwxyz0123456789-=[];'`\\,./<")
+    guard a.count==12,[12,13].contains(b.count),Set(a+b).count==a.count+b.count,Set(a+b).isSubset(of:allowed) else {
+      throw Failure(code:-32602,message:"Use 12 lower keys and 12 or 13 upper keys, all distinct letters, digits or unshifted punctuation.")
     }
-    let win = NSWindow(
-      contentRect: NSRect(x: 0, y: 0, width: 510, height: 360), styleMask: [.titled, .closable],
-      backing: .buffered, defer: false)
-    win.title = "Keyboard and display"
-    win.isReleasedWhenClosed = false
-    window = win
-    let low = NSTextField(string: Self.lowKeys)
-    let high = NSTextField(string: Self.highKeys)
-    low.setAccessibilityLabel("Lower octave note keys")
-    high.setAccessibilityLabel("Upper octave note keys")
-    let transport = NSPopUpButton()
-    transport.addItems(withTitles: ["Space", "Return"])
-    transport.selectItem(at: Self.transportKey == 49 ? 0 : 1)
-    let zoom = NSPopUpButton()
-    for value in [18, 22, 26, 30, 34] {
-      zoom.addItem(withTitle: "\(value) points")
-      zoom.lastItem?.tag = value
-    }
-    zoom.selectItem(withTag: Int(Self.rowHeight))
-    let status = Theme.label("", size: 11, color: Theme.gold)
-    let apply = ActionButton("Apply") {
-      let a = low.stringValue.lowercased()
-      let b = high.stringValue.lowercased()
-      guard a.count == 12, b.count == 12, Set(a + b).count == 24, !a.contains(" "), !b.contains(" ")
-      else {
-        status.stringValue = "Choose 24 distinct keys, 12 for each octave."
-        return
-      }
-      UserDefaults.standard.set(a, forKey: "noteKeysLow")
-      UserDefaults.standard.set(b, forKey: "noteKeysHigh")
-      UserDefaults.standard.set(transport.indexOfSelectedItem == 1, forKey: "returnStartsPlayback")
-      UserDefaults.standard.set(zoom.selectedTag(), forKey: "patternRowHeight")
-      onApply()
-      win.close()
-    }
-    let content = stack(
-      .vertical,
-      [
-        Theme.label("Note entry", size: 16, weight: .semibold),
-        Theme.label(
-          "Enter twelve keys in chromatic order, C through B, for each octave.", size: 11,
-          color: Theme.muted), labeled("LOWER OCTAVE", low), labeled("UPPER OCTAVE", high),
-        stack(
-          .horizontal, [labeled("PLAY / STOP", transport), labeled("PATTERN ROW HEIGHT", zoom)],
-          spacing: 24), status, apply,
-      ], spacing: 14)
-    content.fill(win.contentView!, inset: 24)
-    win.center()
-    win.makeKeyAndOrderFront(nil)
+    return (a,b)
+  }
+  static func snapshot(keys:[String])->[String:Any] {
+    let fields:[String:Any] = ["lower":lowKeys.uppercased(),"upper":highKeys.uppercased(),"playStopKeys":keys]
+    let revision=String(data:try! JSONSerialization.data(withJSONObject:fields,options:[.sortedKeys]),encoding:.utf8)!
+    return fields.merging(["revision":revision]){_,new in new}
+  }
+  static func publish(_ mapping:(lower:String,upper:String),persist:Bool) {
+    if persist {UserDefaults.standard.set(["lower":mapping.lower,"upper":mapping.upper],forKey:"musicalNoteKeys");volatileMapping=nil}
+    else {volatileMapping=mapping}
+  }
+  var window:NSWindow?
+  let low=NSTextField(),high=NSTextField(),transport=NSPopUpButton(),zoom=NSPopUpButton()
+  let status=Theme.label("",size:11,color:Theme.gold)
+  var captured=[String:Any](),onRead:(()->[String:Any])?,onWrite:(([String:Any]) throws -> [String:Any])?,onApply:(()->Void)?
+  var persistPreferences=true
+  func load() {
+    guard let state=onRead?() else{return};captured=state
+    low.stringValue=state["lower"] as? String ?? "";high.stringValue=state["upper"] as? String ?? ""
+    let keys=state["playStopKeys"] as? [String] ?? [];showBinding(keys)
+    zoom.selectItem(withTag:Int(Self.rowHeight));status.stringValue="Current preferences loaded. Held notes retain their original pitch."
+  }
+  func showBinding(_ keys:[String]) {
+    transport.removeAllItems();transport.addItems(withTitles:["Space","Return","Keep: "+(keys.isEmpty ? "disabled":keys.joined(separator:" → "))])
+    transport.selectItem(at:keys==["space"] ? 0:keys==["return"] ? 1:2)
+  }
+  func apply() {
+    guard let revision=captured["revision"] as? String,let onWrite else{return}
+    let keys=transport.indexOfSelectedItem==0 ? ["space"]:transport.indexOfSelectedItem==1 ? ["return"]:captured["playStopKeys"] as? [String] ?? []
+    do {
+      captured=try onWrite(["expectedKeyboard":revision,"lower":low.stringValue,"upper":high.stringValue,"playStopKeys":keys])
+      showBinding(captured["playStopKeys"] as? [String] ?? [])
+      if persistPreferences {UserDefaults.standard.set(zoom.selectedTag(),forKey:"patternRowHeight")}
+      onApply?();status.stringValue="Keyboard settings saved. Song data and Undo are unchanged."
+    } catch let error as Failure {status.stringValue=error.message}
+      catch {status.stringValue=error.localizedDescription}
+  }
+  var snapshot:[String:Any] {["visible":window?.isVisible ?? false,"captured":captured,"draft":["lower":low.stringValue,"upper":high.stringValue,"transport":transport.indexOfSelectedItem],"status":status.stringValue]}
+  func show(onApply:@escaping ()->Void) {
+    self.onApply=onApply
+    if let window {window.makeKeyAndOrderFront(nil);return}
+    let win=NSWindow(contentRect:NSRect(x:0,y:0,width:590,height:420),styleMask:[.titled,.closable],backing:.buffered,defer:false)
+    win.title="Keyboard and display";win.isReleasedWhenClosed=false;window=win
+    low.setAccessibilityLabel("Lower octave note keys");high.setAccessibilityLabel("Upper octave note keys, optional top C");transport.setAccessibilityLabel("Play / Stop shortcut")
+    for value in [18,22,26,30,34] {zoom.addItem(withTitle:"\(value) points");zoom.lastItem?.tag=value}
+    let help=Theme.label("Enter 12 lower-octave keys and 12 upper-octave keys, or 13 including top C. Use distinct letters, digits or unshifted punctuation. Custom Play / Stop bindings are also available in Commands.",size:11,color:Theme.muted)
+    help.lineBreakMode = .byWordWrapping;help.maximumNumberOfLines=0;help.preferredMaxLayoutWidth=535
+    status.lineBreakMode = .byWordWrapping;status.maximumNumberOfLines=0;status.preferredMaxLayoutWidth=535
+    let buttons=stack(.horizontal,[ActionButton("Apply"){[weak self] in self?.apply()},ActionButton("Reload preferences"){[weak self] in self?.load()},ActionButton("Use defaults"){[weak self] in
+      self?.low.stringValue="zsxdcvgbhnjm";self?.high.stringValue="q2w3er5t6y7ui";self?.transport.selectItem(at:0);self?.status.stringValue="Defaults in draft; Apply to save."
+    },ActionButton("Close"){[weak win] in win?.close()}])
+    let content=stack(.vertical,[Theme.label("Note entry",size:16,weight:.semibold),help,labeled("LOWER OCTAVE",low),labeled("UPPER OCTAVE",high),stack(.horizontal,[labeled("PLAY / STOP",transport),labeled("PATTERN ROW HEIGHT",zoom)],spacing:24),status,buttons],spacing:14)
+    content.stretchAcrossAxis();content.fill(win.contentView!,inset:24);load();win.center();win.makeKeyAndOrderFront(nil);win.makeFirstResponder(low)
   }
 }

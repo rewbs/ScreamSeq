@@ -8,7 +8,29 @@ extension InterfaceTests {
     let editor=PreciseNotesEditor(frame:.zero);editor.onContext={(PatternModel(["rows":64,"channels":4]),0,0,2)}
     editor.onRequest={_,_,reply in reply(["result":["revision":"notes:1","data":preciseData]])};editor.capture();editor.onRequest=nil;return editor
   }
+  static func preciseCheckBoundaryChecks() throws {
+    for scenario in ["unchanged","changed","newer","invalid","invalidCell","refused"] {
+      let editor=preciseNotesFixture()
+      var requests=[([String:Any],([String:Any])->Void)](),completed=[Bool]()
+      editor.onRequest={_,params,reply in requests.append((params,reply))}
+      if scenario != "unchanged" {_=editor.editCell(0,"velocity","70")}
+      editor.apply(dryRun:true);editor.finishAutomaticEdit{completed.append($0)}
+      try require(requests.count==1 && completed.isEmpty,"Save waits for the outstanding Check edit")
+      if scenario=="newer" {_=editor.editCell(0,"velocity","81")}
+      if scenario=="invalid" {editor.velocity.stringValue="unfinished";editor.controlTextDidChange(Notification(name:NSControl.textDidChangeNotification,object:editor.velocity))}
+      if scenario=="invalidCell" {let field=NSTextField(string:"unfinished");field.tag=1004;editor.controlTextDidChange(Notification(name:NSControl.textDidChangeNotification,object:field))}
+      requests.removeFirst().1(scenario=="refused" ? ["error":["message":"Refused"]]:["result":["revision":"notes:1","data":[:]]])
+      if scenario=="changed" || scenario=="newer" {
+        try require(requests.count==1 && requests[0].0["dryRun"] as? Bool==false && completed.isEmpty,"Successful Check edit resumes the waiting real write")
+        let events=requests[0].0["events"] as! [[String:Any]]
+        try require(events.first{$0["note"] as? Int==61}?["velocity"] as? Int==(scenario=="newer" ? 81:70),"Waiting Save includes fields entered during Check edit")
+        requests.removeFirst().1(["result":["revision":"notes:2","data":[:]]])
+      }
+      try require(requests.isEmpty && completed==[!scenario.hasPrefix("invalid") && scenario != "refused"],"Check edit settles \(scenario): callbacks=\(completed), requests=\(requests.map{$0.0}), draft=\(editor.hasDraft), status=\(editor.status.stringValue)")
+    }
+  }
   static func preciseNotesChecks() throws {
+    try preciseCheckBoundaryChecks()
     // Regression for the reported capture() trap: tracker volume is UInt8,
     // but scaling 0...64 to MIDI velocity needs a wider intermediate.
     let ordinary=PreciseNotesEditor(frame:.zero);ordinary.units.selectItem(at:1);ordinary.changeUnits()

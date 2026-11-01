@@ -7,7 +7,9 @@ final class PatternNudgeEditor: NSView, NSTextFieldDelegate {
   let target:EditorNavigation,fx:Int,revision:String,kind:String,native:String?
   let model:PatternModel,timingUnit:PatternTimingUnit
   private let original:[String:Any],originalText:[String]
+  private let newCommand:Bool
   private(set) var pending=false
+  var needsCompletion:Bool { pending || newCommand || zip(fields,originalText).contains { $0.stringValue != $1 || ($0.currentEditor() as? NSTextView)?.hasMarkedText() == true } }
   var contentOffset:CGFloat=0 {didSet {needsLayout=true}}
   var onRequest:(([String:Any],@escaping([String:Any])->Void)->Void)?
   var onMessage:((String)->Void)?,onFinish:((Bool)->Void)?,onFocus:((Int)->Void)?
@@ -23,6 +25,7 @@ final class PatternNudgeEditor: NSView, NSTextFieldDelegate {
     kind=schema.kind;native=schema.native;timingUnit=timing;descriptors=allParameters ? schema.fields : schema.inlineFields
     let old=model.nativeCommand(target.row,target.channel,fx)
     let existing=old?.kind==kind && old?.native==native ? old : nil
+    newCommand=draft?.newCommand ?? (existing==nil)
     var command=draft?.original ?? existing?.editCommand ?? ["kind":kind,"offset":0]
     if let native {command["native"]=native;command["parameters"]=command["parameters"] as? [String:Any] ?? [:]}
     for field in schema.fields {

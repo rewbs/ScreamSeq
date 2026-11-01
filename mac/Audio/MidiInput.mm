@@ -2,11 +2,12 @@
 #import <Foundation/Foundation.h>
 #include <mach/mach_time.h>
 #include <stdexcept>
+#include <algorithm>
 namespace Tracker {
 MidiInput::MidiInput() {
   for (uint32_t i = 0; i < queue_.size(); ++i)
     queue_[i].sequence = i;
-  if (MIDIClientCreate(CFSTR("ScreamSeq"), nullptr, nullptr, &client_))
+  if (MIDIClientCreate(CFSTR("ScreamSeq"), changed, this, &client_))
     return;
   MIDIInputPortCreate(client_, CFSTR("Tracker notes"), receive, this, &port_);
   MIDIDestinationCreate(client_, CFSTR("ScreamSeq MIDI In"), receive, this, &virtual_);
@@ -30,14 +31,33 @@ std::vector<MidiSource> MidiInput::sources() {
 void MidiInput::connect(uint32_t id) {
   if (!port_)
     throw std::runtime_error("CoreMIDI is unavailable.");
-  if (source_)
-    MIDIPortDisconnectSource(port_, source_);
-  source_ = 0;
+  if (source_ == id) return;
   if (id) {
     if (MIDIPortConnectSource(port_, id, nullptr))
       throw std::runtime_error("Cannot connect MIDI source.");
-    source_ = id;
   }
+  if (source_) MIDIPortDisconnectSource(port_, source_);
+  source_ = id;
+  discardPending();
+}
+void MidiInput::changed(const MIDINotification *, void *context) {
+  static_cast<MidiInput *>(context)->sourcesChanged_.store(true, std::memory_order_release);
+}
+bool MidiInput::connectionLost() {
+  if (!sourcesChanged_.exchange(false, std::memory_order_acq_rel) || !source_) return false;
+  SInt32 offline = 0;
+  bool present = false;
+  for (ItemCount i = 0; i < MIDIGetNumberOfSources(); ++i) present |= MIDIGetSource(i) == source_;
+  // Virtual endpoints need not publish the inherited hardware offline property.
+  const auto property = MIDIObjectGetIntegerProperty(source_, kMIDIPropertyOffline, &offline);
+  if (present && (property != noErr || !offline)) return false;
+  MIDIPortDisconnectSource(port_, source_); source_ = 0;
+  discardPending(); return true;
+}
+void MidiInput::discardPending() {
+  // Timestamps, rather than a drain-until-empty loop, also reject callbacks
+  // delivered late after a take or source boundary. Only the consumer reads it.
+  acceptAfter_ = mach_absolute_time();
 }
 void MidiInput::push(MidiEvent event) noexcept {
   uint32_t position = head_.load(std::memory_order_relaxed);
@@ -73,6 +93,7 @@ std::vector<MidiEvent> MidiInput::drain() {
 }
 std::vector<MidiEvent> MidiInput::drainSafe() {
   auto result = drain();
+  std::erase_if(result, [this](const auto &event) { return acceptAfter_ && event.timestamp <= acceptAfter_; });
   const auto drops = drops_.load(std::memory_order_acquire);
   discarding_ = discarding_ || drops != deliveredDrops_;
   deliveredDrops_ = drops;

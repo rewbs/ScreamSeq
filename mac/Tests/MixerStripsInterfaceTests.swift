@@ -91,7 +91,11 @@ extension InterfaceTests {
     try require(calls.count == beforeUntouched, "Ending a strip gain edit without typing commits nothing and adds no Undo step")
     strip.preGain.stringValue = "NaN"; let beforeInvalid = calls.count
     strip.controlTextDidEndEditing(Notification(name: NSControl.textDidEndEditingNotification, object: strip.preGain))
-    try require(calls.count == beforeInvalid && strip.preGain.stringValue == "-9.5", "Invalid numeric input restores the saved gain")
+    try require(calls.count == beforeInvalid && strip.preGain.stringValue == "NaN" && editor.hasPendingControls, "Invalid strip input is retained as a pending raw edit")
+    strips.reveal("bus239")
+    try require(strips.visible[0] === strip && strip.busID == "bus0" && strip.preGain.stringValue == "NaN", "An offscreen invalid gain pins its original strip instead of being recycled")
+    strips.reveal("bus0")
+    strip.preGain.stringValue = "-9.5" // Explicitly restore the accepted value before another gesture.
     strip.prePan.doubleValue = -0.6; strip.slide(strip.prePan)
     try require(calls.last?.1["prePan"] as? Double == -0.6 && calls.last?.1["pan"] == nil, "Pre-insert balance is independent of output balance in the API")
     answer("song:6")

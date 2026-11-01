@@ -27,13 +27,19 @@ class MidiInput {
   MIDIClientRef client_ = 0;
   MIDIPortRef port_ = 0;
   MIDIEndpointRef virtual_ = 0, source_ = 0;
+  std::atomic<bool> sourcesChanged_{false};
+  uint64_t acceptAfter_ = 0;
   static void receive(const MIDIPacketList *, void *, void *);
+  static void changed(const MIDINotification *, void *);
 
 public:
   MidiInput();
   ~MidiInput();
   static std::vector<MidiSource> sources();
   void connect(uint32_t id);
+  void discardPending();
+  bool connectionLost();
+  uint32_t connectedSource() const { return source_; }
   void push(MidiEvent) noexcept;
   std::vector<MidiEvent> drain();
   std::vector<MidiEvent> drainSafe();
