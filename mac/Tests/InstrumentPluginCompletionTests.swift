@@ -27,7 +27,7 @@ final class InstrumentPluginFixture {
     "instruments": identities.keys.sorted().map { ["index": $0, "id": identities[$0]!, "name": names[$0]!] as [String: Any] }, "nativePlugins": plugins]) }
   var plugins: [[String: Any]] {
     ["synth", "other"].map { id in ["instanceID": id, "name": id == "synth" ? "Fixture synth" : "Other synth", "isInstrument": true,
-      "instrumentAssignments": routes.keys.sorted().filter { routes[$0]?.plugin == id }.map { ["instrument": $0, "channel": routes[$0]!.channel] }] }
+      "instrumentAssignments": routes.keys.sorted().filter { routes[$0]?.plugin == id }.map { ["instrument": $0, "channel": routes[$0]!.channel, "available": identities[$0] != nil] }] }
   }
   func answer(_ response: [String: Any]) { replies.removeFirst()(response) }
   func result(_ data: [String: Any]) -> [String: Any] { ["result": ["documentId": context.document, "revision": context.revision, "data": data]] }
@@ -118,6 +118,13 @@ extension InterfaceTests {
       try require(retired == 1 && f.owner.retired && !f.owner.needsCompletion && f.writes.count == writes && f.replies.isEmpty,
         "Explicit removal acknowledgement retires once without replay, retargeting or future writes")
     }
+    let dangling = InstrumentPluginFixture(); dangling.prepare(); _ = dangling.assignmentReceipt(); dangling.answer([:])
+    dangling.identities[1] = nil; dangling.advance(); dangling.owner.review(); dangling.answer(dangling.document())
+    try require(dangling.owner.canAccept && dangling.owner.observedRemoval,
+      "A retained plugin route explicitly marked unavailable does not prevent reviewing the removed instrument")
+    dangling.owner.accept()
+    try require(dangling.owner.retired && dangling.writes.count == 1 && dangling.routes[1] != nil,
+      "Acknowledging removal leaves the actual dangling route unchanged for separate repair")
 
     for stage in ["catalogue", "mapping", "created-catalogue", "created-mapping", "assigned-catalogue", "assigned-mapping"] {
       let f = InstrumentPluginFixture(creating: stage.hasPrefix("created")); f.owner.apply()

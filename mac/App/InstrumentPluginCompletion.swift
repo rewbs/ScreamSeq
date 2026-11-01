@@ -30,8 +30,12 @@ struct InstrumentPluginSnapshot {
       else { assignments = [] }
       for assignment in assignments {
         guard instrument, let slot = SampleRecordingRead.integer(assignment["instrument"], maximum: 65535, minimum: 1),
-          identities[slot] != nil, routes[slot] == nil,
+          routes[slot] == nil,
           let channel = SampleRecordingRead.integer(assignment["channel"], maximum: 16, minimum: 1) else { return nil }
+        let exists = identities[slot] != nil
+        if let availability = assignment["available"] {
+          guard SampleRecordingRead.boolean(availability) == exists else { return nil }
+        } else if !exists { return nil }
         routes[slot] = .init(plugin: id, channel: channel)
       }
     }
