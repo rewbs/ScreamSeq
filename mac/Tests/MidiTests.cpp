@@ -21,11 +21,15 @@ int main() {
       Tracker::MidiInput input;
       input.connect(source);
       // Send through the real CoreMIDI service, not the queue's test-facing push
-      // method. Running status, interleaved clock and zero-velocity releases
-      // exercise parsing as well as endpoint connection and callback delivery.
-      const Byte bytes[] = {0x91, 60, 100, 0xf8, 64, 90, 0x81, 60, 0, 0x91, 64, 0, 0xb1, 123, 0};
+      // method. MIDIPacket requires a status byte for every channel message;
+      // running status is not a valid CoreMIDI transport fixture. Interleaved
+      // clock and zero-velocity releases still exercise parsing and delivery.
+      const Byte bytes[] = {0x91, 60, 100, 0xf8, 0x91, 64, 90, 0x81, 60, 0, 0x91, 64, 0, 0xb1, 123, 0};
       MIDIPacketList packets{};
-      const auto timestamp = mach_absolute_time();
+      // connect() quarantines events at or before its host-clock tick. Two
+      // consecutive reads can share a tick, so place this synthetic new input
+      // strictly after that boundary, as with the later take-boundary fixture.
+      const auto timestamp = mach_absolute_time() + 1;
       auto *packet = MIDIPacketListInit(&packets);
       require(MIDIPacketListAdd(&packets, sizeof(packets), packet, timestamp, sizeof(bytes), bytes) != nullptr,
               "Build MIDI packet");
@@ -40,7 +44,7 @@ int main() {
       require(received[0].status == 0x91 && received[0].note == 60 && received[0].velocity == 100,
               "Note-on channel and velocity");
       require(received[1].status == 0x91 && received[1].note == 64 && received[1].velocity == 90,
-              "Running status survives interleaved real-time clock");
+              "Channel message after interleaved real-time clock");
       require(received[2].status == 0x81 && received[2].note == 60, "Explicit note-off");
       require(received[3].status == 0x91 && received[3].velocity == 0, "Zero-velocity note-on release");
       require(received[4].status == 0xb1 && received[4].note == 123, "All-notes-off control");
@@ -70,7 +74,7 @@ int main() {
       require(lost && input.connectedSource() == 0, "Endpoint removal reports input loss and clears its connection");
     }
     MIDIClientDispose(client);
-    std::cout << "PASS CoreMIDI loopback, running status, clock interleave, note releases, timestamps and disconnect\n";
+    std::cout << "PASS CoreMIDI loopback, clock interleave, note releases, timestamps and disconnect\n";
     return 0;
   } catch (const std::exception &error) {
     if (client)

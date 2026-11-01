@@ -100,7 +100,21 @@ qualification build, not the final delivery because of the read-ordering issue.
   and indexing worked. This initial stall is recorded without attributing a cause.
   The final build must repeat first-launch picker checks without concurrent test apps.
 - CTest initially passed 141/142: `midi` failed “Receive all five MIDI events.”
-  The isolated follow-up result must be recorded separately, not replace this result.
+  It failed again in isolation. A diagnostic observer received the entire packet;
+  the input queue consumed its five events but filtered them because their synthetic
+  timestamp exactly equalled the connection's discard boundary. The fixture now
+  places new input one host-clock tick after that boundary, matching the existing
+  later-take fixture. It also supplies explicit channel status bytes as required by
+  Apple's `MIDIPacket` contract. The unchanged timeout and all delivery, timestamp,
+  release, overflow and disconnect assertions passed 20 consecutive runs. Production
+  MIDI code was not changed. Logs retain the initial and isolated failures.
+- A fresh, separately identified build-16 copy accepted the first folder picker,
+  indexed both fixture files, enabled Open for a selected file, and cancelled that
+  file chooser without changing the song. The initial picker stall has not reproduced;
+  its cause remains unknown.
+- Native Save/reopen after removed-assignment discard preserved all ten samples,
+  nine instruments, stable IDs, sample PCM and plugin routing exactly. Both owned
+  QA sessions quit normally; the musician's existing QA10 process was preserved.
 
 Final release identity and follow-up observations will be appended here. Local logs and disposable fixtures live
 under `bin/mac-parity-current/evidence/` and are intentionally excluded from Git.
