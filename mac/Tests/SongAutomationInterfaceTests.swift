@@ -146,13 +146,17 @@ extension InterfaceTests {
     editor.trace.onSelect?(ParameterTraceSample(["value":0.8,"source":["kind":"recorded","frame":96000]])!)
     try require(opened.isEmpty,"Source navigation waits for the current recorded field write")
     editor.pointValue.stringValue="0.6";editor.controlTextDidChange(Notification(name:NSControl.textDidChangeNotification,object:editor.pointValue));revision="activity:2";answer?(["result":["revision":revision,"data":[:]]])
-    RunLoop.current.run(until:Date().addingTimeInterval(0.35))
-    try require(writes.count==2 && writes.last?["frame"] as? Int==144000 && writes.last?["value"] as? Double==0.6 && writes.last?["expectedRevision"] as? String==revision,"Newer raw fields follow the moved point at the acknowledged revision")
+    // This harness has no NSApplication.run(). Keep the main queue serviced
+    // until the deferred write arrives; a single 350 ms run-loop turn races
+    // the 300 ms dispatch timer on hosted Intel runners.
+    let movedPointDeadline=Date().addingTimeInterval(1)
+    while writes.count<2,Date()<movedPointDeadline {pumpMainRunLoop(0.005)}
+    try require(writes.count==2 && writes.last?["frame"] as? Int==144000 && writes.last?["value"] as? Double==0.6 && writes.last?["expectedRevision"] as? String==revision,"Newer raw fields follow the moved point at the acknowledged revision; writes=\(writes.count), status=\(editor.status.stringValue)")
     revision="activity:3";stored=[["frame":96000,"value":0.8],["frame":144000,"value":0.6]];answer?(["result":["revision":revision,"data":[:]]])
     try require(finished==true && !editor.needsCompletion && editor.table.selectedRow==1,"Recorded Save completes after readback and retains the relocated point")
     try require(opened.count==1 && opened[0]["frame"] as? Int==48000,"Deferred source navigation retains its captured source while newer edits finish")
     editor.table.selectRowIndexes(IndexSet(integer:1),byExtendingSelection:false);editor.pointValue.stringValue="0.7";editor.controlTextDidChange(Notification(name:NSControl.textDidChangeNotification,object:editor.pointValue));editor.finishAutomaticEdit{finished=$0};answer?(["error":["message":"Refused"]]);let count=writes.count
-    editor.finishAutomaticEdit{finished=$0};RunLoop.current.run(until:Date().addingTimeInterval(0.35))
+    editor.finishAutomaticEdit{finished=$0};pumpMainRunLoop(0.35)
     try require(finished==false && writes.count==count && editor.pointValue.stringValue=="0.7" && editor.needsCompletion,"A refused recorded write retains raw fields and never silently replays")
     editor.nextRecordedPage();editor.refreshCopies();editor.openSelected()
     try require(writes.count==count && editor.target?["plugin"] as? String=="a" && opened.count==1,"Paging, refresh and source navigation cannot discard or replay a refused recorded draft")
