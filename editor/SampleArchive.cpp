@@ -98,9 +98,13 @@ void encodeStructure(Writer &w, const CSoundFile &source, const CSoundFile &base
   const bool title = source.m_songName != base.m_songName;
   const bool patterns = !samePatterns(source, base) || source.Patterns.Size() != base.Patterns.Size();
   const bool orders = !sameOrders(source, base);
-  if (!title && !patterns && !orders) return;
+  std::vector<INSTRUMENTINDEX> names;
+  for (INSTRUMENTINDEX i = 1; i <= source.GetNumInstruments(); ++i)
+    if (source.Instruments[i] && (!base.Instruments[i] ||
+        source.Instruments[i]->GetName() != base.Instruments[i]->GetName())) names.push_back(i);
+  if (!title && !patterns && !orders && names.empty()) return;
   w.raw(structureMagic, sizeof(structureMagic));
-  w.u8((title ? 1 : 0) | (patterns ? 2 : 0) | (orders ? 4 : 0));
+  w.u8((title ? 1 : 0) | (patterns ? 2 : 0) | (orders ? 4 : 0) | (!names.empty() ? 8 : 0));
   if (title) text(w, source.m_songName); // Bytes in the archived core charset, not a module title field.
   if (patterns) {
     require(source.GetNumChannels() == base.GetNumChannels(), "Module changed the pattern channel inventory");
@@ -136,10 +140,16 @@ void encodeStructure(Writer &w, const CSoundFile &source, const CSoundFile &base
       for (auto pattern : seq) w.u16(pattern);
     }
   }
+  if (!names.empty()) {
+    w.u16(uint16_t(names.size()));
+    for (auto index : names) {
+      w.u16(index); text(w, source.Instruments[index]->GetName());
+    }
+  }
 }
 void restoreStructure(CSoundFile &base, Reader &r, uint64_t &decoded) {
   const auto flags = r.u8();
-  require(flags && !(flags & ~7u), "Unsupported native structure flags");
+  require(flags && !(flags & ~15u), "Unsupported native structure flags");
   if (flags & 1) base.m_songName = text(r);
   if (flags & 2) {
     const auto channels = r.u16(), slots = r.u16(), count = r.u16();
@@ -197,6 +207,20 @@ void restoreStructure(CSoundFile &base, Reader &r, uint64_t &decoded) {
       auto &seq = base.Order(i); seq.resize(ORDERINDEX(count));
       seq.SetName(std::move(unicode)); seq.SetRestartPos(restart);
       for (auto &pattern : seq) pattern = data.u16(); // Keep skip/stop and unallocated references exactly.
+    }
+  }
+  if (flags & 8) {
+    const auto count = r.u16();
+    require(count && count <= base.GetNumInstruments(), "Invalid native instrument name inventory");
+    INSTRUMENTINDEX previous = 0;
+    for (uint16_t entry = 0; entry < count; ++entry) {
+      const auto index = r.u16(); const auto length = r.u32();
+      require(index > previous && index <= base.GetNumInstruments() && base.Instruments[index] &&
+        length < MAX_INSTRUMENTNAME, "Invalid native instrument name entry");
+      const auto bytes = r.raw(length);
+      require(std::find(bytes.begin(), bytes.end(), std::byte{0}) == bytes.end(), "Embedded NUL in native instrument name");
+      base.Instruments[index]->name = std::string(reinterpret_cast<const char *>(bytes.data()), bytes.size());
+      previous = index;
     }
   }
 }
@@ -452,6 +476,10 @@ void validateSampleExport(const CSoundFile &source, const CSoundFile &converted)
     if (bool(s) != bool(c) || (s && (s->Keyboard != c->Keyboard || s->NoteMap != c->NoteMap)))
       throw std::runtime_error("Module export would change instrument " + std::to_string(i) +
                                " sample mapping. Save a .resonance project.");
+    if (s) require(s->GetName() == c->GetName() &&
+      ::OpenMPT::mpt::ToUnicode(source.GetCharsetInternal(), s->GetName()) ==
+        ::OpenMPT::mpt::ToUnicode(converted.GetCharsetInternal(), c->GetName()),
+      "Module export would change an instrument name. Save a .resonance project.");
     if (s) for (uint8_t kind = 0; kind < 3; ++kind)
       require(sameInstrumentEnvelope(envelope(*s, kind), envelope(*c, kind)), "Module export would change an instrument envelope. Save a .resonance project.");
   }

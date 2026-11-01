@@ -268,6 +268,28 @@ int main() {
         check(![session openPath:path error:&error] && [revision isEqual:session.automationRevision],
               "Reject truncated sample archive atomically");
       }
+      for (NSString *name in @[@"1234567890123456789012345678901", @"éééééééééééééééa"]) {
+        TrackerSession *session = [TrackerSession new];
+        NSError *error = nil;
+        auto call = [&](NSString *method, NSDictionary *params, bool mutation = false) {
+          NSMutableDictionary *p = [params mutableCopy];
+          if (mutation) p[@"expectedRevision"] = session.automationRevision;
+          auto result = [session automationMethod:method params:p error:&error];
+          if (!result) throw std::runtime_error(error.localizedDescription.UTF8String);
+          return result[@"data"];
+        };
+        NSNumber *index = call(@"instrument.create", @{@"empty":@YES, @"name":name}, true)[@"instrument"];
+        NSDictionary *instrument = call(@"instrument.get", @{@"instrument":index});
+        NSString *identity = [[session snapshot:0][@"instruments"] lastObject][@"id"];
+        check([instrument[@"name"] isEqual:name], "Created boundary-length instrument name");
+        NSString *path = [folder stringByAppendingPathComponent:@"instrument-name.screamseq"];
+        call(@"document.save", @{@"path":path, @"overwrite":@YES}, true);
+        check([session openPath:path error:&error], "Reopen boundary-length instrument name");
+        check([instrument isEqual:call(@"instrument.get", @{@"instrument":index})],
+              "Native save/reopen retains exact instrument name and mapping");
+        check([identity isEqual:[[session snapshot:0][@"instruments"] lastObject][@"id"]],
+              "Native save/reopen retains named instrument identity");
+      }
       std::filesystem::remove_all(folder.UTF8String);
       std::cout << "PASS API trim/undo, native sample persistence and identity in five formats, checked module export, "
                    "exact independently rendered WAV and malformed project atomicity\n";

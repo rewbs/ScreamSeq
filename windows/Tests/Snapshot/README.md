@@ -21,12 +21,15 @@ selects 1 when no timing correction is required, 2 otherwise. Legacy archives
 without a correction stay readable. Old readers reject RSCORE1 as an unknown
 sample extension instead of silently accepting a lossy song.
 
-RSCORE1 is present only if title, pattern state/container size or order state
-changes in the module roundtrip. All integers are unsigned little-endian;
+RSCORE1 is present only if title, pattern state/container size, order state or instrument names
+change in the module roundtrip. All integers are unsigned little-endian;
 text is `u32 byteLength` followed by exactly that many bytes, without a NUL.
 
 - Magic: eight bytes `RSCORE1\0`.
-- `u8 flags`: bit 0 title, bit 1 patterns, bit 2 orders; nonzero, no other bits.
+- `u8 flags`: bit 0 title, bit 1 patterns, bit 2 orders, bit 3 instrument names;
+  nonzero, no other bits. Readers predating bit 3 reject a name correction rather
+  than silently loading the module's truncated name; those readers still handle
+  files that do not need the correction. Both native frontends use this shared codec.
 - If title: text containing exact `m_songName` bytes in the charset already
   recorded by the sample archive. No trimming or charset conversion.
 - If patterns: `u16 channels`, `u16 slots`, `u16 allocatedCount`. Channels must
@@ -42,6 +45,12 @@ text is `u32 byteLength` followed by exactly that many bytes, without a NUL.
   `u16` pattern indices. Includes repeated, skip, stop, unallocated and trailing
   entries exactly. Existing timing archives retain tempo/speed and selected
   sequence remains in the existing sample header.
+- If instrument names: `u16 count`, then strictly increasing `u16 instrument`
+  indices and text names. Each index must identify a restored, present instrument;
+  each name has fewer than `MAX_INSTRUMENTNAME` (32) bytes and no embedded NUL.
+  The bytes use the archived core charset. Only names changed by module conversion
+  are stored; exact names leave the existing encoding unchanged. This preserves
+  all 31 runtime bytes even though IT/MPTM and XM module name fields are shorter.
 - This extension must be last and unique. Unknown flags/version, bad inventory,
   duplicate/out-of-order indices, invalid signatures/grooves, oversized counts,
   truncated cell/text payloads and trailing data reject. Rows <= 4096, channels

@@ -453,9 +453,17 @@ extension InterfaceTests {
     try require(calls.count == beforeTiming, "Timing uses the shared model's actual ±500 ms bounds")
     reload()
     mixer.controls[2].value.stringValue = "-4.25"
+    let beforeAutomatic = calls.count
     mixer.controls[2].controlTextDidChange(Notification(name: NSControl.textDidChangeNotification, object: mixer.controls[2].value))
-    wait(0.03)
-    try require(calls.last?.1["gainDB"] as? Double == -4.25 && mixer.loading, "Valid typed gain automatically submits after the idle delay")
+    try require(calls.count == beforeAutomatic, "Typed gain is deferred until the idle callback")
+    // Dispatch deadlines are earliest delivery times. A fixed 30 ms sleep races
+    // timer scheduling on both hosted Mac architectures; wait for the one write
+    // within the same bounded allowance used for asynchronous retries above.
+    let automaticDeadline = Date().addingTimeInterval(1)
+    while calls.count == beforeAutomatic, Date() < automaticDeadline { wait(0.005) }
+    try require(calls.count == beforeAutomatic + 1 && calls.last?.0 == "mixer.bus.set" &&
+      calls.last?.1["gainDB"] as? Double == -4.25 && calls.last?.1["expectedRevision"] as? String == "raw:0" && mixer.loading,
+      "Valid typed gain automatically submits once after the idle delay; calls=\(calls.count - beforeAutomatic), status=\(mixer.status.stringValue)")
     mixer.name.stringValue = "Typed during write"; boundaries = []; mixer.finishAutomaticEdit { boundaries.append($0) }
     let count = calls.count; answer("raw:2")
     try require(boundaries == [false] && calls.count == count && mixer.needsReload && mixer.revision == "raw:0" && mixer.name.stringValue == "Typed during write",

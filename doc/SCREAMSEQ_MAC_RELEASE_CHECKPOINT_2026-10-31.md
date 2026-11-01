@@ -20,7 +20,9 @@ historical batches. This document supersedes its remaining-work list.
 - Removed plugin-instrument targets can be explicitly discarded after a current
   catalogue read; this releases Save/history/departure admission without writing
   or selecting a replacement instrument. New trigger names are limited before
-  creation to the engine's 31 UTF-8-byte storage capacity.
+  creation to the engine's 31 UTF-8-byte storage capacity. Native snapshots now
+  retain all accepted instrument-name bytes across Save/reopen and Undo, including
+  Unicode, using the shared Mac/Windows archive codec.
 - Recorder and selection-render input/outcome retention, guarded device settings,
   VST3 location repair, and retained song/mixer/note/automation edits.
 - Clean-only Open/New/recovery admission protects known hidden editor drafts.
@@ -41,6 +43,12 @@ When an import or assignment reports an uncertain outcome, use its Review action
 and inspect the observed result before Accept. Review does not repeat a write.
 For a removed plugin instrument, **Discard removed assignment** explicitly retires
 that editor and its unsaved fields. Correct overlong trigger names before Create.
+
+Projects needing the new instrument-name correction require an updated build on
+either platform. Older readers reject that correction instead of loading a
+truncated name. Files whose module representation already preserves their names
+keep their previous archive encoding. Standalone module export refuses a lossy
+name conversion; use the native project format to retain the full name.
 
 ## Remaining Windows parity work
 
@@ -67,12 +75,26 @@ validation after each full build.
 
 ## Validation record
 
-The final production bundle must include the inspector-read ordering follow-up:
-plugin-instrument results wait for existing inspector reads to finish before
-checking admission. Packaged build 16 exposed a false preflight refusal when the
-Sample inspector was active; the identical captured input succeeded with Pattern
-focus. That source fix passes whole-app typechecking and awaits the next hourly
-build for the exact desktop regression.
+Build 17 confirmed the inspector-read ordering fix through computer use: a new
+plugin instrument now succeeds with the Sample inspector active, preserving focus
+and existing assets. A 32-byte name was refused without a write, a 31-byte name
+created the expected empty keymap and route, and removing/discarding its assignment
+released Save. First-use folder/file pickers also worked without a concurrent test
+app. However, native Save/reopen exposed truncation of the accepted 31-byte name to
+25 bytes through the legacy module base. Build 17 is therefore intermediate too.
+
+The shared archive now corrects instrument-name loss. Portable tests cover XM,
+IT and MPTM, ASCII/Unicode boundaries, sparse instrument slots, repeated snapshots,
+Undo/Redo and malformed corrections; native project tests cover full metadata and
+stable identity after Save/reopen. Both targeted tests passed. The final hourly
+build must repeat the original desktop Save/reopen regression before delivery.
+
+The current 49-group native interface suite passes. CI at `2ce039bae` passed all
+Windows checks and both Mac model/host suites, but both Mac interface jobs failed
+the typed-gain test's fixed 30 ms wait. That test now waits for the callback within
+a bounded second and additionally requires exactly one write, its method and the
+captured revision. Production mixer timing is unchanged. A fresh CI result remains
+necessary; the local pass is not being reported as remote CI success.
 
 Build 16 was optimized Release with the normal production identity, from
 `6a0dc130ec7dc175f16eb5a969e0236b00bf6977`. It started at 2026-11-01 00:06:48.996 UTC
@@ -115,6 +137,22 @@ qualification build, not the final delivery because of the read-ordering issue.
 - Native Save/reopen after removed-assignment discard preserved all ten samples,
   nine instruments, stable IDs, sample PCM and plugin routing exactly. Both owned
   QA sessions quit normally; the musician's existing QA10 process was preserved.
+
+After the CoreMIDI fixture correction, the complete local CTest suite passed
+142/142. The new archive correction still needs the full suite against relinked
+binaries in final qualification.
+
+Build 16's 60-second VST3/graph workload completed 299 edits, 14 history actions and
+three saves, with 5,625 audio callbacks and no overruns, starvations or plugin
+failures. Its presentation gate failed: frames were submitted but Metal reported
+no positive actual presentation timestamps. A separate minimal Metal probe showed
+the same reporting symptom; this does not establish a passing frame-pacing result.
+A final-build run remains to be recorded, and sustained physical-device/audio
+qualification remains follow-up work.
+
+All 21 existing PR review threads are resolved. Greptile has not completed a new
+review after those fixes, so this checkpoint cannot claim a clean current-head
+Greptile review.
 
 Final release identity and follow-up observations will be appended here. Local logs and disposable fixtures live
 under `bin/mac-parity-current/evidence/` and are intentionally excluded from Git.

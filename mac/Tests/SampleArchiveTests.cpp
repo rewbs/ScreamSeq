@@ -1,6 +1,7 @@
 #include "editor/SampleArchive.hpp"
 #include "editor/TrackerDocument.hpp"
 #include "soundlib/ModInstrument.h"
+#include <algorithm>
 #include <cstring>
 #include <iostream>
 using namespace Tracker;
@@ -82,7 +83,8 @@ static void equalSamples(const CSoundFile &a, const CSoundFile &b) {
     const auto *x = a.Instruments[i], *y = b.Instruments[i];
     check(bool(x) == bool(y), "Exact instrument presence");
     if (x)
-      check(x->Keyboard == y->Keyboard && x->NoteMap == y->NoteMap, "Exact sample/note mapping");
+      check(x->Keyboard == y->Keyboard && x->NoteMap == y->NoteMap && x->GetName() == y->GetName(),
+            "Exact instrument name and sample/note mapping");
   }
 }
 static std::vector<float> render(std::vector<std::byte> bytes, uint32_t block) {
@@ -99,8 +101,59 @@ static void put32(std::vector<std::byte> &b, size_t at, uint32_t v) {
   for (int i = 0; i < 4; ++i)
     b.at(at + i) = std::byte(v >> (8 * i));
 }
+static void instrumentNames() {
+  const std::string ascii(31, 'a'), unicode = "éééééééééééééééa";
+  check(unicode.size() == 31, "Unicode boundary fixture");
+  for (auto type : {MOD_TYPE_XM, MOD_TYPE_IT, MOD_TYPE_MPT}) {
+    Document d(type);
+    d.song().m_modFormat.charset = ::OpenMPT::mpt::Charset::UTF8;
+    d.song().m_nInstruments = 3;
+    d.song().Instruments[1] = new ModInstrument();
+    d.song().Instruments[3] = new ModInstrument();
+    d.song().Instruments[1]->name = ascii;
+    d.song().Instruments[3]->name = unicode;
+    auto native = d.native(); native.reconcile(d.song()); d.restoreNative(std::move(native));
+    Document module(d.serialize());
+    check(module.song().Instruments[1]->GetName() != ascii, "Legacy module truncates the 31-byte name");
+    rejects([&] { validateSampleExport(d.song(), module.song()); });
+    Document copy(d.snapshotData()); equalSamples(d.song(), copy.song());
+    Document second(copy.snapshotData()); equalSamples(d.song(), second.song());
+    d.transaction([](CSoundFile &song) { song.Instruments[1]->name = "changed"; });
+    d.undo(); equalSamples(copy.song(), d.song());
+    d.redo(); check(d.song().Instruments[1]->GetName() == "changed", "Instrument rename Redo");
+    d.undo();
+    // Isolate the name correction from other format-specific corrections.
+    copy.song().Instruments[1]->name = "short";
+    auto patch = encodeSampleArchive(d.song(), copy.song());
+    const std::string magic("RSCORE1\0", 8);
+    const auto first = reinterpret_cast<const std::byte *>(magic.data());
+    auto found = std::search(patch.begin(), patch.end(), first, first + magic.size());
+    check(found != patch.end(), "Name correction emitted");
+    const auto at = size_t(found - patch.begin());
+    check(patch.at(at + 8) == std::byte{8}, "Isolated instrument-name flag");
+    const auto base = copy.snapshotData();
+    auto bad = [&](std::vector<std::byte> bytes) {
+      Document target(base); rejects([&] { restoreSampleArchive(target.song(), bytes); });
+    };
+    for (auto [offset, value] : {std::pair{at + 9, 0u}, std::pair{at + 11, 0u},
+                                std::pair{at + 11, 2u}, std::pair{at + 13, 32u},
+                                std::pair{at + 17, 0u}}) {
+      auto invalid = patch; invalid.at(offset) = std::byte(value); bad(invalid);
+    }
+    auto duplicate = patch; duplicate.at(at + 9) = std::byte{2};
+    duplicate.insert(duplicate.end(), patch.begin() + at + 11, patch.end()); bad(duplicate);
+    auto truncated = patch; truncated.pop_back(); bad(truncated);
+    auto trailing = patch; trailing.push_back(std::byte{0}); bad(trailing);
+    restoreSampleArchive(copy.song(), patch); equalSamples(d.song(), copy.song());
+    // No name extension is needed for an already exact archive base.
+    auto unchanged = encodeSampleArchive(d.song(), d.song());
+    check(std::search(unchanged.begin(), unchanged.end(), first, first + magic.size()) == unchanged.end(),
+          "Unchanged names keep the prior archive encoding");
+  }
+}
 int main() {
   try {
+    instrumentNames();
     auto defaultSong = Document::demo();
     Document defaultExport(defaultSong->serialize());
     validateSampleExport(defaultSong->song(), defaultExport.song());
