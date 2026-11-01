@@ -48,7 +48,8 @@ Projects needing the new instrument-name correction require an updated build on
 either platform. Older readers reject that correction instead of loading a
 truncated name. Files whose module representation already preserves their names
 keep their previous archive encoding. Standalone module export refuses a lossy
-name conversion; use the native project format to retain the full name.
+name conversion; use the native project format to retain the full name. This
+prevents future truncation; it cannot recover characters already lost in older saves.
 
 ## Remaining Windows parity work
 
@@ -58,6 +59,9 @@ assertion that every other Windows change has been ported.
 
 | Area | Remaining work and acceptance evidence |
 | --- | --- |
+| Frame pacing | The final 60-second workload failed the existing presentation/geometry gates: 57.724 actual fps, 3.793% missed presentations and a 158.332 ms maximum presentation gap. Diagnose using the retained frame/UI-work/window-state timelines and pass the unchanged gates with the live edits, saves and audio workload enabled. |
+| Intel CI verification | The original Intel job passed model/host checks but failed one recorded-point interface assertion using a 350 ms wait for a 300 ms callback. Test-only follow-up `066b8e6dc` keeps the main queue serviced and retains the target/value/revision assertions; all 49 groups and 20 consecutive repetitions pass locally. A standalone Intel rerun could not be started (workflow lookup rejected, then direct API connection failed). Remote verification remains open. |
+| Native chooser keyboard | Isolate the computer-use timeout when sending Go to Folder in the library chooser on macOS 26.5.2. The app stayed responsive to API reads; Escape cancelled safely, and ordinary file-list navigation worked. Repeat keyboard and accessibility checks for both folder and file pickers. |
 | Sample imports alongside drafts | Let library imports coexist with unrelated raw sample/instrument drafts while preserving stable target, captured revision, text, selection and focus. Current Mac admission can require finishing those drafts first. Test success, refusal, newer input and Undo. |
 | Direct import commands | Port direct raw/mapped/default file-import commands, including hidden browser ownership and native chooser cancellation. Current new-sample import opens the browser. |
 | Multisample import completion | Replace `MultisampleImportView`'s basic result handling with captured intent, strict receipts and catalogue/mapping readback; retain unknown results for Review/Accept without duplicate imports. Verify one-step Undo, exact key ranges and save/reopen. |
@@ -66,93 +70,128 @@ assertion that every other Windows change has been ported.
 | Compact graph bus controls | Audit rejected final writes and preserve the rejected values/target instead of losing the gesture; test subsequent context changes and history. |
 | Other plugin workflows | Audit the plugin-to-many-instruments window, presets, routing, reusable recipes, composition and auxiliary editor completion. The instrument-to-plugin editor completed here is only one of these workflows. |
 | Navigation and accessibility | Continue instrument-envelope, precise-note, recorded-point source-link and keyboard/focus audits against Windows. |
-| Runtime qualification | Complete long exports, continuous drawing, sustained presentation/frame pacing, broader startup/workspace/recovery and third-party plugin runs. Microphone capture, physical-device latency and speaker output remain unqualified by this checkpoint. |
+| Runtime qualification | Complete long exports, continuous drawing and broader third-party plugin runs. The existing startup/workspace/crash-recovery suites pass; broader interactive coverage remains useful. Microphone capture, physical-device latency and speaker output remain unqualified by this checkpoint. |
 
 Existing shared APIs, chronological Undo, stable IDs and native project persistence
 must remain authoritative. Do not fork musical behavior into platform UI code.
 Keep subsequent full builds at least one hour apart and perform computer-use
 validation after each full build.
 
+## Delivered production build
+
+The packaged source commit is `59d7a6dc14d2d32ab0a1f50b7d33859163d89058`.
+Build 18 started at 2026-11-01 02:06:50.579 UTC (31 October, 10:06:50.579 p.m.
+New York), more than one hour after build 17, and finished at 02:09:53.714 UTC.
+It is an optimized Release arm64 bundle, macOS 14+, with the normal production
+identity. Deep strict signature verification passed; all 3,566 tracked files
+were unchanged during the build. The post-build changes are test synchronization and release documentation only;
+no compiled application source changed.
+
+Local deliverables are under `bin/releases/mac-parity-checkpoint-2026-10-31/`:
+`ScreamSeq.app`, `ScreamSeq-macOS-arm64.zip`, `BUILD.json` and this report.
+`BUILD.json` records the source commit, executable and ZIP hashes, source
+fingerprint, minimum OS and signing status. This is a locally ad-hoc signed
+checkpoint, not a notarized public release or a completed Windows-parity claim.
+
 ## Validation record
 
-Build 17 confirmed the inspector-read ordering fix through computer use: a new
-plugin instrument now succeeds with the Sample inspector active, preserving focus
-and existing assets. A 32-byte name was refused without a write, a 31-byte name
-created the expected empty keymap and route, and removing/discarding its assignment
-released Save. First-use folder/file pickers also worked without a concurrent test
-app. However, native Save/reopen exposed truncation of the accepted 31-byte name to
-25 bytes through the legacy module base. Build 17 is therefore intermediate too.
+- **142/142 CTest tests passed** against the rebuilt binaries in 173.94 seconds.
+  This includes the new instrument-name snapshot/project regressions, exact audio,
+  native model/host, routing, history, persistence and malformed-input tests.
+- **49/49 native interface groups passed** after the final test-only follow-up.
+  Both the revised mixer group and recorded-point/parity group also passed 20
+  consecutive runs each, with no assertion retries. Whole-app
+  Swift typechecking passed before the final builds, and the production compile
+  passed after the shared archive change.
+- **All six final-binary suites passed**: CTest, complete application socket API,
+  library/multisample socket behavior, native startup, workspace and crash recovery.
+  Recovery exercises the real timer, process crash/relaunch, exact song recall,
+  corrupt fallback, write failure/retry and recording-take recovery.
+- **Computer-use validation followed every full build.** Build 18's isolated QA
+  bundle had all 44 file-backed Mach-O sections identical to production. With the
+  Sample inspector active, a 32-byte name was refused without changing revision,
+  assets or PCM; valid 31-byte ASCII and Unicode names created empty-keymap plugin
+  instruments. A retained channel-2 field kept Save blocked until explicitly
+  applied, then native Save succeeded. Native Open of a byte-for-byte saved copy
+  created a new document identity and retained all ten samples, eleven instruments,
+  stable asset IDs, full metadata, PCM, keymaps and both channel-1/channel-2 routes.
+- Folder selection indexed the two fixture WAVs. Selecting a WAV enabled Open;
+  Cancel preserved the exact song and browser state. Go to Folder attempts timed
+  out in computer use; the app's main loop and API remained responsive. Escape
+  cancelled safely, and ordinary file-list navigation and type-ahead completed
+  the picker checks. The cause of the shortcut/control timeout remains unverified.
+- Earlier desktop checks on this checkpoint's unchanged editing code covered raw
+  and mapped batch imports, exact PCM, one-step Undo, stable-ID Redo, retained search
+  through Rescan, removed plugin-instrument target discard and release of Save.
+- Owned QA processes were stopped. The musician's QA10 process was preserved.
+  System defaults still select MacBook Pro Microphone for input and MacBook Pro
+  Speakers for output/system output; the workload selected BlackHole only in its
+  own engine.
 
-The shared archive now corrects instrument-name loss. Portable tests cover XM,
-IT and MPTM, ASCII/Unicode boundaries, sparse instrument slots, repeated snapshots,
-Undo/Redo and malformed corrections; native project tests cover full metadata and
-stable identity after Save/reopen. Both targeted tests passed. The final hourly
-build must repeat the original desktop Save/reopen regression before delivery.
+### Playback and presentation limits
 
-The current 49-group native interface suite passes. CI at `2ce039bae` passed all
-Windows checks and both Mac model/host suites, but both Mac interface jobs failed
-the typed-gain test's fixed 30 ms wait. That test now waits for the callback within
-a bounded second and additionally requires exactly one write, its method and the
-captured revision. Production mixer timing is unchanged. A fresh CI result remains
-necessary; the local pass is not being reported as remote CI success.
+The final 60-second combined VST3/graph audio workload used 48 kHz and 512-frame
+buffers, with the Pattern editor visible. It completed 299 live edits, 14
+Undo/Redo cycles and three saves. Its 5,625 audio callbacks had **zero overruns,
+zero buffer starvations, no fault and no plugin failure**; callback p99.9 was
+3,360 µs and maximum was 3,488.833 µs. These are virtual-device/fixture-plugin
+results, not physical-device or third-party-plugin qualification.
 
-Build 16 was optimized Release with the normal production identity, from
-`6a0dc130ec7dc175f16eb5a969e0236b00bf6977`. It started at 2026-11-01 00:06:48.996 UTC
-(31 October, 8:06:48.996 p.m. New York), finished at 00:09:54 UTC, and passed deep
-signature verification with all 3,565 tracked files unchanged. It is an intermediate
-qualification build, not the final delivery because of the read-ordering issue.
+**The presentation gate failed.** Actual timestamps were available in this final
+run: the canonical 58-second window measured 57.724 fps, 132/3,480 missed
+presentations (3.793%), a maximum presentation gap of 158.332 ms and maximum geometry
+snapshot age of 44.142 ms. The failures were stale geometry beyond two periods,
+missed deadlines above 0.1%, and a stall beyond two 60 Hz periods. The window was
+visible, active and unoccluded. No sustained-frame-pacing pass is claimed, and the
+failure is not dismissed as the earlier build-16 missing-timestamp symptom.
+The graph was active in audio; its separate canvas was not visible in this run.
 
-- All 49 native interface groups passed; whole-app Swift typechecking passed.
-- The packaged complete application socket suite and sample-library/multisample
-  socket suite passed, including exact mapping, atomic imports, history and native
-  save/relaunch.
-- Desktop raw batch import appended two exact-PCM samples without changing existing
-  samples or instruments. One native Undo restored original metadata and PCM.
-- Desktop mapped import appended two samples and two instruments, each with all
-  128 notes mapped to its sample. One Undo removed all four assets; Redo restored
-  their exact identities, metadata and PCM. Library rescan kept the search text and
-  focus, displayed the correct filtered results, and left the song revision unchanged.
-- A 32-byte trigger name was refused with no revision or asset change. An exact
-  31-byte name created an empty 128-note keymap and a MIDI-channel-1 assignment
-  after the Pattern-focus workaround. External Undo of assignment then creation,
-  read-only Reload, and **Discard removed assignment** released native Save.
-- The first library folder/file pickers kept Open disabled despite valid selections.
-  Cancel preserved the song. A minimal AppKit picker worked; the application's main
-  project picker then reopened the disposable song, after which folder selection
-  and indexing worked. This initial stall is recorded without attributing a cause.
-  The final build must repeat first-launch picker checks without concurrent test apps.
-- CTest initially passed 141/142: `midi` failed “Receive all five MIDI events.”
-  It failed again in isolation. A diagnostic observer received the entire packet;
-  the input queue consumed its five events but filtered them because their synthetic
-  timestamp exactly equalled the connection's discard boundary. The fixture now
-  places new input one host-clock tick after that boundary, matching the existing
-  later-take fixture. It also supplies explicit channel status bytes as required by
-  Apple's `MIDIPacket` contract. The unchanged timeout and all delivery, timestamp,
-  release, overflow and disconnect assertions passed 20 consecutive runs. Production
-  MIDI code was not changed. Logs retain the initial and isolated failures.
-- A fresh, separately identified build-16 copy accepted the first folder picker,
-  indexed both fixture files, enabled Open for a selected file, and cancelled that
-  file chooser without changing the song. The initial picker stall has not reproduced;
-  its cause remains unknown.
-- Native Save/reopen after removed-assignment discard preserved all ten samples,
-  nine instruments, stable IDs, sample PCM and plugin routing exactly. Both owned
-  QA sessions quit normally; the musician's existing QA10 process was preserved.
+### Fixes found during qualification
 
-After the CoreMIDI fixture correction, the complete local CTest suite passed
-142/142. The new archive correction still needs the full suite against relinked
-binaries in final qualification.
+Build 16 exposed a false plugin-creation preflight refusal with the Sample
+inspector active. Delivery now waits for outstanding inspector reads; builds 17
+and 18 passed the exact desktop case. Build 17 then exposed 31-byte instrument
+names reloading as 25 bytes through the legacy module base. The shared archive
+correction fixed that; build 18 passed native Save/Open for ASCII and Unicode.
 
-Build 16's 60-second VST3/graph workload completed 299 edits, 14 history actions and
-three saves, with 5,625 audio callbacks and no overruns, starvations or plugin
-failures. Its presentation gate failed: frames were submitted but Metal reported
-no positive actual presentation timestamps. A separate minimal Metal probe showed
-the same reporting symptom; this does not establish a passing frame-pacing result.
-A final-build run remains to be recorded, and sustained physical-device/audio
-qualification remains follow-up work.
+The initial local CTest run passed 141/142 because a synthetic CoreMIDI packet
+could have the same host-clock timestamp as the input discard boundary. The
+fixture now uses one later tick and explicit channel status bytes, matching
+Apple's MIDIPacket contract; production MIDI code and assertion timeouts were
+unchanged. It passed 20 isolated runs and the subsequent complete suites.
 
-All 21 existing PR review threads are resolved. Greptile has not completed a new
-review after those fixes, so this checkpoint cannot claim a clean current-head
-Greptile review.
+Both older Mac CI interface runs failed a fixed 30 ms test wait. The mixer test
+now waits for the actual deferred callback within a bounded second, additionally
+asserting exactly one write, its method and captured revision. Production mixer
+timing is unchanged.
 
-Final release identity and follow-up observations will be appended here. Local logs and disposable fixtures live
-under `bin/mac-parity-current/evidence/` and are intentionally excluded from Git.
+The later Intel run passed that mixer test but failed another fixed wait in the
+recorded-point test (350 ms for a 300 ms callback). Test-only commit `066b8e6dc`
+keeps the headless harness's main queue serviced until the expected write arrives
+within one second. It retains the exact two-write count, relocated frame, newer
+value and acknowledged revision assertions, and actively services the rejection
+check's unchanged 350 ms interval. All 49 groups and 20 consecutive parity-group
+runs pass locally. This follow-up does not modify the packaged application.
+
+### Remote checks and evidence
+
+At the packaged source commit, Windows x64 and macOS Apple Silicon CI passed.
+Intel CI passed its model/host checks but finished 48/49 in the interface suite,
+as described above. A standalone Intel interface rerun of the test-only fix was
+not started: GitHub rejected the workflow-name lookup, and the direct workflow-ID
+dispatch could not connect to its API. Remote verification of that fix remains open.
+The test/documentation follow-up commits use `[skip ci]` to avoid another full
+application build for unchanged application code. All 21 existing PR review
+threads are resolved. Greptile has not completed a new review after the fixes,
+so a clean current-head Greptile review remains unavailable. Check PR #9 for later
+remote status; local test success does not replace a missing remote review.
+
+Local evidence is intentionally excluded from Git under
+`bin/mac-parity-current/evidence/`: `build-18-identity.json`,
+`build-18-source-hashes.json`, `release18-tests.json`, `release18-*.log`,
+`qa18-native-reopen-result.json`, the before/after `qa18-*.json` captures,
+`interface-release-checkpoint-final3-all.log`, `interface-mixer-final-repeat.log`,
+`interface-recorded-point-final-repeat.log`, `ci-59d-macos-failures.log`,
+`ui-build18-vst3-graph-60s.json`, `ui-build18-traces/`, the chooser process sample,
+and before/after system-audio inventories. The timelines preserve the failed
+presentation run for follow-up rather than replacing it with a passing rerun.
