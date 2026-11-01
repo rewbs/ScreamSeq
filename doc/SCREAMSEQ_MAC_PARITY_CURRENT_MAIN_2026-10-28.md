@@ -1,5 +1,9 @@
 # Mac parity checkpoint from current main
 
+For the current release checkpoint and remaining work, see
+[Mac release checkpoint — 31 October 2026](SCREAMSEQ_MAC_RELEASE_CHECKPOINT_2026-10-31.md).
+The dated sections below are historical evidence.
+
 This PR is a tested partial parity checkpoint, not a claim that every Windows
 change has been ported. At the user's request, the work is being brought to a
 reviewable stopping point. This checkpoint now includes the dynamic left context

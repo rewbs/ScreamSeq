@@ -96,7 +96,13 @@ extension AppController {
     }
     handleAutomation(method, params: params) { [weak self] response in
       if method == "document.get", response["error"] == nil { self?.refreshAll() }
-      reply(response)
+      // Refreshing the visible sample inspector can start another session read.
+      // Deliver the owned receipt after that read so its temporary busy state
+      // cannot reject preflight or strand the create-to-assignment handoff.
+      // Cancellation still forwards the actual receipt, never a false non-commit.
+      if let self, self.busy || self.sessionReading {
+        self.deferUntilIdle({ reply(response) }, cancel: { reply(response) })
+      } else { reply(response) }
     }
   }
 
