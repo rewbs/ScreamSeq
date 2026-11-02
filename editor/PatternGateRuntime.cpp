@@ -25,9 +25,10 @@ PatternGateRuntime::PatternGateRuntime(const NativeSong &native,CSoundFile &song
   if(!slots_.empty())chase(native,song);
 }
 void PatternGateRuntime::apply(const Event &e,double late) noexcept {
-  if(e.command.native==NativePatternOp::GateStop){if(e.slot==SIZE_MAX){for(auto &s:slots_)if(s.target.channel==e.channel)s.state.active=false;}else slots_[e.slot].state.active=false;return;}
+  if(e.command.native==NativePatternOp::GateStop){if(e.slot==SIZE_MAX){for(auto &s:slots_)if(s.target.channel==e.channel){s.state.active=false;s.suspended=false;}}else {slots_[e.slot].state.active=false;slots_[e.slot].suspended=false;}return;}
   auto &s=slots_[e.slot].state;const auto &a=e.command.arguments;using namespace GateArgument;
   slots_[e.slot].source=e.command;
+  slots_[e.slot].suspended=false;
   s.signal={a[GateArgument::floor],a[ceiling],a[period],a[phase],a[width],a[rise],a[fall],GateShape(uint8_t(a[riseShape])),GateShape(uint8_t(a[fallShape]))};
   s.elapsed=late;s.serial=++serial_;s.pitchRange=uint8_t(a[pitchRange]);s.active=true;
 }
@@ -83,10 +84,10 @@ void PatternGateRuntime::adopt(const CSoundFile &song)noexcept {
   const auto *next=updates_.consume();if(!next)return;
   // Replacing an already sounding gate preserves its musical clock. Removed
   // commands reveal the underlying value; past new onsets wait for the next visit.
-  for(size_t i=0;i<slots_.size();++i)if(slots_[i].state.active){
+  for(size_t i=0;i<slots_.size();++i)if(slots_[i].state.active||slots_[i].suspended){
     auto &slot=slots_[i];const auto found=next->sources.find(key(slot.source));
-    if(found==next->sources.end()||found->second.command.native!=NativePatternOp::Gate||found->second.slot!=i){slot.state.active=false;continue;}
-    if(found->second.command!=slot.source){const auto elapsed=slot.state.elapsed;apply(found->second,elapsed);slot.state.elapsed=std::fmod(elapsed,slot.state.signal.period);}
+    if(found==next->sources.end()||found->second.command.native!=NativePatternOp::Gate||found->second.slot!=i){slot.state.active=false;slot.suspended=true;continue;}
+    if(slot.suspended||found->second.command!=slot.source){const auto elapsed=slot.state.elapsed;apply(found->second,elapsed);slot.state.elapsed=std::fmod(elapsed,slot.state.signal.period);}
   }
   update_=next;const auto &s=song.m_PlayState;const auto found=events().find(s.m_nPattern);current_=found==events().end()?nullptr:&found->second;
   next_=current_?size_t(std::lower_bound(current_->begin(),current_->end(),s.NativeRowPosition(performanceUnitsPerRow)-1e-7,[](const Event &e,double at){return e.command.position<at;})-current_->begin()):0;
@@ -113,7 +114,9 @@ void PatternGateRuntime::prepare(CSoundFile &song,uint32_t count)noexcept {
   }
   for(auto &slot:slots_){auto &v=slot.snapshot;v=slot.state;v.beatsPerFrame=advancing?s.NativeBeatStep():0;
     // Clock continues through muted channels; their output remains muted by the mixer.
-    if(advancing&&v.active)slot.state.elapsed=std::fmod(slot.state.elapsed+count*v.beatsPerFrame,v.signal.period);
+    // A live deletion is reversible: keep the old clock for Undo, without
+    // exposing its modulation. A played GX or replacement GT retires it.
+    if(advancing&&(v.active||slot.suspended))slot.state.elapsed=std::fmod(slot.state.elapsed+count*v.beatsPerFrame,v.signal.period);
     if(!v.active||!advancing)continue;
     switch(slot.target.kind){case GateTarget::Volume:song.nativeGateVolumes[slot.target.channel]=&v;break;
     case GateTarget::Pan:song.nativeGatePans[slot.target.channel]=&v;break;

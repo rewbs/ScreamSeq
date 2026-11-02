@@ -12,6 +12,11 @@ void liveGateControllerTests(){
   need(active&&stops==baselineStops&&playback->renderer().gates()->channel(0,Tracker::GateTarget::Volume)->value()==.25,"Gate update did not reach running renderer");
   invoke(c,"history.undo",{{"domain","all"}});render();need(active&&stops==baselineStops&&playback->renderer().gates()->channel(0,Tracker::GateTarget::Volume)->value()==1,"Gate Undo stopped or failed to restore audio");
   invoke(c,"history.redo",{{"domain","all"}});render();need(active&&stops==baselineStops&&playback->renderer().gates()->channel(0,Tracker::GateTarget::Volume)->value()==.25,"Gate Redo stopped or failed to restore audio");
+  invoke(c,"pattern.effects.set",{{"pattern",0},{"commands",Json::array()}});render();
+  need(!playback->renderer().gates()->channel(0,Tracker::GateTarget::Volume),"Deleted gate still modulates playback");
+  invoke(c,"history.undo",{{"domain","all"}});render();
+  need(active&&stops==baselineStops&&playback->renderer().gates()->channel(0,Tracker::GateTarget::Volume)&&playback->renderer().gates()->channel(0,Tracker::GateTarget::Volume)->value()==.25,"Undo did not reactivate deleted sounding gate");
+  invoke(c,"history.redo",{{"domain","all"}});render();need(active&&!playback->renderer().gates()->channel(0,Tracker::GateTarget::Volume),"Redo did not silence restored gate");
   std::cout<<"PASS live gate controller publication/refusal and Undo/Redo preserve playback\n";
 }
 void livePreciseNoteControllerTests() {

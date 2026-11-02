@@ -8,7 +8,7 @@ class PatternGateRuntime {
 public:
   struct Target {uint16_t channel=0;GateTarget kind=GateTarget::Volume;std::string plugin;uint32_t parameter=0;};
 private:
-  struct Slot {Target target;GateSnapshot state,snapshot;PatternCommand source;};
+  struct Slot {Target target;GateSnapshot state,snapshot;PatternCommand source;bool suspended=false;};
   struct Event {PatternCommand command;uint16_t channel=0;size_t slot=SIZE_MAX;};
   using Key=std::tuple<uint64_t,uint64_t,uint8_t,uint32_t>;
   static Key key(const PatternCommand &c){return {c.pattern,c.track,c.column,c.position/performanceUnitsPerRow};}

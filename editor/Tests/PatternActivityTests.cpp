@@ -25,5 +25,19 @@ int main(){try{
   const auto original=doc->native();SetNoteColumnMutes batch;for(const auto &[channel,track]:original.tracks)batch.columns.push_back({track.id,channel!=0});
   const auto muted=prepareNoteTrackEdit(original,doc->song(),batch);if(!muted.changed||!effectiveColumnMute(muted.native,doc->song(),1))throw std::runtime_error("Atomic solo candidate missing mutes");
   if(prepareNoteTrackEdit(muted.native,doc->song(),batch).changed)throw std::runtime_error("Mute batch no-op changed history");
+  // A request at the start must not traverse a long future arrangement, even
+  // when that future pattern has thousands of performance commands.
+  doc->transaction([](CSoundFile &song){song.Patterns[1].Resize(1024);song.Order().assign(1000,1);song.Order()[0]=0;});
+  doc->annotate([](NativeSong &native){native.performance.commands.clear();for(uint32_t row=0;row<1024;++row)for(const auto &[channel,track]:native.tracks){
+    PatternCommand c;c.pattern=native.patterns.at(1).id;c.track=track.id;c.position=row*65536;c.kind=PatternCommandKind::Native;c.native=NativePatternOp::GainSet;c.arguments=nativePatternDefaults(c.native);native.performance.commands.push_back(c);
+  }});
+  const auto dense=doc->native();const auto revision=doc->revision;
+  PatternActivityBudget early;
+  const auto start=patternActivityCatalog(*doc,0,0,0,0,{},&early);
+  if(!start.playback.complete||!start.playback.reachable||early.rowVisits!=2)throw std::runtime_error("Activity walked beyond the requested occurrence");
+  PatternActivityBudget expired;expired.deadline=std::chrono::steady_clock::time_point::min();
+  const auto limited=patternActivityCatalog(*doc,0,0,0,0,{},&expired);
+  if(limited.playback.complete||limited.playback.limitation.empty()||expired.rowVisits||!limited.items.empty())throw std::runtime_error("Expired shared budget was reset before activity preparation");
+  if(doc->native()!=dense||doc->revision!=revision)throw std::runtime_error("Bounded activity changed the document");
   std::cout<<"PASS replay from start, repeated occurrences, channel isolation, routed/bypassed processors, inherited GT and atomic mute candidate\n";return 0;
 }catch(const std::exception &e){std::cerr<<"FAIL "<<e.what()<<'\n';return 1;}}
