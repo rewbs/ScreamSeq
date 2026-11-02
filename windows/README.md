@@ -14,7 +14,8 @@ It is not a release-qualified Windows build. See
 
 Install Visual Studio 2022 C++ Build Tools, a Windows 10/11 SDK and CMake 3.24 or
 newer. The Visual Studio C++ CMake component supplies CMake and CTest. Install the
-ARM64 compiler tools if targeting ARM64.
+ARM64EC compiler tools and a Windows 11 SDK for the x64-compatible ARM build;
+install ARM64 compiler tools for a pure ARM64 build.
 
 From the repository root in PowerShell:
 
@@ -23,8 +24,10 @@ From the repository root in PowerShell:
 ./bin/windows-dev/Release/ScreamSeq.exe
 ```
 
-Use `-Architecture ARM64` for ARM64. Omitting `-Architecture` detects the native
-machine architecture. `-Configuration Debug` selects a debug build; the default
+Use `-Architecture ARM64EC` on Windows 11 ARM to host x64 VST3 plugins while
+running the host natively. `-Architecture ARM64` retains the pure ARM build,
+which requires ARM64 plugins. Omitting `-Architecture` selects ARM64EC on ARM
+hardware and x64 on x64 hardware. `-Configuration Debug` selects a debug build; the default
 is Release. Use `-Fresh` after a failed initial compiler configuration. Build
 into a separate directory when another application instance is running.
 

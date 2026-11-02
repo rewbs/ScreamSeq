@@ -1,5 +1,34 @@
 // Actual Windows prepared-host publication, with the same rendering entry point
 // used by WASAPI. Preparation/publication are outside the callback audit scope.
+static void preparedGateUpdates(const Project::ProjectState &state){
+  using namespace Tracker;
+  for(unsigned rate:{44100u,48000u,96000u})for(unsigned block:{17u,128u,511u}){
+    auto doc=Document::demo();doc->transaction([](OpenMPT::CSoundFile &s){
+      for(auto &p:s.Patterns)if(p.IsValid())for(auto &cell:p)cell.Clear();
+      auto &sample=s.GetSample(1);sample.nLoopStart=0;sample.nLoopEnd=sample.nLength;sample.uFlags.set(OpenMPT::CHN_LOOP);
+      auto &cell=*s.Patterns[0].GetpModCommand(0,0);cell.note=61;cell.instr=1;
+    });
+    HostedProjectPlayback reference(*doc,state,rate,{},true);
+    doc->annotate([](NativeSong &n){PatternCommand c;c.kind=PatternCommandKind::Native;c.native=NativePatternOp::Gate;c.pattern=n.patterns.at(0).id;c.track=n.tracks.at(0).id;c.arguments=nativePatternDefaults(c.native);c.arguments[1]=c.arguments[2]=1;n.performance.commands={c};});
+    auto before=doc->native(),next=before;next.performance.commands[0].arguments[1]=next.performance.commands[0].arguments[2]=.25;
+    HostedProjectPlayback live(*doc,state,rate,{},true);renderPrepared(live,2048,block);renderPrepared(reference,2048,block);
+    auto update=live.prepareNativeUpdate(before,next);check(update&&update->kind()==HostedProjectPlayback::PreparedNativeUpdate::Kind::Gates&&live.publishNativeUpdate(*update),"Live gate controls failed publication");
+    auto actual=renderPrepared(live,2048,block),expected=renderPrepared(reference,2048,block);
+    for(size_t i=0;i<actual.size();++i)check(std::abs(actual[i]-.25f*expected[i])<2e-6,"Live gate did not reach sample PCM");
+    check(live.renderer().telemetry().frames==4096,"Live gate restarted the song clock");
+    auto undo=live.prepareNativeUpdate(next,before);check(undo&&live.publishNativeUpdate(*undo),"Live gate Undo plan refused");
+    actual=renderPrepared(live,2048,block);expected=renderPrepared(reference,2048,block);
+    for(size_t i=0;i<actual.size();++i)check(std::abs(actual[i]-expected[i])<2e-6,"Live gate Undo did not restore audio");
+    auto previous=before;
+    for(unsigned i=0;i<4;++i){auto candidate=previous;candidate.performance.commands[0].arguments[1]=candidate.performance.commands[0].arguments[2]=.1*(i+1);auto plan=live.prepareNativeUpdate(previous,candidate);check(plan&&live.publishNativeUpdate(*plan)==(i<3),"Gate queue did not reject atomically at capacity");if(i<3)previous=candidate;}
+    actual=renderPrepared(live,2048,block);expected=renderPrepared(reference,2048,block);
+    for(size_t i=0;i<actual.size();++i)check(std::abs(actual[i]-.3f*expected[i])<2e-6,"Gate burst did not adopt latest accepted controls");
+    auto removed=previous;removed.performance.commands.clear();auto removal=live.prepareNativeUpdate(previous,removed);check(removal&&live.publishNativeUpdate(*removal),"Live gate removal refused");
+    actual=renderPrepared(live,2048,block);expected=renderPrepared(reference,2048,block);
+    for(size_t i=0;i<actual.size();++i)check(std::abs(actual[i]-expected[i])<2e-6,"Gate removal retained old audio modulation");
+  }
+  std::cout<<"PASS live gate sample PCM, clock, Undo, queue refusal/coalescing and removal at three rates/partitions\n";
+}
 static void preparedPreciseNotes(const Project::ProjectState &state) {
   using namespace Tracker;
   for(unsigned rate:{44100u,48000u,96000u})for(unsigned block:{17u,128u,511u}) {

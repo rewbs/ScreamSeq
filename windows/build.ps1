@@ -2,10 +2,11 @@
 # Examples: .\windows\build.ps1 -Test
 #           .\windows\build.ps1 -Target worker-tests -Test
 #           .\windows\build.ps1 -Architecture ARM64 -Target portable-tests -Test
+#           .\windows\build.ps1 -Architecture ARM64EC -BuildDirectory bin/windows-arm64ec
 #           .\windows\build.ps1 -Target renderer-probe
 [CmdletBinding()]
 param(
-    [ValidateSet('Auto', 'ARM64', 'x64')][string]$Architecture = 'Auto',
+    [ValidateSet('Auto', 'ARM64', 'ARM64EC', 'x64')][string]$Architecture = 'Auto',
     [ValidateSet('Debug', 'Release', 'RelWithDebInfo')][string]$Configuration = 'Release',
     [string]$BuildDirectory = '',
     [ValidateRange(1, 128)][int]$Jobs = 4,
@@ -40,10 +41,10 @@ namespace ScreamSeq {
     [UInt16]$nativeMachine = 0
     if (-not [ScreamSeq.NativeBuildArchitecture]::IsWow64Process2(
         [ScreamSeq.NativeBuildArchitecture]::GetCurrentProcess(), [ref]$processMachine, [ref]$nativeMachine)) {
-        throw 'Cannot determine native Windows architecture; pass -Architecture ARM64 or x64.'
+        throw 'Cannot determine native Windows architecture; pass -Architecture ARM64EC, ARM64 or x64.'
     }
     switch ($nativeMachine) {
-        0xAA64 { $Architecture = 'ARM64' }
+        0xAA64 { $Architecture = 'ARM64EC' }
         0x8664 { $Architecture = 'x64' }
         default { throw "Unsupported native Windows architecture: $nativeMachine" }
     }
@@ -57,7 +58,9 @@ $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio/Installer
 if (-not (Test-Path $vswhere)) {
     throw 'Visual Studio Installer not found. Install VS 2022 Build Tools with C++ tools, CMake and a Windows SDK.'
 }
-$component = if ($Architecture -eq 'ARM64') {
+$component = if ($Architecture -eq 'ARM64EC') {
+    'Microsoft.VisualStudio.Component.VC.Tools.ARM64EC'
+} elseif ($Architecture -eq 'ARM64') {
     'Microsoft.VisualStudio.Component.VC.Tools.ARM64'
 } else { 'Microsoft.VisualStudio.Component.VC.Tools.x86.x64' }
 $installations = @(& $vswhere -latest -products '*' -version '[17.0,18.0)' -requires $component -property installationPath)

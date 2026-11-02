@@ -1,3 +1,19 @@
+void liveGateControllerTests(){
+  bool active=false,refuse=false;unsigned stops=0;HostedProjectPlayback *playback=nullptr;
+  PlaybackHooks hooks;hooks.feedback=[&]{PlaybackFeedback f;f.playing=f.audioActive=active;f.generation=9;return f;};
+  hooks.publishNativeUpdate=[&](auto *owner,auto &plan){return !refuse&&active&&owner==playback&&owner->publishNativeUpdate(plan);};
+  DocumentController c({},"live-gate",[&]{++stops;active=false;},[](const auto &){},{},64u*1024u*1024u,{},hooks);
+  const auto command=[](double gain){return Json{{"pattern",0},{"commands",Json::array({{{"kind","native"},{"native","gate"},{"position",0},{"channel",0},{"column",0},{"parameters",{{"floor",gain},{"ceiling",gain}}}}})}};};
+  invoke(c,"pattern.effects.set",command(1));playback=c.prepare(48000,Json::object(),true,true).get();active=true;const auto baselineStops=stops;
+  std::array<float,256> pcm{};auto render=[&]{need(playback->render(pcm.data(),128),"Live gate render failed");};render();
+  auto original=c.view();refuse=true;bool rejected=false;try{invoke(c,"pattern.effects.set",command(.25));}catch(const Api::ApiError &e){rejected=e.code==-32002;if(!rejected)std::cerr<<"Unexpected gate error "<<e.code<<": "<<e.what()<<'\n';}
+  need(rejected&&c.view()==original&&active&&stops==baselineStops,"Rejected gate update mutated history or stopped playback");
+  refuse=false;invoke(c,"pattern.effects.set",command(.25));render();
+  need(active&&stops==baselineStops&&playback->renderer().gates()->channel(0,Tracker::GateTarget::Volume)->value()==.25,"Gate update did not reach running renderer");
+  invoke(c,"history.undo",{{"domain","all"}});render();need(active&&stops==baselineStops&&playback->renderer().gates()->channel(0,Tracker::GateTarget::Volume)->value()==1,"Gate Undo stopped or failed to restore audio");
+  invoke(c,"history.redo",{{"domain","all"}});render();need(active&&stops==baselineStops&&playback->renderer().gates()->channel(0,Tracker::GateTarget::Volume)->value()==.25,"Gate Redo stopped or failed to restore audio");
+  std::cout<<"PASS live gate controller publication/refusal and Undo/Redo preserve playback\n";
+}
 void livePreciseNoteControllerTests() {
   bool active=false,refuse=false;unsigned stops=0;HostedProjectPlayback *playback=nullptr;
   PlaybackHooks hooks;hooks.feedback=[&]{PlaybackFeedback f;f.playing=f.audioActive=active;f.generation=9;return f;};

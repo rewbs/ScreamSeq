@@ -64,6 +64,14 @@
                 selectedPlugin.clear();selectedProgram.clear();programCatalogRevision.clear();selectedParameter=pluginDraftParameter=0;selectedPort=-1;
                 listedPlugins=nullptr;pluginParameters.clear();pluginPrograms.clear();pluginPorts.clear();pendingPluginTriggers.clear();return true;
             });
+        add("Plugin trigger result",[this]{
+            auto result=mainDraft(pluginTriggerTarget.value("documentId",std::string()),pluginTriggerTarget.value("expectedRevision",std::string()),
+                pluginTriggerTarget.dump(),pluginTriggerGeneration,false,pluginTriggerPending);
+            result.uncertain=!pluginTriggerPending&&pluginTriggerCompletion.retained();return result;
+        },[this]{pluginDetailPage=0;ScreamSeq::NativeInputGate::present(controls.at(pluginPage),CB_SETCURSEL,0,0);reviewMainDraft("plugins",pluginNewInstrument);},[this]()noexcept{
+            if(pluginTriggerPending||pluginTriggerCompletion.retained())return false;
+            ++pluginTriggerGeneration;pluginTriggerTarget.clear();pluginTriggerObservation.clear();pluginTriggerReviewed=false;return true;
+        });
         add("Plugin preset result",[this]{
             auto result=mainDraft(pluginPresetTarget.value("documentId",std::string()),pluginPresetTarget.value("expectedRevision",std::string()),
                 pluginPresetTarget.dump(),pluginPresetGeneration,false,pluginPresetPending);

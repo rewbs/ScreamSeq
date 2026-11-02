@@ -110,6 +110,7 @@ constexpr int keyboardSettingsCommand=628;
 constexpr int exitCommand=629;
 constexpr int aboutCommand=630,keyboardHelpCommand=631,selectChannelCommand=632,selectPatternCommand=633,selectRowCommand=634;
 constexpr int contextPanelCommand=635,contextActionFirst=636,contextActionLast=641;
+constexpr int noteColumnSoloCommand=690,channelMuteFirst=25000,channelSoloFirst=25200,activityListCommand=25400,activityOpenCommand=25401;
 constexpr int exportModuleCommand=642;
 constexpr int mixingGraphPanelCommand=643,mixingGraphFloatCommand=644,editorMixingGraphTab=645,
     allEditorsCommand=646,navigationPatternCommand=647,navigationSamplesCommand=648,
@@ -388,6 +389,7 @@ public:
             {"lowerVisible",workspaceState.lowerVisible},{"lowerEditor",lowerEditorName()},
             {"octave",octave},{"editStep",editStep},{"documentBusy",busy},{"pendingPatternPaste",pendingPatternPaste.has_value()},{"pendingViewCommands",deferredViews.size()+(drainingViews?1u:0u)},{"status",utf8Path(status)},
             {"sampleEditor",sampleEditorSnapshot()},{"sampleLibrary",sampleLibrarySnapshot()},
+            {"gateInspector",gateInspectorWindow?gateInspectorWindow->snapshot():Json::object()},
             {"audioSettings",audioSettingsSnapshot()},
             {"recovery",recoveryWindow?recoveryWindow->snapshot():Json{{"visible",false}}},
             {"recording",view->recording},{"midi",midiSettingsSnapshot()},{"midiWindow",midiWindow?midiWindow->snapshot():Json{{"visible",false}}},
@@ -430,6 +432,7 @@ public:
             {"parameterRecording",parameterRecordingWindow?parameterRecordingWindow->snapshot():Json{{"visible",false}}},
             {"pluginRecoveryReview",pluginRecoveryReviewWindow?pluginRecoveryReviewWindow->snapshot():Json{{"visible",false}}},
             {"patternSampleRender",patternSampleRenderWindow?patternSampleRenderWindow->snapshot():Json{{"visible",false}}},
+            {"pluginTriggerAction",{{"pending",pluginTriggerPending},{"completion",pluginTriggerCompletion.snapshot()},{"target",pluginTriggerTarget},{"reviewed",pluginTriggerReviewed},{"observation",pluginTriggerObservation}}},
             {"pluginPresetAction",{{"pending",pluginPresetPending},{"completion",pluginPresetCompletion.snapshot()},{"target",pluginPresetTarget},
                 {"report",pluginPresetReport},{"needsReload",pluginPresetNeedsReload},{"status",utf8Path(pluginPresetStatus)}}},
             {"nativeCommandResult",{{"pending",nativeCommandPending},{"completion",nativeCommandCompletion.snapshot()},{"target",nativeCommandTarget},{"report",nativeCommandReport}}},
@@ -851,6 +854,7 @@ public:
     void refreshPlaybackLoopControl() {
         if(auto found=controls.find(playbackLoopCommand);found!=controls.end()) {
             ScreamSeq::NativeControls::text(found->second,playbackLoop?L"Playback loop: on":L"Playback loop: off");
+            ScreamSeq::NativeControls::state(found->second)->compactCaption=playbackLoop?L"Loop on":L"Loop off";
             ScreamSeq::NativeControls::active(found->second,playbackLoop);
         }
     }
@@ -925,6 +929,7 @@ public:
     #include "WorkspaceNavigation.inc"
     #include "WorkspaceAccessibility.inc"
     #include "WorkspaceContextPanel.inc"
+    #include "PatternActivityPanel.inc"
     #include "DeferredViews.inc"
 	#include "PatternGeometry.inc"
 	#include "WorkspaceView.inc"
@@ -1316,6 +1321,7 @@ LRESULT CALLBACK windowProc(HWND window, UINT message, WPARAM wp, LPARAM lp) {
             }
             if(LOWORD(wp)>=patternChooser && LOWORD(wp)<=soundChooser && HIWORD(wp)!=CBN_SELCHANGE) return 0;
             if(LOWORD(wp)==sampleCommandBase && HIWORD(wp)!=LBN_SELCHANGE && HIWORD(wp)!=LBN_DBLCLK) return 0;
+            if(LOWORD(wp)==activityListCommand){if(HIWORD(wp)==LBN_DBLCLK)app->command(activityOpenCommand);return 0;}
             app->command(LOWORD(wp));return 0;
 		case WM_KEYDOWN:case WM_SYSKEYDOWN: if(app->key(wp,(lp&(1LL<<30))!=0)) return 0;break;
         case WM_KEYUP:case WM_SYSKEYUP:if(app->handleKeyUp(wp))return 0;break;
@@ -1505,6 +1511,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
             app.serviceRecovery();
             app.serviceMidi();
             app.servicePatternRuler();
+            app.servicePatternActivity();
 			if(result == WAIT_FAILED) throw std::runtime_error("Frame wait failed");
 			if(renderPending && result == WAIT_OBJECT_0 && !IsIconic(window)) {
 				// A frame counts only when it was really presented: draw() returns

@@ -15,7 +15,7 @@
         if(!focus)return false;
         const int id=GetDlgCtrlID(focus);
         return GetParent(focus)==window&&(id==contextPanelCommand||
-            (id>=contextActionFirst&&id<=contextActionLast)||id==sampleCommandBase||
+            (id>=contextActionFirst&&id<=contextActionLast)||id==activityListCommand||id==activityOpenCommand||id==sampleCommandBase||
             id==patternChooser||id==orderChooser||id==octaveChooser||id==stepChooser||id==soundChooser);
     }
     void toggleContextPanel() {
@@ -99,7 +99,8 @@
         const bool visible=workspaceState.contextPanelVisible;
         const float scale=GetDpiForWindow(window)/96.f;
         const float height=client.bottom/scale;
-        auto place=[&](int id,float y,float h,bool show,float x=10,float w=146) {
+        auto place=[&](int id,float y,float h,bool show,float x=10,float w=0) {
+            if(!w)w=workspaceState.contextPanelWidth-20;
             ScreamSeq::NativeControls::place(controls.at(id),int(x*scale),int(y*scale),int(w*scale),int(h*scale),visible&&show);
         };
         ScreamSeq::NativeControls::place(controls.at(contextPanelCommand),int(10*scale),int(50*scale),int(146*scale),int(26*scale),true);
@@ -115,10 +116,12 @@
         for(size_t i=0;i<contextActions.size();++i) {
             const auto &action=contextActions[i];const int id=contextActionFirst+int(i);
             const float y=actionTop+float(i)*30;
-            place(id,y,26,action.command&&y+26<height-54);
+            place(id,y,26,!pattern&&action.command&&y+26<height-54);
             ScreamSeq::NativeControls::text(controls.at(id),action.label);
             EnableWindow(controls.at(id),available&&action.enabled);
         }
+        place(activityOpenCommand,324,26,pattern);
+        place(activityListCommand,356,std::max(40.f,height-390),pattern);
         contextPanelStamp=stamp;
     }
     void contextPanelAction(int id) {
@@ -138,5 +141,5 @@
                 {"visible",found!=controls.end()&&IsWindowVisible(found->second)!=FALSE},
                 {"enabled",found!=controls.end()&&IsWindowEnabled(found->second)!=FALSE}});
         }
-        return {{"visible",workspaceState.contextPanelVisible},{"editor",contextPanelEditor},{"actions",actions}};
+        return {{"visible",workspaceState.contextPanelVisible},{"editor",contextPanelEditor},{"actions",actions},{"activity",patternActivitySnapshot()}};
     }

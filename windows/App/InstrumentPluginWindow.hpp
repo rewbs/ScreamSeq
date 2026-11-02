@@ -9,13 +9,13 @@ class InstrumentPluginWindow final : public NativeToolWindow {
   using Json=Api::Json;
   using Request=std::function<Json(const std::string &,const Json &)>;
   using Context=std::function<std::pair<std::string,std::string>()>;
-  enum : int {plugin=4801,channel,apply,reload,browse,rack,close,
+  enum : int {plugin=4801,channel,apply,reload,browse,rack,close,discardRemoved,
     heading=4850,pluginLabel,channelLabel,explanation,statusLabel};
   Request request_;Context context_;NativeWriteCompletion::Write write_;
   std::function<void(bool)> navigate_;
   std::string document_,identity_,revision_,selected_;
   unsigned index_=0,midi_=1;Json plugins_=Json::array();
-  bool dirty_=false,pending_=false,setting_=false;uint64_t generation_=0;
+  bool dirty_=false,pending_=false,setting_=false,removed_=false;uint64_t generation_=0;
   NativeWriteCompletion completion_;
   void require(bool ok,const char *message)const{if(!ok)throw std::runtime_error(message);}
   void status(std::wstring text){status_=std::move(text);set(statusLabel,status_);requestPaint();}
@@ -28,7 +28,9 @@ class InstrumentPluginWindow final : public NativeToolWindow {
     require(context_()==before&&token==generation_,"Song changed while reading / selection retained");
     const auto &instruments=data.at("instruments");
     const auto found=std::find_if(instruments.begin(),instruments.end(),[&](const auto &i){return i.at("id")==identity_;});
-    require(found!=instruments.end(),"The captured instrument was removed");
+    require(instruments.is_array(),"Invalid instrument catalogue / draft retained");
+    removed_=found==instruments.end();
+    if(removed_){KillTimer(window_,1);layout();status(L"The captured instrument was removed / Discard removed assignment releases this editor without changing the song");return;}
     const auto slot=found->at("index").template get<unsigned>();
     Json choices=Json::array();std::string selected;unsigned midi=1;
     for(const auto &p:data.at("nativePlugins"))if(p.value("isInstrument",false)){
@@ -57,9 +59,21 @@ class InstrumentPluginWindow final : public NativeToolWindow {
       load();status(L"Plugin assignment saved / sample mapping preserved / Undo restores the previous assignment");
     }catch(...){pending_=false;layout();throw;}
   }
+  void discardMissing(){
+    require(!pending_&&removed_,"Refresh the removed instrument before discarding its assignment");
+    request_("synchronizeView",Json::object());const auto before=context_();const auto token=generation_;
+    require(before.first==document_,"The captured instrument belongs to another song");
+    const auto data=request_("document.get",Json::object());const auto &instruments=data.at("instruments");
+    require(context_()==before&&token==generation_&&instruments.is_array(),"Song changed during removed-instrument review / draft retained");
+    for(const auto &instrument:instruments)require(instrument.at("id").is_string()&&!instrument.at("id").get<std::string>().empty(),"Invalid instrument catalogue / draft retained");
+    removed_=std::none_of(instruments.begin(),instruments.end(),[&](const auto &instrument){return instrument.at("id")==identity_;});
+    layout();require(removed_,"The captured instrument is available again / Refresh to review its assignment");
+    dirty_=false;completion_.finish();++generation_;hide();
+  }
   void action(int id,unsigned notification)override{
     if(setting_)return;if(id==close&&notification==BN_CLICKED){hide();return;}if(pending_)return;
     if(id==reload&&notification==BN_CLICKED){request_("synchronizeView",Json::object());load();return;}
+    if(id==discardRemoved&&notification==BN_CLICKED){discardMissing();return;}
     require(!completion_.retained(),"Reload / review the previous result first");
     if(notification==CBN_SELCHANGE&&(id==plugin||id==channel)){
       const auto choice=int(SendMessageW(controls_.at(id),CB_GETCURSEL,0,0));if(choice<0)return;
@@ -85,17 +99,18 @@ class InstrumentPluginWindow final : public NativeToolWindow {
     place(pluginLabel,16,48,w-156,20);place(channelLabel,w-124,48,108,20);
     place(plugin,16,72,w-156,240);place(channel,w-124,72,108,260);
     place(browse,16,112,142,28);place(rack,166,112,142,28);
-    place(explanation,16,154,w-32,66);place(apply,16,h-76,100,28,dirty_&&!completion_.retained());place(reload,dirty_?124:16,h-76,158,28);place(close,w-116,h-76,100,28);place(statusLabel,16,h-40,w-32,34);
-    for(int id:{plugin,channel,apply,browse,rack})EnableWindow(controls_.at(id),!pending_&&!completion_.retained());
-    EnableWindow(controls_.at(channel),!pending_&&!completion_.retained()&&!selected_.empty());EnableWindow(controls_.at(reload),!pending_);
-    set(reload,completion_.retained()?L"Reload / review result":dirty_?L"Discard change":L"Refresh");
+    place(explanation,16,154,w-32,66);place(apply,16,h-76,100,28,dirty_&&!completion_.retained()&&!removed_);place(reload,dirty_&&!removed_?124:16,h-76,removed_?100:158,28);place(close,w-116,h-76,100,28);place(statusLabel,16,h-40,w-32,34);
+    place(discardRemoved,124,h-76,w-248,28,removed_);
+    for(int id:{plugin,channel,apply,browse,rack})EnableWindow(controls_.at(id),!pending_&&!completion_.retained()&&!removed_);
+    EnableWindow(controls_.at(channel),!pending_&&!completion_.retained()&&!removed_&&!selected_.empty());EnableWindow(controls_.at(reload),!pending_);EnableWindow(controls_.at(discardRemoved),!pending_);
+    set(reload,removed_?L"Refresh":completion_.retained()?L"Reload / review result":dirty_?L"Discard change":L"Refresh");
   }
 public:
   InstrumentPluginWindow(HWND owner,std::string document,std::string instrument,Request request,Context context,NativeWriteCompletion::Write write,std::function<void(bool)> navigate)
     :NativeToolWindow(owner),request_(std::move(request)),context_(std::move(context)),write_(std::move(write)),navigate_(std::move(navigate)),document_(std::move(document)),identity_(std::move(instrument)){
     minimumClientWidth_=460;minimumClientHeight_=310;create(L"ScreamSeq.InstrumentPlugin",L"Instrument plugin",640,360,true);
     combo(plugin);combo(channel);for(unsigned i=1;i<=16;++i){auto text=std::to_wstring(i);NativeInputGate::present(controls_.at(channel),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(text.c_str()));}
-    for(auto [id,text]:std::initializer_list<std::pair<int,const wchar_t *>>{{apply,L"Retry change"},{reload,L"Reload / discard"},{browse,L"Add plugin…"},{rack,L"Plugin rack…"},{close,L"Close"}})button(id,text);
+    for(auto [id,text]:std::initializer_list<std::pair<int,const wchar_t *>>{{apply,L"Retry change"},{reload,L"Reload / discard"},{browse,L"Add plugin…"},{rack,L"Plugin rack…"},{close,L"Close"},{discardRemoved,L"Discard removed assignment"}})button(id,text);
     label(heading,L"Instrument plugin");label(pluginLabel,L"Instrument plugin in this song");label(channelLabel,L"MIDI channel");label(statusLabel,L"");
     label(explanation,L"The plugin and mapped samples play together. Samples use the instrument keymap and track routing; plugin audio uses its output routes. Choose None to keep only the samples.");finish();load();
   }
@@ -104,6 +119,6 @@ public:
   bool matches(const std::string &document,const std::string &identity)const{return document_==document&&identity_==identity;}
   bool retainedDraft()const{return pending_||dirty_||completion_.retained();}
   std::optional<Tracker::DocumentDraft> documentDraft()const override{return describeDraft(document_,revision_,identity_,generation_,dirty_||completion_.retained(),pending_,completion_.retained());}
-  Json snapshot()const{return {{"visible",visible()},{"document",document_},{"instrument",identity_},{"index",index_},{"revision",revision_},{"plugin",selected_},{"channel",midi_},{"dirty",dirty_},{"pending",pending_},{"stale",!current()},{"completion",completion_.snapshot()},{"plugins",plugins_},{"status",utf8(status_)}};}
+  Json snapshot()const{return {{"visible",visible()},{"document",document_},{"instrument",identity_},{"index",index_},{"revision",revision_},{"plugin",selected_},{"channel",midi_},{"dirty",dirty_},{"pending",pending_},{"removed",removed_},{"stale",!current()},{"completion",completion_.snapshot()},{"plugins",plugins_},{"status",utf8(status_)}};}
 };
 }

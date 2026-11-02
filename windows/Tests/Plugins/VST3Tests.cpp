@@ -17,7 +17,9 @@ static std::string utf(const std::filesystem::path &p){auto s=p.u8string();retur
 template<class T>static T symbol(HMODULE dll,const char *name){auto p=reinterpret_cast<T>(GetProcAddress(dll,name));check(p!=nullptr,"fixture export missing");return p;}
 int main(int argc,char **argv){try{
  check(argc==4,"arguments");
-#if defined(_M_ARM64)
+#if defined(_M_ARM64EC)
+ constexpr USHORT expectedMachine=IMAGE_FILE_MACHINE_ARM64;
+#elif defined(_M_ARM64)
  constexpr USHORT expectedMachine=IMAGE_FILE_MACHINE_ARM64;
 #elif defined(_M_X64)
  constexpr USHORT expectedMachine=IMAGE_FILE_MACHINE_AMD64;
@@ -27,7 +29,7 @@ int main(int argc,char **argv){try{
  USHORT emulated=0,native=0;
  check(IsWow64Process2(GetCurrentProcess(),&emulated,&native)&&native==expectedMachine&&emulated==IMAGE_FILE_MACHINE_UNKNOWN,
    "VST3 fixture must run natively on the compiled architecture");
- std::cout<<"native-machine="<<native<<", process=not-emulated\n";WindowsVST3::configure(argv[1],argv[3]);
+ std::cout<<"native-machine="<<native<<", process-machine="<<emulated<<"\n";WindowsVST3::configure(argv[1],argv[3]);
  auto descriptors=WindowsVST3::rescan(argv[2]);check(descriptors.size()==4,"real fixture DLL must expose four exact classes");
  check(descriptors[0].classID=="5245534F4E414E434546464543540001","canonical FUID class identity");
  PluginState effect{descriptors[0]};auto &factory=platformPluginBackendFactory();
@@ -36,7 +38,7 @@ int main(int argc,char **argv){try{
  auto plugin=factory.create(effect,48000,true);std::array<float,8192> pcm{};std::array<const float*,64> inputs{};
  pcm.fill(1);check(plugin->process(pcm.data(),17,0,inputs.data(),0,{}),"real effect processing");for(int i=0;i<34;++i)expectPCM(pcm[i],.5);
  HMODULE dll=GetModuleHandleW(wide(descriptors[0].path).c_str());check(dll!=nullptr,"real DLL is not loaded");
- std::cout<<"PASS ARM64 loader, cache identity, malformed IDs, missing/AU rejection, effect PCM\n";
+ std::cout<<"PASS compatible loader, cache identity, malformed IDs, missing/AU rejection, effect PCM\n";
  check(plugin->supportsSampleOffsetParameters(),"sample-offset capability");
  constexpr double lo=.123456789012345,hi=.987654321098765;
  check(plugin->parameter(7,lo,0)&&plugin->parameter(7,hi,16),"double ramp endpoints rejected");pcm.fill(1);check(plugin->process(pcm.data(),17,17,inputs.data(),0,{}),"ramp processing");for(int i=0;i<17;++i)expectPCM(pcm[i*2],lo+(hi-lo)*i/16);

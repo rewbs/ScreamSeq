@@ -1,5 +1,6 @@
 #include "DocumentController.hpp"
 #include "TimelineOperations.hpp"
+#include "PatternActivityJSON.hpp"
 #include "windows/Audio/WasapiCapture.hpp"
 #include "editor/hosted/SelectionRender.hpp"
 #include "editor/hosted/AudioExportStream.hpp"
@@ -559,7 +560,7 @@ std::function<void()> DocumentController::prepareRackPublication(const std::vect
 std::function<void()> DocumentController::prepareNativePublication(const Tracker::NativeSong &next) {
   const auto &before=document_->native();
   if(next.mixer==before.mixer&&Tracker::sameSignalProcessing(next.signal,before.signal)&&
-     next.automation==before.automation&&next.scratchGestures==before.scratchGestures&&next.columnMutes==before.columnMutes)return {};
+     next.automation==before.automation&&next.scratchGestures==before.scratchGestures&&next.columnMutes==before.columnMutes&&next.performance==before.performance)return {};
   return prepareNativeUpdate(document_->native(),next);
 }
 
@@ -923,7 +924,8 @@ Json DocumentController::operation(const std::string &method,Json params) {
       }
       result=assets_->invoke(method,params,[this,&method](const Json &imported){return prepareAssetCompletion(method,imported);});
     } else if(std::find(timeline.begin(),timeline.end(),method)!=timeline.end()) {
-      TimelineOperations operations(*document_,[this]{onMain(stop_);});result=operations.invoke(method,params);
+      if(method=="pattern.activity.get")result=patternActivityJSON(*document_,params,project_.preserved.at("plugins"));
+      else {TimelineOperations operations(*document_,[this]{onMain(stop_);});result=operations.invoke(method,params);}
     } else {
       if((method=="history.undo" && document_->canUndo()) || (method=="history.redo" && document_->canRedo())){
         const auto &candidate=document_->historyNative(method=="history.redo");validateGraphViewGrowth(candidate);
@@ -966,7 +968,9 @@ Api::CompletedCall DocumentController::invokeOperation(const std::string &method
       // Only our own publication boundary can supply this invocation's result.
       // Never adopt a receipt thrown by a nested host callback, even when its
       // method and document happen to match.
-      throw Api::ApiError(-32003,"Document operation committed but completion failed; read current state before retrying the write.",
+      std::string detail;
+      try{std::rethrow_exception(failure);}catch(const std::exception &e){detail=std::string(" ")+e.what();}catch(...){}
+      throw Api::ApiError(-32003,"Document operation committed but completion failed; read current state before retrying the write."+detail,
         Tracker::WriteOutcome{Tracker::CommitOutcome::Committed,identity_+":"+std::to_string(generation_),revision()},completedCall_);
     }
     if(returned)throw Api::ApiError(-32003,"Operation returned but completion identity could not be retained; read state before retrying.",Tracker::WriteOutcome{});
@@ -982,7 +986,7 @@ Api::CompletedCall DocumentController::invokeOperation(const std::string &method
     // This does not classify recording start/stop/discard, file writes or vendor calls.
     if(method=="instrument.importMultisample"||method=="sample.importMany"||method=="sample.renderSelection"||method=="sample.recording.commit"
         ||method=="sample.import"||method=="instrument.import"||method=="instrument.create"
-        ||method=="track.group"||method=="track.create"||method=="track.ungroup"||method=="track.column.set"||method=="pattern.transform"||method=="document.new"||method=="document.open"||method=="graph.update"
+        ||method=="track.group"||method=="track.create"||method=="track.ungroup"||method=="track.column.set"||method=="track.columns.set"||method=="pattern.transform"||method=="document.new"||method=="document.open"||method=="graph.update"
         ||method=="plugin.parameters.preview.commit"||method=="graph.plugin.preview.commit") {
       const Tracker::WriteOutcome rejected{Tracker::CommitOutcome::NotCommitted};
       try {std::rethrow_exception(failure);}

@@ -1,5 +1,25 @@
 # Windows continuation
 
+**1 November 2026:** [ARM64EC and playback workflow](ARM64EC_FLOW_FIXES_2026-11-01.md)
+adds x64-compatible plugin hosting, automatic live gate edits, cursor-row FX,
+top-right loop controls and the M/S Space focus fix. Separate build:
+`bin/windows-arm64ec/Release/ScreamSeq.exe`. Ohmicide's editor opens; its demo
+dialog disables audio bounces, so its wet export remains unqualified.
+
+**1 November 2026:** [pattern context and channel controls](PATTERN_CONTEXT_2026-11-01.md)
+adds start-to-cursor activity links, channel-header M/S buttons and current-channel
+shortcuts. Five focused native/shared test groups and nine application tests pass.
+Separate ARM64 build: `bin/windows-pattern-context/Release/ScreamSeq.exe`.
+
+**1 November 2026:** [gate Apply fix](GATE_APPLY_FIX_2026-11-01.md) records the
+reproduced busy-worker refusal, safe deferred Apply, three passing native checks
+and three passing application tests with sample-audio evidence. Separate ARM64
+build: `bin/windows-gate-fix/Release/ScreamSeq.exe`.
+
+**31 October 2026:** [current-main alignment](CURRENT_MAIN_ALIGNMENT_2026-10-31.md)
+records the ARM64 build on `58fad76f5`, trigger/assignment fixes, passing focused
+checks, and the hardware D3D11 device-loss limitation in the full GUI run.
+
 **Current continuation, 23 October 2026:** the entries below are historical.
 The user has resumed Windows/macOS parity, prioritising plugin recording and
 complete composing journeys, with at most one coordinated build checkpoint per

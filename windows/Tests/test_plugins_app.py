@@ -187,6 +187,33 @@ class PluginAppTests(unittest.TestCase):
         self.assertEqual(self.doc()['data']['instruments'], instruments)
         self.assertEqual(set(info(created)['mapping']), {0})
 
+    def test_trigger_name_storage_limits_and_exact_native_roundtrip(self):
+        before = self.doc()
+        for name in ['x' * 32, '\u00e9' * 16, '\u754c' * 11]:
+            for dry in [False, True]:
+                with self.subTest(name=name, dry=dry):
+                    with self.assertRaises(ApiError) as error:
+                        self.write('instrument.create', empty=True, name=name, dryRun=dry)
+                    self.assertEqual(error.exception.code, -32602)
+                    self.assertEqual(self.doc(), before)
+        for index, name in enumerate(['x' * 31, '\u00e9' * 15 + 'x', '\u754c' * 10 + 'x']):
+            with self.subTest(name=name):
+                original = self.doc()['data']['instruments']
+                slot = self.write('instrument.create', empty=True, name=name)['data']['instrument']
+                info = self.client.call('instrument.get', {'instrument': slot})['data']
+                self.assertEqual(info['name'], name)
+                self.assertEqual(set(info['mapping']), {0})
+                accepted = self.doc()['data']['instruments']
+                self.write('history.undo', domain='all')
+                self.assertEqual(self.doc()['data']['instruments'], original)
+                self.write('history.redo', domain='all')
+                self.assertEqual(self.doc()['data']['instruments'], accepted)
+                path = self.folder / f'full-trigger-name-{index}.screamseq'
+                self.write('document.save', path=str(path))
+                self.write('document.open', path=str(path))
+                self.assertEqual(self.doc()['data']['instruments'], accepted)
+                self.assertEqual(self.client.call('instrument.get', {'instrument': slot})['data'], info)
+
     @unittest.skipUnless(os.environ.get('SCREAMSEQ_TEST_INSTRUMENT_CACHE'), 'opt-in installed instrument cache')
     def test_installed_instrument_trigger_native_controls_and_reopen(self):
         descriptor = next(d for d in self.client.call('plugin.discover', {'format': 'VST3'})['data'] if d['isInstrument'])

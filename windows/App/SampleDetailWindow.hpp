@@ -269,6 +269,7 @@ public:
     options(channels,{L"Both channels",L"Left",L"Right"});options(interpolation,{L"Linear draw",L"Step draw"});options(operation,{L"Reverse",L"Normalize",L"Gain",L"Fade in",L"Fade out",L"Invert",L"Remove DC",L"Smooth",L"Trim",L"Silence",L"Swap channels",L"Copy left",L"Copy right",L"Stereo average"});options(fadeCurve,{L"Linear fade",L"Smooth",L"Exponential",L"Logarithmic"});options(crossLoop,{L"Normal loop",L"Sustain loop"});options(crossMode,{L"Preserve duration",L"Overlap"});options(crossCurve,{L"Linear",L"Equal power"});options(snapMode,{L"Zero crossing",L"Grid"});options(snapDirection,{L"Nearest",L"Before",L"After"});options(pasteMode,{L"Insert",L"Overwrite",L"Mix",L"Replace selection"});createWorkflowControls();finish();
   }
   void openAt(){if(id_.empty()&&!mutationFrozen())load(true);show();}
+  void openSourceAt(unsigned slot){require(!draft()&&!pending_&&!mutationFrozen(),"Finish the existing sample draft first");load(true,slot);show();}
   void hide()override{cancelGesture();NativeToolWindow::hide();}
   void replaceAudioFromFile(std::function<std::vector<std::filesystem::path>()> choose){replaceFromFile(std::move(choose));}
   std::optional<Tracker::DocumentDraft> documentDraft()const override {
