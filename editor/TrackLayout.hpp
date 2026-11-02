@@ -56,7 +56,8 @@ struct CreateNoteTrack {
 };
 struct UngroupNoteTrack { uint64_t track = 0; };
 struct SetNoteColumnMute { uint64_t column = 0; bool muted = false; };
-using NoteTrackEdit = std::variant<GroupNoteTrack, CreateNoteTrack, UngroupNoteTrack, SetNoteColumnMute>;
+struct SetNoteColumnMutes { std::vector<SetNoteColumnMute> columns; };
+using NoteTrackEdit = std::variant<GroupNoteTrack, CreateNoteTrack, UngroupNoteTrack, SetNoteColumnMute, SetNoteColumnMutes>;
 struct PreparedNoteTrackEdit {
   NativeSong native;
   uint64_t affected = 0;

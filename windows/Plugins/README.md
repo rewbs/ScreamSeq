@@ -27,8 +27,12 @@ add_dependencies(YourApp ScreamSeqVST3Scanner)
 
 `Provider.cmake` compiles the private sources plus the unchanged vendored SDK
 identifier sources and existing `windows/Project/BinaryPlist.cpp`. It supplies
-private SDK/JSON include paths and user32/ole32/bcrypt linkage. Build ARM64 or
-x64 with MSVC C++20; plugins must match the application process architecture. Package `ScreamSeqVST3Scanner.exe` beside the app and package
+private SDK/JSON include paths and user32/ole32/bcrypt linkage. Build ARM64EC,
+ARM64 or x64 with MSVC C++20. ARM64EC uses the x64-compatible ABI and
+`x86_64-win` bundles: Windows 11 executes the host natively and x64 plugins
+under emulation in the same process. Pure ARM64 plugins require the ARM64 host;
+this is not a 32-bit plugin bridge. Vendor support and emulation performance
+remain plugin-specific. Package `ScreamSeqVST3Scanner.exe` beside the app and package
 `VST3-NOTICES/` with its license and revision pins. Never package/install the test
 fixture modules into user plugin folders. There is exactly one
 `Tracker::platformPluginBackendFactory()`; both rack and independent graph
@@ -42,7 +46,9 @@ instances reach it through the same shared `NativePlugin` facade.
   before using the factory, on the single stopped/control owner. Default scanner
   is beside the executable; default cache is
   `%LOCALAPPDATA%/ScreamSeq/vst3-arm64-cache.json` for ARM64, or
-  `vst3-x64-cache.json` in the same directory for x64. The caches remain separate.
+  `vst3-x64-cache.json` for x64, or `vst3-arm64ec-cache.json` for ARM64EC.
+  The caches remain separate, including failed scan/quarantine state; rescan
+  the library after switching architectures.
 - `factory.discover()` reads **only the persistent cache**. An absent cache is
   empty. A malformed cache is an error, not a reason to execute installed code.
   Do not invoke `discoverVST3` on startup to populate a menu.

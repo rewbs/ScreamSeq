@@ -1,5 +1,8 @@
 void applicationPlaybackLoop() {
   RestoreFixture fixture;auto &app=*fixture.app;
+  resizeRestoreClient(app,1200,800);app.layoutControls();
+  restoreCheck(IsWindowVisible(app.controls.at(playbackLoopCommand))&&IsWindowVisible(app.controls.at(playSelectionCommand)),"Top-right loop/pattern playback controls missing");
+  restoreCheck(app.defaultShortcutKeys(playbackLoopCommand)==std::vector<std::string>{"ctrl+alt+r"},"Loop shortcut missing");
   app.openNoteTrackEditor(true);const auto tool=app.createNoteTrackWindow.get();
   const auto window=tool->window(),field=GetDlgItem(window,7902);ScreamSeq::Tests::ownGuiWindow(window);
   rawDraftText(field,L"-");SetFocus(field);

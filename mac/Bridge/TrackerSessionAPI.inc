@@ -46,7 +46,7 @@
       @"sample.recording.devices", @"sample.recording.get",
       @"parameter.activity.targets", @"parameter.activity.parameters", @"parameter.activity.get", @"parameter.activity.sources", @"automation.recorded.get", @"envelope.bank.list", @"scratch.gestures.get", @"envelope.catalogue.list", @"transport.get", @"automation.formula.preview", @"automation.formula.reference", @"graph.provenance.get", @"graph.note.activity", @"graph.get", @"graph.selection.copy", @"graph.trim.get", @"graph.group.boundary", @"graph.signal.get", @"graph.scope.get", @"graph.listen.get", @"graph.automation.get", @"graph.plugin.get",
       @"recording.get", @"pattern.notes.get", @"pattern.performance.get", @"pattern.effects.get", @"instrument.envelope.get", @"instrument.envelope.copy",
-      @"plugin.programs.get", @"plugin.instruments.get", @"document.timing.get", @"track.get", @"plugin.parameters.preview.get", @"api.describe", @"document.get", @"pattern.get", @"pattern.timeline.get", @"pattern.commands", @"sample.get", @"sample.waveform.get", @"sample.snap.get", @"sample.pcm.get", @"sample.clipboard.get", @"instrument.get",
+      @"plugin.programs.get", @"plugin.instruments.get", @"document.timing.get", @"track.get", @"plugin.parameters.preview.get", @"api.describe", @"document.get", @"pattern.get", @"pattern.activity.get", @"pattern.timeline.get", @"pattern.commands", @"sample.get", @"sample.waveform.get", @"sample.snap.get", @"sample.pcm.get", @"sample.clipboard.get", @"instrument.get",
       @"plugin.preset.inspect", @"plugin.library.get", @"plugin.locations.get", @"plugin.discover", @"plugin.parameters.get", @"plugin.meters", @"plugin.state.get", @"plugin.buses.get", @"automation.get", @"automation.target.get", @"arrangement.get", @"arrangement.matrix", @"automation.pattern.get", @"automation.pattern.copy", @"mixer.get", @"mixer.meters"
     ];
     NSArray *writes = @[@"plugin.path.scan", @"plugin.path.set", @"graph.plugin.path.scan", @"graph.plugin.path.set", @"plugin.editor.open", @"plugin.editor.close", @"plugin.parameters.preview.set", @"plugin.parameters.preview.commit", @"plugin.parameters.preview.cancel",
@@ -55,7 +55,7 @@
       @"sample.renderSelection", @"sample.recording.start", @"sample.recording.stop", @"sample.recording.commit", @"sample.recording.discard",
       @"parameter.activity.watch", @"automation.recorded.edit", @"automation.recorded.clear", @"envelope.bank.save", @"scratch.gestures.set", @"scratch.gestures.remove", @"scratch.gestures.clone", @"envelope.bank.remove", @"envelope.bank.apply", @"envelope.bank.unlink", @"envelope.catalogue.publish", @"envelope.catalogue.import", @"transport.play", @"transport.stop", @"transport.note", @"transport.panic", @"transport.loop", @"graph.plugin.set", @"graph.plugin.bypass", @"graph.plugin.preset.save", @"graph.plugin.preset.load", @"graph.note.connect", @"graph.note.update", @"graph.note.disconnect", @"graph.note.restoreAssignment", @"graph.source.mute", @"graph.trim.set", @"graph.group.bypass", @"graph.makeIndependent", @"graph.selection.paste", @"graph.selection.cut", @"graph.selection.duplicate", @"graph.plugin.editor.open", @"graph.plugin.editor.commit", @"graph.plugin.editor.close", @"graph.layout.set", @"graph.presentation.set", @"graph.routes.set", @"graph.audio.connection.set", @"graph.connections.remove", @"graph.controller", @"graph.signal.clear", @"graph.scope.watch", @"graph.listen.set", @"graph.song.source.add", @"graph.song.source.update", @"graph.song.source.remove", @"graph.song.modulation.set", @"graph.song.modulation.remove", @"graph.song.group.create", @"graph.song.group.update", @"graph.song.group.remove", @"graph.song.group.export", @"graph.group.create", @"graph.group.update", @"graph.group.remove", @"graph.group.export", @"graph.create", @"graph.clone", @"graph.update", @"graph.remove", @"graph.node.add", @"graph.node.remove", @"graph.nodes.insert", @"graph.nodes.detach", @"graph.assign", @"graph.instrument.assign", @"graph.commands.set", @"graph.automation.set",
       @"recording.start", @"recording.capture", @"recording.stop", @"recording.commit", @"recording.discard", @"pattern.notes.set", @"pattern.performance.set", @"pattern.effects.set", @"pattern.effect.set", @"instrument.envelope.transform",
-      @"instrument.plugin.set", @"plugin.programs.load", @"plugin.instruments.set", @"document.timing.set", @"track.create", @"track.group", @"track.ungroup", @"track.column.set", @"pattern.apply",   @"document.patch",        @"pattern.create",    @"order.edit", @"document.save", @"document.exportModule", @"document.exportAudio",
+      @"instrument.plugin.set", @"plugin.programs.load", @"plugin.instruments.set", @"document.timing.set", @"track.create", @"track.group", @"track.ungroup", @"track.column.set", @"track.columns.set", @"pattern.apply",   @"document.patch",        @"pattern.create",    @"order.edit", @"document.save", @"document.exportModule", @"document.exportAudio",
       @"sequence.select", @"sample.patch",          @"sample.process",    @"sample.import", @"sample.importMany", @"sample.clipboard.copy", @"sample.clipboard.set", @"sample.cut", @"sample.delete", @"sample.paste",
       @"sample.pcm.set", @"sample.copyToNew", @"sample.draw", @"sample.crossfade", @"sample.loops.set", @"instrument.create",     @"instrument.import", @"instrument.importMultisample", @"instrument.patch",
       @"plugin.preset.save", @"plugin.preset.load", @"plugin.library.set", @"plugin.locations.trust", @"plugin.add", @"plugin.duplicate",      @"plugin.remove",         @"plugin.move",       @"plugin.bypass",
@@ -496,6 +496,7 @@
         if (color) found->color = *color;
         result = nativeEntity(*found);
       });
+#include "PatternActivityAPI.inc"
     } else if ([method isEqual:@"pattern.timeline.get"]) {
       allowed(@[@"pattern",@"order"]);
       const auto pattern=PATTERNINDEX(integer(p[@"pattern"],0,UINT16_MAX));
@@ -1039,6 +1040,7 @@
       require(!empty || sample==0,"An empty plugin trigger instrument cannot map a sample");
       require(empty || (!p[@"name"] && !dry),"Name and dryRun require empty:true");
       if(empty) {
+        require([name lengthOfBytesUsingEncoding:NSUTF8StringEncoding]<MAX_INSTRUMENTNAME,"Instrument names can use at most 31 UTF-8 bytes");
         require(song.GetType()==MOD_TYPE_IT || song.GetType()==MOD_TYPE_XM || song.GetType()==MOD_TYPE_MPT,"This format does not support instruments");
         // Converting a sample-only song must preserve every existing sample number.
         const auto previous=std::max(1,int(song.GetNumSamples()));

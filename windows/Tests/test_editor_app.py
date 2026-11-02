@@ -190,7 +190,15 @@ class EditorAppTests(unittest.TestCase):
                     time.sleep(.1)
             hwnd = desktop.hwnd(pid)
             for control_id, key in ((132, 'octave'), (133, 'editStep'), (200, None)):
+                if control_id == 200:
+                    desktop.send(hwnd, 0x111, 648)  # Reveal the native Samples editor before clicking its list.
+                    client.call('workspace.get')
                 control = user.GetDlgItem(hwnd, control_id)
+                for _ in range(100):
+                    if user.IsWindowVisible(control):
+                        break
+                    time.sleep(.02)  # Context actions follow the newly focused editor on refresh.
+                self.assertTrue(user.IsWindowVisible(control), f'control {control_id} must be visible')
                 desktop.send(control, 0x201, 1, 5 | (5 << 16))  # targeted click, private desktop
                 desktop.send(control, 0x202, 0, 5 | (5 << 16))
                 if key:
@@ -304,13 +312,15 @@ class EditorAppTests(unittest.TestCase):
         cell = client.call('pattern.get', {'pattern': 0, 'startRow': 1, 'rowCount': 1, 'channelCount': 1})['data']['cells'][0]
         self.assertEqual((cell['volumeCommand'], cell['volume']), (1, 32))
         self.navigate(client, column=3)
-        self.send(process, 0x100, ord('A'))
+        speed = next(c for c in client.call('pattern.commands')['data']['effect'] if c['name'] == 'Set Speed')
+        for key in speed['displayCode']:
+            self.send(process, 0x100, ord(key))
         self.navigate(client, column=4)
         self.send(process, 0x100, ord('0'))
         self.send(process, 0x100, ord('6'))
         cell = client.call('pattern.get', {'pattern': 0, 'startRow': 1, 'rowCount': 1, 'channelCount': 1})['data']['cells'][0]
         self.assertEqual(cell['parameter'], 6)
-        self.assertNotEqual(cell['effect'], 0)
+        self.assertEqual(cell['effect'], speed['command'])
         note_fields = {k: cell[k] for k in ('note', 'instrument', 'volumeCommand', 'volume')}
         self.send(process, 0x100, 0x2E)
         cell = client.call('pattern.get', {'pattern': 0, 'startRow': 1, 'rowCount': 1, 'channelCount': 1})['data']['cells'][0]
@@ -481,8 +491,9 @@ class EditorAppTests(unittest.TestCase):
 
     def test_worker_keeps_stop_and_navigation_responsive(self):
         import concurrent.futures
-        client, process = self.launch()
-        self.write(client, 'pattern.create', rows=1024)
+        exe = Path(os.environ.get('SCREAMSEQ_TEST_EXE', str(ROOT / 'bin/windows-editor/Release/ScreamSeq.exe')))
+        subprocess.run([str(exe.with_name('document-controller-tests.exe')), '--large-fixture', str(self.directory)], check=True, timeout=120)
+        client, process = self.launch(self.directory / 'large.screamseq')
         user = ctypes.WinDLL('user32')
         user.GetWindowTextW.argtypes = [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int]
         hwnd = self.hwnd(process)
@@ -490,8 +501,11 @@ class EditorAppTests(unittest.TestCase):
             work = pool.submit(self.write, client, 'document.patch', channels=96)
             observed = False
             for _ in range(1000):
+                # A large structural edit crosses the deliberate 150ms busy
+                # presentation delay. Read the native window without queuing
+                # another API request behind the outstanding write.
                 title = ctypes.create_unicode_buffer(512)
-                user.GetWindowTextW(hwnd, title, 512)
+                user.GetWindowTextW(hwnd, title, len(title))
                 if 'Document worker busy' in title.value:
                     observed = True
                     break
@@ -578,20 +592,32 @@ class EditorAppTests(unittest.TestCase):
         self.assertEqual(reopened.call('document.get')['data']['title'], title)
         self.assertEqual(reopened.call('document.get')['data']['patterns'], before['patterns'])
 
-    def test_old_native_rejection_and_current_dry_run_version(self):
+    def test_old_native_recovery_preserves_source_and_current_dry_run_version(self):
         import plistlib
         legacy = self.directory / 'legacy.resonance'
         legacy.write_bytes(plistlib.dumps({'version': 1, 'module': (ROOT / 'test/test.mod').read_bytes(), 'plugins': [], 'automation': []}, fmt=plistlib.FMT_BINARY))
         client, _ = self.launch()
+        original = legacy.read_bytes()
+        self.write(client, 'document.open', path=str(legacy), discard=True)
+        recovered = client.call('document.get')['data']
+        self.assertTrue(recovered['loadWarnings'])
+        self.assertTrue(recovered['requiresSaveAs'])
+        self.assertEqual(recovered['format'], 'MOD')
         before = client.call('context.get')
-        with self.assertRaises(ApiError):
-            self.write(client, 'document.open', path=str(legacy), discard=True)
-        self.assertEqual(client.call('context.get'), before)
+        for dry in (False, True):
+            with self.assertRaises(ApiError):
+                self.write(client, 'document.save', path=str(legacy), overwrite=True, dryRun=dry)
+        self.assertEqual(legacy.read_bytes(), original)
         target = self.directory / 'upgraded.screamseq'
         result = self.write(client, 'document.save', path=str(target), dryRun=True)
         self.assertEqual(result['data']['projectVersion'], 6)
         self.assertFalse(target.exists())
         self.assertEqual(client.call('context.get'), before)
+        self.write(client, 'document.save', path=str(target))
+        reopened, _ = self.launch(target)
+        self.assertEqual(reopened.call('document.get')['data']['format'], 'MOD')
+        self.assertFalse(reopened.call('document.get')['data']['requiresSaveAs'])
+        self.assertEqual(legacy.read_bytes(), original)
 
     def test_timeline_worker_save_reopen(self):
         client, _ = self.launch()

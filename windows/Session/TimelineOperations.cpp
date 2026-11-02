@@ -66,7 +66,7 @@ Json preciseEffects(OpenMPT::MODTYPE format){
 }
 }
 TimelineOperations::TimelineOperations(Tracker::Document &d,std::function<void()> stop):document_(d),stopPlayback_(std::move(stop)){}
-std::vector<std::string> TimelineOperations::reads(){return {"pattern.timeline.get","pattern.notes.get","document.timing.get","automation.formula.reference","automation.formula.preview"};}
+std::vector<std::string> TimelineOperations::reads(){return {"pattern.activity.get","pattern.timeline.get","pattern.notes.get","document.timing.get","automation.formula.reference","automation.formula.preview"};}
 std::vector<std::string> TimelineOperations::writes(){return {"pattern.notes.set","document.timing.set"};}
 Json TimelineOperations::invoke(const std::string &method,const Json &p){
   using namespace Tracker;

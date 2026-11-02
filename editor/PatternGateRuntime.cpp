@@ -4,6 +4,9 @@
 namespace Tracker {
 using namespace OpenMPT;
 PatternGateRuntime::PatternGateRuntime(const NativeSong &native,CSoundFile &song) {
+  // Reserve sample destinations once. Live GT insertion never changes slot
+  // addresses or the hosted mixer bindings while the callback is using them.
+  for(uint16_t channel=0;channel<song.GetNumChannels();++channel)for(auto kind:{GateTarget::Volume,GateTarget::Pitch,GateTarget::Pan})slots_.push_back({{channel,kind,{},{}},{},{},{}});
   for(const auto &c:native.performance.commands)if(isGate(c)){
     const auto p=std::find_if(native.patterns.begin(),native.patterns.end(),[&](const auto &v){return v.second.id==c.pattern;});
     const auto t=std::find_if(native.tracks.begin(),native.tracks.end(),[&](const auto &v){return v.second.id==c.track;});
@@ -17,13 +20,15 @@ PatternGateRuntime::PatternGateRuntime(const NativeSong &native,CSoundFile &song
     }
     events_[p->first].push_back(std::move(e));
   }
-  if(slots_.size()>256)throw std::invalid_argument("Use at most 256 channel/destination gate targets");
+  if(slots_.size()>3*song.GetNumChannels()+256)throw std::invalid_argument("Use at most 256 plugin gate targets");
   for(auto &[p,events]:events_)std::sort(events.begin(),events.end(),[](const auto &a,const auto &b){return std::tie(a.command.position,a.channel,a.command.column)<std::tie(b.command.position,b.channel,b.command.column);});
   if(!slots_.empty())chase(native,song);
 }
 void PatternGateRuntime::apply(const Event &e,double late) noexcept {
-  if(e.command.native==NativePatternOp::GateStop){if(e.slot==SIZE_MAX){for(auto &s:slots_)if(s.target.channel==e.channel)s.state.active=false;}else slots_[e.slot].state.active=false;return;}
+  if(e.command.native==NativePatternOp::GateStop){if(e.slot==SIZE_MAX){for(auto &s:slots_)if(s.target.channel==e.channel){s.state.active=false;s.suspended=false;}}else {slots_[e.slot].state.active=false;slots_[e.slot].suspended=false;}return;}
   auto &s=slots_[e.slot].state;const auto &a=e.command.arguments;using namespace GateArgument;
+  slots_[e.slot].source=e.command;
+  slots_[e.slot].suspended=false;
   s.signal={a[GateArgument::floor],a[ceiling],a[period],a[phase],a[width],a[rise],a[fall],GateShape(uint8_t(a[riseShape])),GateShape(uint8_t(a[fallShape]))};
   s.elapsed=late;s.serial=++serial_;s.pitchRange=uint8_t(a[pitchRange]);s.active=true;
 }
@@ -57,9 +62,40 @@ void PatternGateRuntime::chase(const NativeSong &native,CSoundFile &song){
   const auto result=song.GetLength(eNoAdjust,target);
   if(result.empty()||!result.back().targetReached)for(auto &s:slots_)s.state.active=false;
 }
-uint32_t PatternGateRuntime::limit(const CSoundFile &song,uint32_t count)const noexcept {
+std::unique_ptr<PatternGateRuntime::Update> PatternGateRuntime::prepareUpdate(const NativeSong &native)const {
+  auto result=std::make_unique<Update>();
+  for(const auto &c:native.performance.commands)if(isGate(c)){
+    const auto p=std::find_if(native.patterns.begin(),native.patterns.end(),[&](const auto &v){return v.second.id==c.pattern;});
+    const auto t=std::find_if(native.tracks.begin(),native.tracks.end(),[&](const auto &v){return v.second.id==c.track;});
+    if(p==native.patterns.end()||t==native.tracks.end())throw std::invalid_argument("Unresolved live gate target");
+    Event e{c,t->first};const auto kind=GateTarget(uint8_t(c.arguments[0]));
+    if(kind!=GateTarget::All){
+      Target target{t->first,kind,{},{}};if(kind==GateTarget::Parameter){const auto &b=native.performance.bindings.at(gateBinding(c));target.plugin=b.plugin;target.parameter=b.parameter;}
+      const auto found=std::find_if(slots_.begin(),slots_.end(),[&](const auto &s){return std::tie(s.target.channel,s.target.kind,s.target.plugin,s.target.parameter)==std::tie(target.channel,target.kind,target.plugin,target.parameter);});
+      if(found==slots_.end())throw std::invalid_argument("Stop playback to add a new plugin-parameter gate destination");
+      e.slot=size_t(found-slots_.begin());
+    }
+    result->events[p->first].push_back(e);result->sources.emplace(key(c),e);
+  }
+  for(auto &[p,events]:result->events)std::sort(events.begin(),events.end(),[](const auto &a,const auto &b){return std::tie(a.command.position,a.channel,a.command.column)<std::tie(b.command.position,b.channel,b.command.column);});
+  return result;
+}
+void PatternGateRuntime::adopt(const CSoundFile &song)noexcept {
+  const auto *next=updates_.consume();if(!next)return;
+  // Replacing an already sounding gate preserves its musical clock. Removed
+  // commands reveal the underlying value; past new onsets wait for the next visit.
+  for(size_t i=0;i<slots_.size();++i)if(slots_[i].state.active||slots_[i].suspended){
+    auto &slot=slots_[i];const auto found=next->sources.find(key(slot.source));
+    if(found==next->sources.end()||found->second.command.native!=NativePatternOp::Gate||found->second.slot!=i){slot.state.active=false;slot.suspended=true;continue;}
+    if(slot.suspended||found->second.command!=slot.source){const auto elapsed=slot.state.elapsed;apply(found->second,elapsed);slot.state.elapsed=std::fmod(elapsed,slot.state.signal.period);}
+  }
+  update_=next;const auto &s=song.m_PlayState;const auto found=events().find(s.m_nPattern);current_=found==events().end()?nullptr:&found->second;
+  next_=current_?size_t(std::lower_bound(current_->begin(),current_->end(),s.NativeRowPosition(performanceUnitsPerRow)-1e-7,[](const Event &e,double at){return e.command.position<at;})-current_->begin()):0;
+}
+uint32_t PatternGateRuntime::limit(const CSoundFile &song,uint32_t count) noexcept {
+  adopt(song);
   const auto &s=song.m_PlayState;if(!count||s.m_flags[SONG_PAUSED|SONG_FADINGSONG])return count;
-  const auto found=events_.find(s.m_nPattern);if(found==events_.end())return count;
+  const auto found=events().find(s.m_nPattern);if(found==events().end())return count;
   const double begin=s.NativeRowPosition(performanceUnitsPerRow),step=s.NativeRowStep(performanceUnitsPerRow);if(step<=0)return count;
   const auto event=std::upper_bound(found->second.begin(),found->second.end(),begin+1e-7,[](double p,const Event &e){return p<e.command.position;});
   if(event!=found->second.end()){const auto frames=std::ceil((event->command.position-begin)/step-1e-8);if(frames<count)count=uint32_t(std::max(1.,frames));}
@@ -71,14 +107,16 @@ void PatternGateRuntime::prepare(CSoundFile &song,uint32_t count)noexcept {
   if(advancing){
     const double position=s.NativeRowPosition(performanceUnitsPerRow),step=s.NativeRowStep(performanceUnitsPerRow);
     const bool entering=pattern_!=s.m_nPattern||order_!=s.m_nCurrentOrder||position<=previous_||(row_!=UINT32_MAX&&s.m_nRow!=row_&&s.m_nRow!=row_+1);
-    if(entering){const auto found=events_.find(s.m_nPattern);current_=found==events_.end()?nullptr:&found->second;
+    if(entering){const auto found=events().find(s.m_nPattern);current_=found==events().end()?nullptr:&found->second;
       next_=current_?size_t(std::lower_bound(current_->begin(),current_->end(),position-1e-7,[](const Event &e,double at){return e.command.position<at;})-current_->begin()):0;}
     pattern_=s.m_nPattern;order_=s.m_nCurrentOrder;row_=s.m_nRow;previous_=position;
     while(current_&&next_<current_->size()&&(*current_)[next_].command.position<=position+1e-7){const auto &e=(*current_)[next_++];apply(e,std::max(0.,(position-e.command.position)/step*s.NativeBeatStep()));}
   }
   for(auto &slot:slots_){auto &v=slot.snapshot;v=slot.state;v.beatsPerFrame=advancing?s.NativeBeatStep():0;
     // Clock continues through muted channels; their output remains muted by the mixer.
-    if(advancing&&v.active)slot.state.elapsed=std::fmod(slot.state.elapsed+count*v.beatsPerFrame,v.signal.period);
+    // A live deletion is reversible: keep the old clock for Undo, without
+    // exposing its modulation. A played GX or replacement GT retires it.
+    if(advancing&&(v.active||slot.suspended))slot.state.elapsed=std::fmod(slot.state.elapsed+count*v.beatsPerFrame,v.signal.period);
     if(!v.active||!advancing)continue;
     switch(slot.target.kind){case GateTarget::Volume:song.nativeGateVolumes[slot.target.channel]=&v;break;
     case GateTarget::Pan:song.nativeGatePans[slot.target.channel]=&v;break;

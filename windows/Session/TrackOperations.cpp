@@ -59,7 +59,7 @@ Json noteTrackLayout(const Tracker::NativeSong &native, const OpenMPT::CSoundFil
 TrackOperations::TrackOperations(Tracker::Document &document, std::function<void()> stop, TrackHostHooks host)
   : document_(document), stop_(std::move(stop)), host_(std::move(host)) {}
 std::vector<std::string> TrackOperations::reads() { return {"track.get"}; }
-std::vector<std::string> TrackOperations::writes() { return {"track.group", "track.create", "track.ungroup", "track.column.set"}; }
+std::vector<std::string> TrackOperations::writes() { return {"track.group", "track.create", "track.ungroup", "track.column.set", "track.columns.set"}; }
 Json TrackOperations::invoke(const std::string &method, const Json &p) {
   try {
     const auto &song = document_.song();
@@ -83,6 +83,13 @@ Json TrackOperations::invoke(const std::string &method, const Json &p) {
         return Tracker::GroupNoteTrack{std::move(channels), name(), output()};
       }
       if (method == "track.ungroup") { keys(p, {"track", "dryRun"}); return Tracker::UngroupNoteTrack{identity(p.at("track"))}; }
+      if(method=="track.columns.set") {
+        keys(p,{"columns","dryRun"});const auto &columns=p.at("columns");
+        need(columns.is_array()&&!columns.empty()&&columns.size()<=127,"Expected 1..127 note columns");
+        Tracker::SetNoteColumnMutes batch;
+        for(const auto &item:columns){keys(item,{"column","mute"});batch.columns.push_back({identity(item.at("column")),boolean(item.at("mute"))});}
+        return batch;
+      }
       keys(p, {"column", "mute", "dryRun"}); return Tracker::SetNoteColumnMute{identity(p.at("column")), boolean(p.at("mute"))};
     }();
     auto prepared = Tracker::prepareNoteTrackEdit(document_.native(), song, edit);

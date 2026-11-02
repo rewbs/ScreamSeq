@@ -15,6 +15,12 @@
             p[@"output"] ? std::optional<uint64_t>(decodeNativeID(p[@"output"])) : std::nullopt};
         } else if ([method isEqual:@"track.ungroup"]) {
           allowed(@[@"track", @"dryRun"]); return UngroupNoteTrack{decodeNativeID(p[@"track"])};
+        } else if ([method isEqual:@"track.columns.set"]) {
+          allowed(@[@"columns", @"dryRun"]);
+          NSArray *columns=array(p[@"columns"],127);require(columns.count>0,"Choose one or more columns");
+          SetNoteColumnMutes batch;
+          for(id raw in columns){auto item=object(raw);keys(item,@[@"column",@"mute"]);batch.columns.push_back({decodeNativeID(item[@"column"]),boolean(item[@"mute"])});}
+          return batch;
         } else if ([method isEqual:@"track.column.set"]) {
           allowed(@[@"column", @"mute", @"dryRun"]);
           return SetNoteColumnMute{decodeNativeID(p[@"column"]), boolean(p[@"mute"])};
