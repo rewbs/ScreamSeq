@@ -630,6 +630,18 @@ Json PluginOperations::invoke(const std::string &method,const Json &p) {
     probe.loadProgram(id);const auto captured=probe.state();rack[index]["state"]=blob(captured.state);rack[index]["audioLayout"]=captured.audioLayout;commit(std::move(rack),std::move(automation));return result;
   } else throw Api::ApiError(-32601,"Unknown plugin operation");
   const bool changed=rack!=project_.preserved.at("plugins")||automation!=project_.preserved.at("automation");
-  if(!dry){commit(std::move(rack),std::move(automation),false,method=="plugin.parameters.set",liveChanges);if(!touch.is_null()){lastTouched_=std::move(touch);++touchSequence_;}}return {{"wouldChange",changed},{"dryRun",dry}};
+  if(!dry){
+    const bool keepOpen=method=="plugin.parameters.set";
+    commit(std::move(rack),std::move(automation),keepOpen,keepOpen,liveChanges);
+    if(keepOpen){
+      if(auto it=editors_.find(state.instanceID);it!=editors_.end()&&it->second){
+        for(const auto &change:liveChanges)(void)it->second->parameter(change.id,change.value);
+      }
+      pendingParameters_.erase(state.instanceID);
+      pendingLiveParameters_.erase(state.instanceID);
+    }
+    if(!touch.is_null()){lastTouched_=std::move(touch);++touchSequence_;}
+  }
+  return {{"wouldChange",changed},{"dryRun",dry}};
 }
 }

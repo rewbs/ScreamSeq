@@ -2,13 +2,14 @@
 #include "NativeToolWindow.hpp"
 #include "NativeWriteCompletion.hpp"
 #include <commdlg.h>
+#include <shobjidl.h>
 #include <filesystem>
 namespace ScreamSeq {
 class PluginPathWindow final : public NativeToolWindow {
   using Json=Api::Json;
   using Request=std::function<Json(const std::string &,const Json &)>;
   using Context=std::function<std::pair<std::string,std::string>()>;
-  enum : int {candidate=3601,preview,reconnect,reload,scan,browse,rescan,close,savedPath,chosenPath,manualPath,discardDraft,
+  enum : int {candidate=3601,preview,reconnect,reload,scan,browse,browseFolder,rescan,close,savedPath,chosenPath,manualPath,discardDraft,
     heading=3700,savedLabel,candidateLabel,manualLabel,statusLabel};
   Request request_;Context context_;Json target_,candidates_=Json::array();
   NativeWriteCompletion::Write write_;NativeWriteCompletion completion_;Json report_=Json::object();
@@ -115,6 +116,29 @@ class PluginPathWindow final : public NativeToolWindow {
       if(context_()!=captured||generation!=generation_)throw std::runtime_error("Song or path draft changed while choosing a plugin / retained; Reload before scanning");set(manualPath,std::wstring(path.data()));scanPath();
     }catch(...){pending_=false;layout();throw;}layout();
   }
+  void chooseFolder(){
+    if(pending_)return;requireResolved();current();const auto captured=context_();const auto generation=generation_;pending_=true;layout();
+    try{
+      IFileOpenDialog *dialog=nullptr;
+      if(FAILED(CoCreateInstance(CLSID_FileOpenDialog,nullptr,CLSCTX_INPROC_SERVER,IID_PPV_ARGS(&dialog)))||!dialog)throw std::runtime_error("Could not open the plugin bundle chooser");
+      struct ReleaseDialog{IFileOpenDialog *p;~ReleaseDialog(){if(p)p->Release();}}guard{dialog};
+      DWORD options=0;dialog->GetOptions(&options);
+      dialog->SetOptions(options|FOS_PICKFOLDERS|FOS_FORCEFILESYSTEM|FOS_PATHMUSTEXIST|FOS_NOCHANGEDIR|FOS_DONTADDTORECENT);
+      dialog->SetTitle(L"Choose Windows VST3 bundle folder");
+      const HRESULT shown=dialog->Show(window_);
+      pending_=false;
+      if(shown==HRESULT_FROM_WIN32(ERROR_CANCELLED)){layout();return;}
+      if(FAILED(shown))throw std::runtime_error("Could not open the plugin bundle chooser");
+      IShellItem *item=nullptr;
+      if(FAILED(dialog->GetResult(&item))||!item)throw std::runtime_error("Could not read selected plugin bundle folder");
+      struct ReleaseItem{IShellItem *p;~ReleaseItem(){if(p)p->Release();}}itemGuard{item};
+      PWSTR rawPath=nullptr;
+      if(FAILED(item->GetDisplayName(SIGDN_FILESYSPATH,&rawPath))||!rawPath)throw std::runtime_error("Selected folder is not a filesystem path");
+      struct FreePath{PWSTR p;~FreePath(){if(p)CoTaskMemFree(p);}}pathGuard{rawPath};
+      if(context_()!=captured||generation!=generation_)throw std::runtime_error("Song or path draft changed while choosing a plugin / retained; Reload before scanning");
+      set(manualPath,std::wstring(rawPath));scanPath();
+    }catch(...){pending_=false;layout();throw;}layout();
+  }
   void scanInstalled(){
     if(pending_)return;requireResolved();current();runScan("plugin.discover",{{"format","VST3"},{"rescan",true}});
   }
@@ -125,7 +149,7 @@ class PluginPathWindow final : public NativeToolWindow {
     if(id==close&&notification==BN_CLICKED){hide();return;}if(pending_)return;
     if(notification!=BN_CLICKED)return;
     if(id==discardDraft){requireResolved();setting_=true;set(manualPath,L"");setting_=false;baseline_=raw();++generation_;hide();return;}
-    if(id==preview||id==reconnect)apply(id==preview);else if(id==reload)load();else if(id==scan)scanPath();else if(id==browse)chooseFile();else if(id==rescan)scanInstalled();
+    if(id==preview||id==reconnect)apply(id==preview);else if(id==reload)load();else if(id==scan)scanPath();else if(id==browse)chooseFile();else if(id==browseFolder)chooseFolder();else if(id==rescan)scanInstalled();
   }
   bool key(WPARAM value,bool ctrl,bool)override{
     if(value==VK_ESCAPE){hide();return true;}if(ctrl&&value=='R'){load();return true;}if(ctrl&&value==VK_RETURN){apply(false);return true;}
@@ -135,9 +159,9 @@ class PluginPathWindow final : public NativeToolWindow {
   void layout()override{
     if(!ready_)return;const auto [w,h]=size();place(heading,16,14,w-144,25);place(reload,w-120,14,104,26);place(savedLabel,16,49,w-32,20);place(savedPath,16,73,w-32,26);
     place(candidateLabel,16,112,w-32,20);place(candidate,16,137,w-32,240);place(chosenPath,16,173,w-32,26);place(preview,16,213,144,26);place(reconnect,168,213,144,26);place(discardDraft,320,213,144,26);
-    place(manualLabel,16,260,w-32,20);place(manualPath,16,284,w-174,26);place(browse,w-150,284,134,26);place(scan,16,321,144,26);place(rescan,168,321,168,26);place(close,w-120,321,104,26);place(statusLabel,16,362,w-32,std::max(48.0f,h-378));
+    place(manualLabel,16,260,w-32,20);place(manualPath,16,284,w-304,26);place(browseFolder,w-280,284,126,26);place(browse,w-146,284,130,26);place(scan,16,321,144,26);place(rescan,168,321,168,26);place(close,w-120,321,104,26);place(statusLabel,16,362,w-32,std::max(48.0f,h-378));
     for(int id:{candidate,manualPath})EnableWindow(controls_.at(id),!pending_);
-    for(int id:{reload,scan,browse,rescan,discardDraft})EnableWindow(controls_.at(id),!pending_&&!unresolved());
+    for(int id:{reload,scan,browse,browseFolder,rescan,discardDraft})EnableWindow(controls_.at(id),!pending_&&!unresolved());
     EnableWindow(controls_.at(preview),!pending_&&!unresolved()&&selected_>=0);
     set(reconnect,unresolved()?L"Review result":L"Reconnect");EnableWindow(controls_.at(reconnect),!pending_&&(unresolved()||selected_>=0));
   }
@@ -145,7 +169,7 @@ public:
   PluginPathWindow(HWND owner,Json target,Request request,Context context,NativeWriteCompletion::Write write):NativeToolWindow(owner),request_(std::move(request)),context_(std::move(context)),target_(std::move(target)),write_(std::move(write)){
     prefix_=target_.contains("graph")?"graph.plugin.path.":"plugin.path.";minimumWidth_=700;minimumHeight_=480;create(L"ScreamSeq.PluginPath",L"Reconnect Windows plugin",820,540);
     combo(candidate);for(int id:{savedPath,chosenPath})add(id,L"EDIT",L"",ES_AUTOHSCROLL|ES_READONLY);edit(manualPath,L"",8192);
-    for(auto [id,name]:std::initializer_list<std::pair<int,const wchar_t *>>{{preview,L"Verify module"},{reconnect,L"Reconnect"},{reload,L"Reload"},{scan,L"Scan path"},{browse,L"Browse module…"},{rescan,L"Rescan installed"},{close,L"Close"},{discardDraft,L"Discard draft"}})button(id,name);
+    for(auto [id,name]:std::initializer_list<std::pair<int,const wchar_t *>>{{preview,L"Verify module"},{reconnect,L"Reconnect"},{reload,L"Reload"},{scan,L"Scan path"},{browseFolder,L"Browse bundle…"},{browse,L"Browse module…"},{rescan,L"Rescan installed"},{close,L"Close"},{discardDraft,L"Discard draft"}})button(id,name);
     for(auto [id,name]:std::initializer_list<std::pair<int,const wchar_t *>>{{heading,L"Reconnect plugin"},{savedLabel,L"Saved location"},{candidateLabel,L"Scanned Windows modules with the same plugin class"},{manualLabel,L"Or scan an absolute VST3 bundle or module path"},{statusLabel,L""}})label(id,name);
     const auto captured=context_();document_=captured.first;revision_=captured.second;finish();load();
   }

@@ -63,14 +63,30 @@ final class KeyboardSettings {
     }
   }
   static var volatileMapping: (lower:String,upper:String)?
+  private static var cachedPersistedMapping: (lower:String,upper:String)?
   static var playStopKeysProvider: (() -> [String])?
-  static var legacyPlayStopKeys:[String] {UserDefaults.standard.bool(forKey:"returnStartsPlayback") ? ["return"]:["space"]}
+  private static var cachedLegacyPlayStopKeys: [String]?
+  static var legacyPlayStopKeys:[String] {
+    if let cached = cachedLegacyPlayStopKeys { return cached }
+    let value = UserDefaults.standard.bool(forKey:"returnStartsPlayback") ? ["return"]:["space"]
+    cachedLegacyPlayStopKeys = value
+    return value
+  }
   static var playStopKeys:[String] {playStopKeysProvider?() ?? legacyPlayStopKeys}
+  private static func persistedMapping() -> (lower:String,upper:String) {
+    if let cached = cachedPersistedMapping { return cached }
+    let dict = UserDefaults.standard.dictionary(forKey:"musicalNoteKeys")
+    let lower = (dict?["lower"] as? String) ?? UserDefaults.standard.string(forKey:"noteKeysLow") ?? "zsxdcvgbhnjm"
+    let upper = (dict?["upper"] as? String) ?? UserDefaults.standard.string(forKey:"noteKeysHigh") ?? "q2w3er5t6y7u"
+    cachedPersistedMapping = (lower, upper)
+    return (lower, upper)
+  }
+  static func invalidateCache() { cachedPersistedMapping = nil; cachedLegacyPlayStopKeys = nil }
   static var lowKeys: String {
-    volatileMapping?.lower ?? (UserDefaults.standard.dictionary(forKey:"musicalNoteKeys")?["lower"] as? String) ?? UserDefaults.standard.string(forKey:"noteKeysLow") ?? "zsxdcvgbhnjm"
+    volatileMapping?.lower ?? persistedMapping().lower
   }
   static var highKeys: String {
-    volatileMapping?.upper ?? (UserDefaults.standard.dictionary(forKey:"musicalNoteKeys")?["upper"] as? String) ?? UserDefaults.standard.string(forKey: "noteKeysHigh") ?? "q2w3er5t6y7u"
+    volatileMapping?.upper ?? persistedMapping().upper
   }
   static var transportKey: UInt16 {
     playStopKeys == ["space"] ? 49 : playStopKeys == ["return"] ? 36 : UInt16.max
@@ -109,7 +125,7 @@ final class KeyboardSettings {
     return fields.merging(["revision":revision]){_,new in new}
   }
   static func publish(_ mapping:(lower:String,upper:String),persist:Bool) {
-    if persist {UserDefaults.standard.set(["lower":mapping.lower,"upper":mapping.upper],forKey:"musicalNoteKeys");volatileMapping=nil}
+    if persist {UserDefaults.standard.set(["lower":mapping.lower,"upper":mapping.upper],forKey:"musicalNoteKeys");volatileMapping=nil;cachedPersistedMapping=mapping}
     else {volatileMapping=mapping}
   }
   var window:NSWindow?

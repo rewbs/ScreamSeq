@@ -100,9 +100,12 @@ Json TrackOperations::invoke(const std::string &method, const Json &p) {
       const bool muteChanged = document_.native().columnMutes != prepared.native.columnMutes;
       const auto publish = muteChanged && host_.prepareColumnMutes ? host_.prepareColumnMutes(document_.native(), prepared.native) : std::function<void()>{};
       if ((prepared.appendedColumns || prepared.mixerChanged) && stop_) stop_();
-      if (prepared.appendedColumns) document_.transaction([&](OpenMPT::CSoundFile &next, Tracker::NativeSong &native) {
-        Tracker::Document::resizeChannels(next, int(next.GetNumChannels() + prepared.appendedColumns)); native = std::move(prepared.native);
-      });
+      if (prepared.appendedColumns) {
+        document_.transaction([&](OpenMPT::CSoundFile &next, Tracker::NativeSong &native) {
+          Tracker::Document::resizeChannels(next, int(next.GetNumChannels() + prepared.appendedColumns)); native = std::move(prepared.native);
+        });
+        result["layout"] = noteTrackLayout(document_.native(), document_.song());
+      }
       else document_.annotate([&](Tracker::NativeSong &native) { native = std::move(prepared.native); }, publish);
     }
     return result;

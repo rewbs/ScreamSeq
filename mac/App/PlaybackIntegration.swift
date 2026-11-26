@@ -21,7 +21,12 @@ extension AppController {
       return false
     }
     let focus = focusedView(event)
-    if modifiers.isEmpty,event.keyCode==36,let grid=focus as? PatternView,grid.column==1 {return false}
+    if modifiers.isEmpty, event.keyCode == 36, let grid = focus as? PatternView {
+      let hasLocalReturn = grid.column == 1
+        || (grid.column <= 2 && !grid.model.notes(grid.cursorRow, grid.cursorChannel).isEmpty)
+        || (grid.column >= 3 && grid.model.nativeCommand(grid.cursorRow, grid.cursorChannel, grid.effectColumn) != nil)
+      if hasLocalReturn { return false }
+    }
     if focus is FormulaCodeView, modifiers == [.control], event.keyCode == 49 { return false }
     // These responders have an actual local binding: text insertion, sample preview,
     // control activation, or Return's default action. Modified Space remains global.

@@ -196,6 +196,7 @@
         for(int id:{playbackLoopCommand,liveKeysCommand,composeCommand,patternCommand,soundCommand,notesInspectorCommand,samplesCommand,dockNotes,dockSamples,dockEffects,dockPlugins,dockMixer,dockGraph})
             ScreamSeq::NativeControls::active(controls.at(id),controlActive(id));
         rememberCompletedWorkspaceLayout();
+        if(workspaceState.layout!=lastAnalyticsLayout){lastAnalyticsLayout=workspaceState.layout;usageAnalytics.recordLayoutChange(lastAnalyticsLayout);}
         layoutPatternNudgeEditor();
         refreshContextPanel(true);
         layoutChannelButtons();
@@ -235,11 +236,13 @@
         for(int c=0;c<127;++c){add(channelMuteFirst+c,L"M");add(channelSoloFirst+c,L"S");}
         add(activityOpenCommand,L"Open selected ↗");
         controls[activityListCommand]=CreateWindowExW(WS_EX_CLIENTEDGE,L"LISTBOX",L"Row activity from song start",WS_CHILD|WS_TABSTOP|WS_VSCROLL|WS_HSCROLL|LBS_NOTIFY|LBS_NOINTEGRALHEIGHT,0,0,1,1,window,reinterpret_cast<HMENU>(INT_PTR(activityListCommand)),GetModuleHandleW(nullptr),nullptr);
-        SetWindowSubclass(controls.at(activityListCommand),[](HWND h,UINT m,WPARAM w,LPARAM l,UINT_PTR,DWORD_PTR)->LRESULT{
+        static constexpr SUBCLASSPROC activityListProc=[](HWND h,UINT m,WPARAM w,LPARAM l,UINT_PTR id,DWORD_PTR)->LRESULT{
+            if(m==WM_NCDESTROY){RemoveWindowSubclass(h,activityListProc,id);return DefSubclassProc(h,m,w,l);}
             if(m==WM_KEYDOWN&&w==VK_RETURN){SendMessageW(GetParent(h),WM_COMMAND,activityOpenCommand,0);return 0;}
             if(m==WM_GETDLGCODE&&w==VK_RETURN)return DLGC_WANTALLKEYS;
             return DefSubclassProc(h,m,w,l);
-        },0x50414354,0);
+        };
+        SetWindowSubclass(controls.at(activityListCommand),activityListProc,0x50414354,0);
         for(int id:{sampleStartField,sampleEndField}) {
             controls[id]=CreateWindowExW(WS_EX_CLIENTEDGE,L"EDIT",L"0",WS_CHILD|WS_TABSTOP|ES_NUMBER|ES_AUTOHSCROLL,0,0,1,1,window,reinterpret_cast<HMENU>(INT_PTR(id)),GetModuleHandleW(nullptr),nullptr);
             SendMessageW(controls.at(id),EM_SETLIMITTEXT,10,0);
@@ -275,7 +278,23 @@
 		palette=std::make_unique<ScreamSeq::CommandPalette>(window,workspaceCommands,[this](int id){runPaletteCommand(id);});connectPaletteShortcuts();installMenuBar();layoutControls();installPatternAccessibility();
 	}
 	void command(int id) {
+		struct AnalyticsStatusGuard { Application &app; ~AnalyticsStatusGuard(){ app.observeAnalyticsStatus(); } } statusGuard{*this};
 		try {
+            if(id==usageAnalyticsToggleCommand){toggleUsageAnalytics();return;}
+            if(id==usageAnalyticsBookmarkCommand){triggerUsageBookmark(activeCommandSource);return;}
+            const bool isUndo=(id==undoCommand||id==pluginUndo);
+            const bool isDeepMenu=(id==patternHeaderMenuCommand||id==allEditorsCommand||id==navigationWindowsCommand||id==navigationLayoutsCommand);
+            const auto cmdLabel=analyticsCommandLabel(id);
+            if(!cmdLabel.empty()) {
+                usageAnalytics.recordCommand(shortcutCommandID(id),cmdLabel,isDeepMenu?"deep_menu":activeCommandSource,isUndo,isDeepMenu?cmdLabel:std::string());
+            }
+            if(id==newDocumentCommand)usageAnalytics.recordDocumentAction("new");
+            else if(id==openDemoCommand)usageAnalytics.recordDocumentAction("demo");
+            else if(id==openCommand)usageAnalytics.recordDocumentAction("open");
+            else if(id==saveCommand)usageAnalytics.recordDocumentAction("save");
+            else if(id==saveAsCommand)usageAnalytics.recordDocumentAction("save_as");
+            else if(id==exportModuleCommand)usageAnalytics.recordDocumentAction("export_module");
+            else if(id==exportAudioCommand)usageAnalytics.recordDocumentAction("export_audio");
             if(id==activityOpenCommand){openActivityLink();return;}
             if(id>=channelMuteFirst&&id<channelMuteFirst+127){toggleNoteColumnMute(unsigned(id-channelMuteFirst));return;}
             if(id>=channelSoloFirst&&id<channelSoloFirst+127){toggleNoteColumnSolo(unsigned(id-channelSoloFirst));return;}

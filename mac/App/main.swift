@@ -178,6 +178,10 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
   var automationMenuItem: NSMenuItem?
   let automationTest = CommandLine.arguments.contains("--automation-test")
   let inspectionTest = CommandLine.arguments.contains("--inspection")
+  lazy var usageAnalytics = UsageAnalytics(suppressed: inspectionTest || automationTest || CommandLine.arguments.contains("--ui-test"))
+  let usageBookmarkBar = UsageBookmarkBar(frame: .zero)
+  var usageAnalyticsMenuItem: NSMenuItem?
+  var lastAnalyticsStatus = ""
 
   func applicationDidFinishLaunching(_ notification: Notification) {
     session.documentDepartureDelegate = self
@@ -279,6 +283,8 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
     connectEditors()
     refreshAll()
+    usageAnalyticsMenuItem?.state = usageAnalytics.enabled ? .on : .off
+    usageAnalytics.recordAppStart(document: model.title)
     if automationTest || inspectionTest { window.center() }
     if !automationTest {
       window.makeKeyAndOrderFront(nil)
@@ -365,6 +371,15 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     documentLoadBanner.report.handler = { [weak self] in self?.importReport() }
     documentLoadBanner.saveCopy.handler = { [weak self] in self?.saveDocumentAs() }
     vertical.addArrangedSubview(documentLoadBanner)
+    usageBookmarkBar.onSaveNote = { [weak self] id, note in
+      self?.usageAnalytics.recordBookmarkNote(bookmarkID: id, note: note)
+      self?.statusLabel.stringValue = "Bookmark note saved"
+    }
+    usageBookmarkBar.onDismiss = { [weak self] in
+      guard let self else { return }
+      self.window.makeFirstResponder(self.patternView)
+    }
+    vertical.addArrangedSubview(usageBookmarkBar)
     let workspace = NSStackView()
     workspace.orientation = .horizontal
     workspace.distribution = .fill
@@ -415,7 +430,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     octave.action = #selector(changeOctave(_:))
     octave.fixed(width: 112)
     let editStep = stepPicker
-    for i in [0, 1, 2, 4, 8] {
+    for i in [0, 1, 2, 4, 8, 16] {
       editStep.addItem(withTitle: "Step \(i)")
       editStep.lastItem?.tag = i
     }
@@ -496,7 +511,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     if documentLoadReport.requiresSaveAs { documentURL = nil; dirty = true }
     updateDocumentLoadReport()
     if previousDocument != model.revisionToken.split(separator:":").first {
-      auditionOwnership.clear();pendingNotes.removeAll();midiNotes.removeAll()
+      clearAllAuditionState()
       // Admission protected dirty/pending commands. Retire an unchanged
       // inline editor as well: its captured target belongs to the old song.
       patternView.nudgeEditor?.onFinish?(false)
@@ -553,15 +568,27 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     updateRecoveryStatus()
   }
   func refreshSidebar() { refreshContextPanel() }
+  private var cachedOrdersFirst = -1, cachedOrdersSlice = [Int]()
+  private var orderSlotButtons = [ActionButton]()
+  var lastContextRefreshKey = ""
   func refreshOrders() {
     orderEditor.update(model, selected: selectedOrder)
+    let first = max(0, min(selectedOrder - 32, model.orders.count - 128))
+    let upper = min(model.orders.count, first + 128)
+    let slice = first < upper ? Array(model.orders[first..<upper]) : []
+    if first == cachedOrdersFirst && slice == cachedOrdersSlice && orderSlotButtons.count == slice.count && !orderStack.arrangedSubviews.isEmpty {
+      for (offset, b) in orderSlotButtons.enumerated() {
+        b.contentTintColor = (first + offset) == selectedOrder ? Theme.selectionMark : Theme.muted
+      }
+      return
+    }
+    cachedOrdersFirst = first; cachedOrdersSlice = slice; orderSlotButtons.removeAll(keepingCapacity: true)
     orderStack.arrangedSubviews.forEach {
       orderStack.removeArrangedSubview($0)
       $0.removeFromSuperview()
     }
     orderStack.addArrangedSubview(ActionButton("Arrange…") { [weak self] in self?.arrangeOrders() })
-    let first = max(0, min(selectedOrder - 32, model.orders.count - 128))
-    for i in first..<min(model.orders.count, first + 128) {
+    for i in first..<upper {
       let pat = model.orders[i]
       let b = ActionButton(String(format: "%02d   %02d", i, pat)) { [weak self] in
         guard let self else { return }
@@ -574,6 +601,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
       b.font = .monospacedSystemFont(ofSize: 12, weight: .medium)
       b.contentTintColor = i == selectedOrder ? Theme.selectionMark : Theme.muted
       b.fixed(width: 80, height: 32)
+      orderSlotButtons.append(b)
       orderStack.addArrangedSubview(b)
     }
     orderStack.addArrangedSubview(
@@ -678,6 +706,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
   @objc func togglePlaybackLoop() {
     guard !busy else { return }
     playbackLoop.toggle(); session.setPlaybackLoop(playbackLoop)
+    usageAnalytics.recordTransport(action: playbackLoop ? "loop_on" : "loop_off", nowPlaying: session.playing)
     loopButton.title = playbackLoop ? "Loop on" : "Loop off"
     loopButton.contentTintColor = playbackLoop ? Theme.selectionMark : Theme.muted
     loopButton.setAccessibilityValue(playbackLoop ? "On" : "Off")
@@ -698,15 +727,23 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     guard !busy, model.rows > 0 else { return }
     let settings = playbackSettings(fromCursor: fromCursor, bounded: bounded)
     perform("Preparing playback…", refresh: false, { try self.session.playRegion(settings) },
-      completion: { self.patternView.isFollowing = true; self.startLiveRecordingIfArmed() })
+      completion: { self.patternView.isFollowing = true; self.usageAnalytics.recordTransport(action: "play", nowPlaying: true); self.startLiveRecordingIfArmed() })
+  }
+  func clearAllAuditionState() {
+    pendingNotes.removeAll()
+    auditionOwnership.clear()
+    midiNotes.removeAll()
+    workspaceHeldKeys.removeAll()
+    inspectorHeldKeys.removeAll()
+    inspectorPendingNotes.removeAll()
   }
   func stopPlayback() {
     guard !busy else { return }
-    pendingNotes.removeAll()
-    auditionOwnership.clear()
+    clearAllAuditionState()
     session.panic()
     session.stop()
     currentPlaying = false
+    usageAnalytics.recordTransport(action: "stop", nowPlaying: false)
     statusLabel.stringValue = "Stopped"
     finishLiveRecording()
   }
@@ -772,6 +809,11 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
     let playing = session.playing
     currentPlaying = playing
+    usageAnalytics.setContext(playing: playing)
+    if statusLabel.stringValue != lastAnalyticsStatus {
+      lastAnalyticsStatus = statusLabel.stringValue
+      usageAnalytics.recordStatusMessage(lastAnalyticsStatus)
+    }
     rulerPlaybackOrder=playing ? t["order"] as? Int : nil
     if t["fault"] as? Bool == true {
       statusLabel.stringValue = "Playback stopped: engine capacity limit reached"
@@ -810,13 +852,14 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     } else {
       patternView.playRow = -1
     }
-    meter.left = Float(truncating: t["left"] as? NSNumber ?? 0)
-    meter.right = Float(truncating: t["right"] as? NSNumber ?? 0)
-    if !playing {
-      meter.left = 0
-      meter.right = 0
+    let audioActive = playing || session.active
+    let nextLeft = audioActive ? Float(truncating: t["left"] as? NSNumber ?? 0) : 0
+    let nextRight = audioActive ? Float(truncating: t["right"] as? NSNumber ?? 0) : 0
+    if meter.left != nextLeft || meter.right != nextRight {
+      meter.left = nextLeft
+      meter.right = nextRight
+      meter.needsDisplay = true
     }
-    meter.needsDisplay = true
     if mixerWindow?.isVisible == true || workspace?.visibleIDs.contains("mixer") == true {
       UIWorkTrace.measure(.mixer){
         mixerEditor.showMeters(session.mixerMeters())
@@ -871,11 +914,13 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
   @objc func undo() {
     if EditorHistory.performTextHistory(in: (NSApp.keyWindow ?? window)?.firstResponder, redo: false) { return }
     if finishPendingNotes({[weak self] in self?.undo()}) {return}
+    usageAnalytics.recordCommand(id: "edit.undo", label: "Edit / Undo", source: "shortcut", isUndo: true)
     perform("Undo…", markDirty: true, { try self.session.historyUndo(false) }, completion: { self.signalGraphEditor.historyDidComplete();self.refreshPreciseNotesAfterHistory() })
   }
   @objc func redo() {
     if EditorHistory.performTextHistory(in: (NSApp.keyWindow ?? window)?.firstResponder, redo: true) { return }
     if finishPendingNotes({[weak self] in self?.redo()}) {return}
+    usageAnalytics.recordCommand(id: "edit.redo", label: "Edit / Redo", source: "shortcut", isUndo: false)
     perform("Redo…", markDirty: true, { try self.session.historyUndo(true) }, completion: { self.signalGraphEditor.historyDidComplete();self.refreshPreciseNotesAfterHistory() })
   }
   func refreshPreciseNotesAfterHistory() {
@@ -934,6 +979,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
         self.statusLabel.stringValue =
           (self.documentLoadReport.requiresSaveAs ? "Recovered \(url.lastPathComponent) · Save a copy" : "Opened \(url.lastPathComponent)")
           + (self.model.issues.isEmpty ? "" : " · \(self.model.issues.count) import notes")
+        self.usageAnalytics.recordDocumentAction("open", detail: url.pathExtension.lowercased())
         self.offerPluginTrust(untrustedPlugins)
       })
   }
@@ -1016,6 +1062,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
         self.dirty = false
         self.window.isDocumentEdited = false
         self.statusLabel.stringValue = "Saved \(url.lastPathComponent)"
+        self.usageAnalytics.recordDocumentAction("save", detail: url.pathExtension.lowercased())
         self.clearRecovery()
         then?()
       })
@@ -1038,6 +1085,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
         self.selectedOrder = 0
         self.model.pattern = 0
         self.patternView.muted.removeAll()
+        self.usageAnalytics.recordDocumentAction(demo ? "demo" : "new")
         self.refreshAll()
       })
   }
@@ -1060,6 +1108,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
           self?.statusLabel.stringValue = error["message"] as? String ?? "Module export failed"
         } else {
           self?.statusLabel.stringValue = "Exported \(url.lastPathComponent)"
+          self?.usageAnalytics.recordDocumentAction("export_module", detail: ext)
         }
       }
     }
@@ -1104,6 +1153,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
           self?.statusLabel.stringValue = error["message"] as? String ?? "Audio export failed"
         } else {
           self?.statusLabel.stringValue = "Exported \(url.lastPathComponent)"
+          self?.usageAnalytics.recordDocumentAction("export_audio", detail: "wav")
         }
       }
     }
@@ -1479,8 +1529,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
   }
   @objc func systemSleep() {
     guard !shuttingDown else { return }
-    pendingNotes.removeAll()
-    auditionOwnership.clear()
+    clearAllAuditionState()
     if busy { worker.async { self.session.stop() } } else { session.stop() }
   }
   @objc func systemWake() {
@@ -1513,7 +1562,15 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
       }
     }
     if !pendingNotes.isEmpty {
-      perform("Preparing audition…", refresh: false, { try self.session.prepareAudition() })
+      perform("Preparing audition…", refresh: false, { try self.session.prepareAudition() }, completion: {
+        // Deliver once after preparation; drop still-rejected notes so invalid
+        // targets cannot trigger an endless prepareAudition() busy loop.
+        let retry = self.pendingNotes
+        self.pendingNotes.removeAll()
+        for note in retry {
+          _ = self.session.note(note.0, instrument: note.1, velocity: note.2, on: note.3, channel: note.4)
+        }
+      })
     }
   }
   func handleMIDI(_ events: [[AnyHashable: Any]], telemetry: [AnyHashable: Any], allowEdits: Bool = true) {
@@ -1742,6 +1799,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     return .terminateLater
   }
   func applicationWillTerminate(_ notification: Notification) {
+    usageAnalytics.recordAppStop()
     patternView.shutdownRendering()
     if !automationTest && !inspectionTest,let state=workspace?.state { UserDefaults.standard.set(state,forKey:"workspaceLastLayout") }
     session.shutdown()
@@ -1964,12 +2022,31 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     item(workspaceMenu, "Save Custom Layout", #selector(saveWorkspaceLayout))
     item(workspaceMenu, "Restore Custom Layout", #selector(restoreWorkspaceLayout))
     item(workspaceMenu, "Layouts…", #selector(showWorkspaceLayouts), "w", [.control,.option])
+    workspaceMenu.addItem(.separator())
+    item(workspaceMenu, "Local Usage & Friction Analytics", #selector(toggleUsageAnalytics))
+    usageAnalyticsMenuItem = workspaceMenu.items.last
+    item(workspaceMenu, "Bookmark Friction Moment…", #selector(triggerUsageBookmark), ".", [.command,.shift])
     let win = submenu("Window")
     item(win, "Mixer…", #selector(showMixer), "m", [.command, .shift])
     item(win, "Plugin Automation Take…", #selector(showPluginRecording))
     win.addItem(
       withTitle: "Minimize", action: #selector(NSWindow.performMiniaturize(_:)), keyEquivalent: "m")
     NSApp.windowsMenu = win
+  }
+  @objc func toggleUsageAnalytics() {
+    usageAnalytics.toggleEnabled()
+    usageAnalyticsMenuItem?.state = usageAnalytics.enabled ? .on : .off
+    if usageAnalytics.suppressed {
+      statusLabel.stringValue = "Local usage analytics is suppressed in test/inspection mode"
+    } else if usageAnalytics.enabled {
+      statusLabel.stringValue = "Local usage & friction analytics enabled · ⌘⇧. bookmarks friction"
+    } else {
+      statusLabel.stringValue = "Local usage & friction analytics disabled"
+    }
+  }
+  @objc func triggerUsageBookmark() {
+    let id = usageAnalytics.recordBookmark(trigger: "shortcut")
+    usageBookmarkBar.present(bookmarkID: id, analyticsEnabled: usageAnalytics.enabled)
   }
   @objc func newPattern() { addPattern(false) }
   @objc func duplicatePattern() { addPattern(true) }

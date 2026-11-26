@@ -322,8 +322,15 @@
       const auto snapshot=_document->snapshotData();
       result=@{@"path":path,@"format":@"wav",@"written":@(!dry),@"rate":@48000,@"channels":@2,@"bits":@32,
                @"scope":@"selectedSequence",@"sourceState":@"acceptedSong"};
-      if(!dry)exportProjectAudio(snapshot,_plugins,_automation,path.fileSystemRepresentation,
-                                song.Order.GetCurrentSequenceIndex(),&_document->native(),overwrite);
+      if(!dry){
+        auto exportPlugins=_plugins;
+        if(!_manualParameters.empty()){
+          auto manualCopy=_manualParameters;
+          commitManualParameterState(exportPlugins,manualCopy,[&](const PluginState &candidate){return std::make_unique<NativePlugin>(candidate,48000.0);});
+        }
+        exportProjectAudio(snapshot,exportPlugins,_automation,path.fileSystemRepresentation,
+                           song.Order.GetCurrentSequenceIndex(),&_document->native(),overwrite);
+      }
     } else if ([method isEqual:@"document.save"] || [method isEqual:@"document.exportModule"]) {
       allowed(@[@"path", @"overwrite", @"dryRun"]);
       NSString *path = string(p[@"path"]);
@@ -1551,8 +1558,8 @@
         require(target != _plugins.end(), "Plugin instance does not exist");
         auto slot = size_t(target - _plugins.begin());
         auto parameters = _audio->pluginParameters(slot);
-        require(std::any_of(parameters.begin(), parameters.end(), [&](const auto &v) { return v.id == replacement.parameter; }),
-                "Plugin parameter does not exist or plugin is unavailable");
+        require(std::any_of(parameters.begin(), parameters.end(), [&](const auto &v) { return v.id == replacement.parameter && v.writable && v.max > v.min; }),
+                "Plugin parameter does not exist, is read-only, or plugin is unavailable");
         if (replacement.enabled)
           require(!next.performance.controls(replacement.plugin,replacement.parameter), "Remove pattern commands for this parameter before enabling an envelope");
         if (replacement.enabled)

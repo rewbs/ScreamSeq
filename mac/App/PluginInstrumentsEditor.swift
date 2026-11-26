@@ -23,7 +23,7 @@ final class PluginInstrumentRow: NSTableCellView {
 }
 final class PluginInstrumentsEditor: NSView,NSTableViewDataSource,NSTableViewDelegate {
   let plugin:String,table=NSTableView(),status=Theme.label("",size:12,color:Theme.muted),name=Theme.label("",size:13)
-  private(set) var revision:String?,pending=false,routes=[PluginInstrumentRoute](),inventory=[[String:Any]](),generation=0
+  private(set) var revision:String?,pending=false,hasDraft=false,routes=[PluginInstrumentRoute](),inventory=[[String:Any]](),generation=0
   var onRequest:((String,[String:Any],@escaping([String:Any])->Void)->Void)?
   var addButton:ActionButton!,previewButton:ActionButton!,applyButton:ActionButton!,reloadButton:ActionButton!
   init(plugin:String) {
@@ -60,7 +60,7 @@ final class PluginInstrumentsEditor: NSView,NSTableViewDataSource,NSTableViewDel
     routes=(data["assignments"] as? [[String:Any]] ?? []).compactMap { item in
       guard let instrument=item["instrument"] as? Int,let channel=item["channel"] as? Int else{return nil}
       return PluginInstrumentRoute(instrument:instrument,channel:channel)
-    };generation += 1;table.reloadData()
+    };hasDraft=false;generation += 1;table.reloadData()
   }
   var available: [Int] {
     inventory.compactMap { item in
@@ -83,7 +83,7 @@ final class PluginInstrumentsEditor: NSView,NSTableViewDataSource,NSTableViewDel
       if let channel {routes[row].channel=channel}
     };changed()
   }
-  private func changed(){generation += 1;table.reloadData();status.stringValue="Draft changed. Preview or Apply to save these assignments.";updateControls()}
+  private func changed(){hasDraft=true;generation += 1;table.reloadData();status.stringValue="Draft changed. Preview or Apply to save these assignments.";updateControls()}
   func apply(dryRun:Bool) {
     guard !pending,let revision,let onRequest else{return};pending=true;updateControls();status.stringValue=dryRun ? "Checking assignments…" : "Applying assignments…"
     onRequest("plugin.instruments.set",["plugin":plugin,"expectedRevision":revision,"assignments":routes.map(\.encoded),"dryRun":dryRun]){[weak self] reply in

@@ -235,20 +235,39 @@ void NativeSong::reconcile(const OpenMPT::CSoundFile &s) {
     std::set<uint64_t> trackIDs;
     for (const auto &[index, track] : tracks) trackIDs.insert(track.id);
     std::set<uint64_t> removed;
+    std::vector<std::string> orphanInserts;
     std::erase_if(mixer.buses, [&](const auto &bus) {
       if (bus.kind != MixerBusKind::Track || trackIDs.count(bus.id)) return false;
       // A removed channel must not move a disconnected insert into Master
       // and silence the entire song. Keep its ordered chain on a silent root.
       if(!bus.inserts.empty()&&std::any_of(bus.inserts.begin(),bus.inserts.end(),[&](const auto &id){return std::find(mixer.disconnectedMainInputs.begin(),mixer.disconnectedMainInputs.end(),id)!=mixer.disconnectedMainInputs.end();})) {
         mixer.detachedChains.push_back({makeEntity().id,bus.inserts});std::erase(mixer.disconnectedMainInputs,bus.inserts.front());
+      } else {
+        orphanInserts.insert(orphanInserts.end(), bus.inserts.begin(), bus.inserts.end());
       }
       removed.insert(bus.id); return true;
     });
+    if (!removed.empty()) {
+      for (auto &bus : mixer.buses) {
+        if (removed.count(bus.output)) bus.output = 0;
+        std::erase_if(bus.sends, [&](const auto &send) { return removed.count(send.target); });
+      }
+    }
     std::erase_if(mixer.sidechains, [&](const auto &side) { return removed.count(side.source); });
     auto master = std::find_if(mixer.buses.begin(), mixer.buses.end(), [](const auto &bus) { return bus.kind == MixerBusKind::Master; });
     if (master != mixer.buses.end()) {
       const auto masterID = master->id;
+      for (const auto &insertID : orphanInserts) {
+        if (std::find(master->inserts.begin(), master->inserts.end(), insertID) != master->inserts.end()) continue;
+        if (master->inserts.size() < 64) master->inserts.push_back(insertID);
+        else if (std::find(mixer.detached.begin(), mixer.detached.end(), insertID) == mixer.detached.end())
+          mixer.detached.push_back(insertID);
+      }
       for (auto &source : mixer.instruments) if (removed.count(source.target)) source.target = masterID;
+      std::set<std::tuple<std::string, uint32_t, uint64_t>> seenInstruments;
+      std::erase_if(mixer.instruments, [&](const auto &source) {
+        return !seenInstruments.emplace(source.plugin, source.output, source.target).second;
+      });
       for (const auto &[index, track] : tracks)
         if (std::none_of(mixer.buses.begin(), mixer.buses.end(), [&](const auto &bus) { return bus.id == track.id; }))
           mixer.buses.push_back({track.id, masterID, MixerBusKind::Track, "Track " + std::to_string(index + 1)});

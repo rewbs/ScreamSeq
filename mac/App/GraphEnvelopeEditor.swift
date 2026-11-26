@@ -29,6 +29,7 @@ final class GraphEnvelopeEditor:NSView,NSTextFieldDelegate {
     for field in [row,value]{field.target=self;field.action=#selector(commitPointField);field.toolTip="Commits on Return or leaving the field"}
     formula.font = .monospacedSystemFont(ofSize:11,weight:.regular);formula.isHidden=true
     canvas.onEdit = {[weak self] in self?.markDraft()};canvas.onSelect = {[weak self] in self?.showPoint()};canvas.onViewport = {[weak self] in self?.preview()}
+    canvas.onCancelEdit = {[weak self] in guard let self else{return};self.saveWork?.cancel();self.saveWork=nil;self.hasDraft=false;self.pointFieldsDirty=false;self.status.stringValue="Drag cancelled"}
     canvas.beforeInteraction = {[weak self] in self?.pointFieldsDirty == false}
     canvas.onEditFinished = {[weak self] in self?.apply()}
     canvas.setAccessibilityLabel("Graph pattern automation curve");canvas.heightAnchor.constraint(greaterThanOrEqualToConstant:140).isActive=true
@@ -192,7 +193,7 @@ final class GraphEnvelopeEditor:NSView,NSTextFieldDelegate {
     let params:[String:Any]=["points":canvas.points.map(\.dictionary),"rows":canvas.rows,"rowsPerBeat":rowsPerBeat,"start":canvas.visibleStart,"end":canvas.horizontalEnd,"samples":1024]
     let work=DispatchWorkItem{[weak self] in guard let self,token==self.previewGeneration else{return};onRequest("automation.formula.preview",params){[weak self] response in
       guard let self,token==self.previewGeneration else{return}
-      if let data=(response["result"] as? [String:Any])?["data"] as? [String:Any],let values=data["values"] as? [[Double]]{self.canvas.previewValues=values.filter{$0.count==2}.map{($0[0],$0[1])}}else{self.error(response)}
+      if let data=(response["result"] as? [String:Any])?["data"] as? [String:Any],let values=data["values"] as? [[Double]]{self.canvas.previewValues=values.filter{$0.count==2}.map{($0[0],$0[1])}}else{self.status.stringValue=(response["error"] as? [String:Any])?["message"] as? String ?? "Formula preview failed"}
     }}
     previewWork=work;DispatchQueue.main.asyncAfter(deadline:.now()+0.15,execute:work)
   }

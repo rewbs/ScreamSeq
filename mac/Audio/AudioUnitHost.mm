@@ -491,7 +491,7 @@ std::vector<PluginParameter> MacPluginBackend::parameters() const {
       Float32 value = info.defaultValue;
       AudioUnitGetParameter(unit_, id, kAudioUnitScope_Global, 0, &value);
       auto name =
-          (info.flags & kAudioUnitParameterFlag_HasCFNameString) ? string(info.cfNameString) : std::string(info.name);
+          (info.flags & kAudioUnitParameterFlag_HasCFNameString) ? string(info.cfNameString) : std::string(info.name, strnlen(info.name, sizeof(info.name)));
       result.push_back({id, name, info.minValue, info.maxValue, value, info.unit});
       result.back().continuous = info.unit != kAudioUnitParameterUnit_Indexed && info.unit != kAudioUnitParameterUnit_Boolean && info.unit != kAudioUnitParameterUnit_MIDINoteNumber;
       if(!result.back().continuous)result.back().step=1;
@@ -571,15 +571,20 @@ void MacPluginBackend::showEditor() {
   auto *info = reinterpret_cast<AudioUnitCocoaViewInfo *>(storage.data());
   checkAU(AudioUnitGetProperty(unit_, kAudioUnitProperty_CocoaUI, kAudioUnitScope_Global, 0, info, &size),
           "Cannot load Audio Unit interface");
-  NSBundle *bundle = [NSBundle bundleWithURL:(__bridge NSURL *)info->mCocoaAUViewBundleLocation];
-  [bundle load];
-  Class factory = NSClassFromString((__bridge NSString *)info->mCocoaAUViewClass[0]);
+  if (size < sizeof(AudioUnitCocoaViewInfo) || size > storage.size())
+    throw std::runtime_error("Invalid Audio Unit interface");
   NSView *view = nil;
-  if ([factory conformsToProtocol:@protocol(AUCocoaUIBase)]) {
-    id<AUCocoaUIBase> object = [[factory alloc] init];
-    view = [object uiViewForAudioUnit:unit_ withSize:NSMakeSize(640, 480)];
+  if (info->mCocoaAUViewBundleLocation && info->mCocoaAUViewClass[0]) {
+    NSBundle *bundle = [NSBundle bundleWithURL:(__bridge NSURL *)info->mCocoaAUViewBundleLocation];
+    [bundle load];
+    Class factory = NSClassFromString((__bridge NSString *)info->mCocoaAUViewClass[0]);
+    if ([factory conformsToProtocol:@protocol(AUCocoaUIBase)]) {
+      id<AUCocoaUIBase> object = [[factory alloc] init];
+      view = [object uiViewForAudioUnit:unit_ withSize:NSMakeSize(640, 480)];
+    }
   }
-  CFRelease(info->mCocoaAUViewBundleLocation);
+  if (info->mCocoaAUViewBundleLocation)
+    CFRelease(info->mCocoaAUViewBundleLocation);
   auto classes = (size - sizeof(CFURLRef)) / sizeof(CFStringRef);
   for (size_t i = 0; i < classes; ++i)
     if (info->mCocoaAUViewClass[i])

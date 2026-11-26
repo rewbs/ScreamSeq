@@ -72,12 +72,15 @@ extension AppController {
       actions = [A(id:"plugins",title:"Plugin rack"),A(id:"addPlugin",title:"Add plugins…"),A(id:"browseSamples",title:"Browse samples…"),A(id:"songGraph",title:"Song mixing graph panel"),A(id:"activity",title:"Parameter activity…",enabled:plugin != nil)]
     case "automation", "graphCurve", "songAutomation", "parameterActivity":
       title = editor == "graphCurve" ? "GRAPH CURVE" : editor == "parameterActivity" ? "PARAMETER ACTIVITY" : "AUTOMATION"
-      actions = [A(id:"activity",title:"Parameter activity…",enabled:plugin != nil),A(id:"graph",title:"Modulation & sources…"),A(id:"songAutomation",title:"Song automation…",enabled:plugin != nil),A(id:"graph",title:"Graph recipes"),A(id:"songGraph",title:"Song mixing graph panel")]
+      actions = [A(id:"activity",title:"Parameter activity…",enabled:plugin != nil),A(id:"graph",title:"Modulation & sources…"),A(id:"songAutomation",title:"Song automation…",enabled:plugin != nil),A(id:"graphRecipes",title:"Graph recipes"),A(id:"songGraph",title:"Song mixing graph panel")]
     default:
       title = editor == "gate" ? "GATE" : editor == "notes" ? "NOTES" : editor == "graphCommands" ? "PATTERN EFFECTS" : "PATTERN"
       actions = [A(id:"notes",title:"Precise notes…"),A(id:"patternTools",title:"Selection tools…"),A(id:"arrange",title:"Arrange patterns…"),A(id:"timing",title:"Tempo & groove…"),A(id:"browseSamples",title:"Browse samples…"),A(id:"render",title:"Render selection…")]
     }
     let stamp = contextChoiceStamp
+    let refreshKey = "\(editor)|\(title)|\(available)|\(stamp)|\(actions.map { "\($0.id):\($0.enabled)" }.joined(separator: ","))"
+    if refreshKey == lastContextRefreshKey { return }
+    lastContextRefreshKey = refreshKey
     func choice(_ item:[String:Any], prefix:String) -> WorkspaceContextPanel.Choice? {
       guard let index=item["index"] as? Int, let id=item["id"] as? String else { return nil }
       let name=item["name"] as? String ?? ""
@@ -154,7 +157,7 @@ extension AppController {
     case "recordSample":showSampleRecorder()
     case "samples","instruments","plugins":workspace?.show(id,focus:true)
     case "mixer":showMixer()
-    case "graph":showSignalGraph()
+    case "graph","graphRecipes":showSignalGraph()
     case "songGraph":showSignalGraph();signalGraphEditor.navigate(graph:nil)
     case "floatGraph":workspace?.place("graph",at:"float")
     case "dockGraph":workspace?.place("graph",at:"right")

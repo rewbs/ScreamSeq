@@ -124,7 +124,7 @@ final class PatternMetalPresenter:NSObject,CAMetalDisplayLinkDelegate {
     self.freeBuffers=(0..<3).map{_ in queue.device.makeBuffer(length:bufferLength,options:.storageModeShared)!}
     self.queue=queue;self.pipeline=pipeline;self.atlas=atlas
     self.request=snapshot;self.refreshHost=refreshHost;self.timing=timing;self.submitted=submitted;self.completed=completed;self.presented=presented
-    self.recovery=PatternSnapshotRecovery(interval:1/Double(max(60,min(120,frameRate))))
+    self.recovery=PatternSnapshotRecovery(interval:1.5/Double(max(60,min(120,frameRate))))
     super.init()
     latest=snapshot()
     let worker=Thread{[self] in
@@ -206,8 +206,11 @@ final class PatternMetalPresenter:NSObject,CAMetalDisplayLinkDelegate {
         recoveryTrace?.finish(refresh ? .snapshotRecoveryRefresh:.snapshotRecoverySkipped,start:dequeuedAt)
       }}
       guard active,let frame else{return}
-      let report=PatternRenderTiming(timestamp:now,deadline:update.targetTimestamp,snapshotAgeMS:(now-frame.preparedAt)*1000,generation:frame.generation,starved:buffer==nil)
-      DispatchQueue.main.async{[timing] in timing(report)}
+      let collectMetrics = frameTrace != nil
+      if collectMetrics {
+        let report=PatternRenderTiming(timestamp:now,deadline:update.targetTimestamp,snapshotAgeMS:(now-frame.preparedAt)*1000,generation:frame.generation,starved:buffer==nil)
+        DispatchQueue.main.async{[timing] in timing(report)}
+      }
       guard let buffer else{return}
       let release={ [self] in lock.lock();freeBuffers.append(buffer);lock.unlock() }
       guard frame.bytes.count<=buffer.length else{release();return}
@@ -223,10 +226,16 @@ final class PatternMetalPresenter:NSObject,CAMetalDisplayLinkDelegate {
       encoder.setVertexBytes(&size,length:MemoryLayout<SIMD2<Float>>.stride,index:1)
       encoder.setFragmentTexture(atlas,index:0);encoder.drawPrimitives(type:.triangle,vertexStart:0,vertexCount:frame.count);encoder.endEncoding()
       let generation=frame.generation,deadline=update.targetTimestamp
-      command.addScheduledHandler{[submitted] _ in let time=CACurrentMediaTime();if let traceID{trace?.update(traceID){$0.scheduled=time}};let late=(time-deadline)*1000;DispatchQueue.main.async{submitted(generation,late)}}
+      if collectMetrics {
+        command.addScheduledHandler{[submitted] _ in let time=CACurrentMediaTime();if let traceID{trace?.update(traceID){$0.scheduled=time}};let late=(time-deadline)*1000;DispatchQueue.main.async{submitted(generation,late)}}
+      }
       command.addCompletedHandler{[completed] command in
-        if let traceID {let time=CACurrentMediaTime();trace?.update(traceID){$0.gpuStart=command.gpuStartTime;$0.gpuEnd=command.gpuEndTime;$0.completed=time}}
-        let ms=(command.gpuEndTime-command.gpuStartTime)*1000;release();DispatchQueue.main.async{completed(generation,ms)}
+        if collectMetrics {
+          if let traceID {let time=CACurrentMediaTime();trace?.update(traceID){$0.gpuStart=command.gpuStartTime;$0.gpuEnd=command.gpuEndTime;$0.completed=time}}
+          let ms=(command.gpuEndTime-command.gpuStartTime)*1000;release();DispatchQueue.main.async{completed(generation,ms)}
+        } else {
+          release()
+        }
       }
       drawable.addPresentedHandler{[presented] draw in let time=draw.presentedTime;if let traceID {let callback=CACurrentMediaTime();trace?.update(traceID){$0.presented=time;$0.presentationCallback=callback}};DispatchQueue.main.async{presented(generation,time)}}
       // CAMetalDisplayLink assigns the drawable's presentation time. The

@@ -674,7 +674,7 @@ final class PatternView: MTKView, MTKViewDelegate {
     let (r, c) = position(event)
     if p.y < CGFloat(headerHeight) {
       if p.x < CGFloat(gutterWidth) {cyclePositionMode();return}
-      if p.x>=CGFloat(gutterWidth) && Float(p.x)-channelX(c)>=model.channelWidth(c)-30 && Float(p.x)-channelX(c)<model.channelWidth(c) {cursorChannel=c;onEffectColumns?(c,min(8,model.effectCount(c)+1));return}
+      if p.x>=CGFloat(gutterWidth), p.y >= CGFloat(headerHeight - 36), Float(p.x)-channelX(c)>=model.channelWidth(c)-30 && Float(p.x)-channelX(c)<model.channelWidth(c) {cursorChannel=c;onEffectColumns?(c,min(8,model.effectCount(c)+1));return}
       guard p.x >= CGFloat(gutterWidth), p.y >= CGFloat(headerHeight - 36) else { return }
       onMute?(c)
       return
@@ -684,8 +684,12 @@ final class PatternView: MTKView, MTKViewDelegate {
     let x = Float(p.x)-channelX(c)
     column=fieldAt(x,c)
     parameterIndex=parameterAt(x,c,r,effectColumn)
+    if event.clickCount >= 2 {
+      if column>=3 && model.nativeCommand(cursorRow,cursorChannel,effectColumn)?.kind != "tracker" && model.nativeCommand(cursorRow,cursorChannel,effectColumn) != nil {onNativeEffect?();return}
+      else if column<=2 {onPreciseNotes?();return}
+      else {onEffectPicker?();return}
+    }
     if column>=4 && column%2==0 && beginNudgeEdit() {return}
-    if event.clickCount >= 2 {if column>=3 && model.nativeCommand(cursorRow,cursorChannel,effectColumn)?.kind != "tracker" && model.nativeCommand(cursorRow,cursorChannel,effectColumn) != nil {onNativeEffect?()} else if column<=2 {onPreciseNotes?()} else {onEffectPicker?()}}
     selectionStart = (r, c)
     selectionEnd = nil
     onCursor?()
@@ -802,11 +806,12 @@ final class PatternView: MTKView, MTKViewDelegate {
       super.keyDown(with: event)
       return
     }
-    guard model.rows > 0, model.channels > 0, canEdit() else {
+    guard model.rows > 0, model.channels > 0 else {
       NSSound.beep()
       return
     }
     if event.keyCode == 51 || event.keyCode == 117, let a = selectionStart, let b = selectionEnd {
+      guard canEdit() else { NSSound.beep(); return }
       onRowShift?(["operation":"clear","scope":"selection","pattern":model.pattern,"startRow":min(a.0,b.0),"rowCount":abs(a.0-b.0)+1,"startChannel":min(a.1,b.1),"channelCount":abs(a.1-b.1)+1,"fields":column>=3 ? ["effect"] : ["note","instrument","volume","effect"],"expectedRevision":commandRevision?() ?? model.revisionToken])
       return
     }
@@ -843,6 +848,7 @@ final class PatternView: MTKView, MTKViewDelegate {
     case 115: cursorRow = 0
     case 119: cursorRow = model.rows - 1
     case 51, 117:
+      guard canEdit() else { NSSound.beep(); return }
       if column==0 && !model.notes(cursorRow,cursorChannel).isEmpty {onClearPreciseNotes?(cursorRow,cursorChannel);return}
       if column >= 3 {onClearNativeEffect?(cursorRow,cursorChannel,effectColumn);revealCursor();return}
       var cell = model.cell(cursorRow, cursorChannel)
@@ -855,6 +861,7 @@ final class PatternView: MTKView, MTKViewDelegate {
       }
       commit(cell)
     default:
+      guard canEdit() else { NSSound.beep(); return }
       if column<=2 && (event.keyCode==36 || (!model.notes(cursorRow,cursorChannel).isEmpty && (KeyboardSettings.note(for:ch) != nil || Int(ch,radix:16) != nil))) {onPreciseNotes?();return}
       if column >= 3 {
         let command=model.nativeCommand(cursorRow,cursorChannel,effectColumn)

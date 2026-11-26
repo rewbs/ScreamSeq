@@ -188,13 +188,14 @@ private:
     const auto result=call("scratch.gestures.clone",{{"id",state_.id()},{"target",{{"pattern",target.pattern},{"row",target.row},{"channel",target.channel},{"column",target.column}}}},true);
     target_=resolve_(target);load(false,result.at("id"));status(L"Independent phrase created and captured SK reassigned · one Undo restores both");
   }
-  static LRESULT CALLBACK pointFieldProc(HWND h,UINT message,WPARAM w,LPARAM l,UINT_PTR,DWORD_PTR opaque){
+  static LRESULT CALLBACK pointFieldProc(HWND h,UINT message,WPARAM w,LPARAM l,UINT_PTR id,DWORD_PTR opaque){
+    if(message==WM_NCDESTROY){RemoveWindowSubclass(h,pointFieldProc,id);return DefSubclassProc(h,message,w,l);}
     auto &self=*reinterpret_cast<ScratchGestureWindow *>(opaque);
     if(message==WM_KILLFOCUS&&self.ready_&&self.visible()&&!self.hiding_&&!self.pending_&&!self.setting_&&self.fieldsDirty_){
-      const auto next=reinterpret_cast<HWND>(w);const auto id=next?GetDlgCtrlID(next):0;
+      const auto next=reinterpret_cast<HWND>(w);const auto nextId=next?GetDlgCtrlID(next):0;
       // Moving among the fields is one point edit. Leaving the row commits it;
       // invalid text remains visible and never changes the selected point.
-      if(id!=pointPosition&&id!=pointValue&&id!=pointFormula&&id!=pointKind&&id!=setPoint)
+      if(nextId!=pointPosition&&nextId!=pointValue&&nextId!=pointFormula&&nextId!=pointKind&&nextId!=setPoint)
         try{self.pointFields();self.layout();}catch(const std::exception &e){self.error(e);}
     }
     return DefSubclassProc(h,message,w,l);
@@ -283,12 +284,12 @@ public:
     for(int id:{pointPosition,pointValue,pointFormula})SetWindowSubclass(controls_.at(id),pointFieldProc,2,reinterpret_cast<DWORD_PTR>(this));
     for(auto &canvas:canvases_){canvas.start=0;canvas.end=65536;}finish();
   }
-  ~ScratchGestureWindow()override{ready_=false;for(int id:{pointPosition,pointValue,pointFormula})RemoveWindowSubclass(controls_.at(id),pointFieldProc,2);}
+  ~ScratchGestureWindow()override{ready_=false;for(int id:{pointPosition,pointValue,pointFormula})if(auto it=controls_.find(id);it!=controls_.end()&&IsWindow(it->second))RemoveWindowSubclass(it->second,pointFieldProc,2);}
   void openAt(){if(visible()||retainedDraft()){show();return;}load(true,0,true);show();}
   void documentChanged(){if(visible()&&!current())scheduleRefresh();}
   bool retainedDraft()const{return draft()||pending_||writeUncertain_||(workbench_&&(workbench_->visible()||workbench_->retainedDraft()));}
   std::optional<Tracker::DocumentDraft> documentDraft()const override {
-    return describeDraft(document_,revision_,std::to_string(state_.id()),state_.generation,draft()||dragging_||saveNeeded_||writeUncertain_,pending_);
+    return describeDraft(document_,revision_,std::to_string(state_.id()),state_.generation,draft()||dragging_||saveNeeded_,pending_,writeUncertain_);
   }
   void hide()override{if(dragging_)cancelDrag();KillTimer(window_,3);KillTimer(window_,4);KillTimer(window_,5);refreshScheduled_=false;hiding_=true;NativeToolWindow::hide();hiding_=false;}
   void show(){NativeToolWindow::show();documentChanged();if(previewNeeded_)SetTimer(window_,3,100,nullptr);if(saveNeeded_&&!writeUncertain_&&current())SetTimer(window_,4,350,nullptr);}

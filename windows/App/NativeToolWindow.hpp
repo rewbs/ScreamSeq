@@ -259,6 +259,7 @@ protected:
     if(!ready_||!IsWindowVisible(window_)||IsIconic(window_))return;
     if(renderFailures_){const auto now=GetTickCount64();if(now<renderRetry_){SetTimer(window_,2,UINT(renderRetry_-now)+1,nullptr);return;}}
     if(WaitForSingleObject(surface_->ready(),0)!=WAIT_OBJECT_0){SetTimer(window_,2,16,nullptr);return;}
+    surface_->markReadyConsumed();
     try{
       surface_->begin();
       // A failed paint must still end the D2D draw and pop its clips.
@@ -391,7 +392,8 @@ protected:
       case WM_KEYDOWN:case WM_SYSKEYDOWN:if(self->workspaceShortcut(w,(l&(1LL<<30))!=0,true)||(self->musicalKey_&&self->musicalKey_(GetFocus(),w,(l&(1LL<<30))!=0))||self->key(w,(GetKeyState(VK_CONTROL)&0x8000)!=0,(GetKeyState(VK_SHIFT)&0x8000)!=0)||(self->workspaceKeys_&&self->workspaceKeys_(w,(l&(1LL<<30))!=0))||self->workspaceShortcut(w,(l&(1LL<<30))!=0,false))return 0;break;
       case WM_KEYUP:case WM_SYSKEYUP:if((self->musicalRelease_&&self->musicalRelease_(w))||self->keyUp(w))return 0;break;
       case WM_MOUSEWHEEL:case WM_MOUSEHWHEEL:{POINT p{GET_X_LPARAM(l),GET_Y_LPARAM(l)};ScreenToClient(h,&p);const float scale=96.0f/GetDpiForWindow(h);if(self->wheel(m,p.x*scale,p.y*scale,w))return 0;break;}
-      case WM_LBUTTONDBLCLK:case WM_LBUTTONDOWN:case WM_LBUTTONUP:case WM_MOUSEMOVE:case WM_CAPTURECHANGED:{const float scale=96.0f/GetDpiForWindow(h);self->mouse(m,GET_X_LPARAM(l)*scale,GET_Y_LPARAM(l)*scale,w);self->requestPaint();return 0;}
+      case WM_CAPTURECHANGED:{self->mouse(m,0,0,w);self->requestPaint();return 0;}
+      case WM_LBUTTONDBLCLK:case WM_LBUTTONDOWN:case WM_LBUTTONUP:case WM_MOUSEMOVE:{const float scale=96.0f/GetDpiForWindow(h);self->mouse(m,GET_X_LPARAM(l)*scale,GET_Y_LPARAM(l)*scale,w);if(m!=WM_MOUSEMOVE||GetCapture()==h)self->requestPaint();return 0;}
     }}catch(const std::exception &e){
       // A failed close must not reach the default handler, which destroys the
       // window while its owner still refers to it.

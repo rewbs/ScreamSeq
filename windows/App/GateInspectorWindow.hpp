@@ -47,10 +47,18 @@ private:
     if(i==2)return {1./64,16};if(i==3)return {-period,period};if(i==4)return {0,1};if(i==7)return {1,96};if(i==8)return {0,(1.-1./65536)/(captured_?captured_->rowsPerBeat:4)};return {0,period*2};
   }
   void sliders(){for(size_t i=0;i<numeric.size();++i){const auto [low,high]=range(i);const double position=i==2?std::log(std::max(low,value(numeric[i]))/low)/std::log(high/low):(value(numeric[i])-low)/(high-low);NativeInputGate::present(controls_.at(sliderBase+int(i)),TBM_SETPOS,TRUE,LPARAM(std::lround(std::clamp(position,0.,1.)*10000)));}}
+  void updateShapeLabel(){
+    if(fields_.empty()||std::find(valid_.begin(),valid_.end(),false)!=valid_.end()||value("period")<=0||value("floor")>value("ceiling")){set(shapeLabel,L"");return;}
+    auto shape=[&](const char *key){return Tracker::GateShape(std::find(shapes.begin(),shapes.end(),fields_.value(key,std::string("linear")))-shapes.begin());};
+    const double period=value("period"),width=value("width"),riseVal=value("rise"),fallVal=value("fall");
+    const auto rise=shape("riseShape")==Tracker::GateShape::Direct?0.0:std::min(riseVal,period*width);
+    const auto fall=shape("fallShape")==Tracker::GateShape::Direct?0.0:std::min(fallVal,period*(1.0-width));
+    set(shapeLabel,L"Effective rise "+wide(std::to_string(rise))+L" b · fall "+wide(std::to_string(fall))+L" b");
+  }
   void showFields(bool reset=false){setting_=true;for(size_t i=0;i<numeric.size();++i)if(reset||valid_[i]){set(fieldBase+int(i),value(numeric[i])*scale(i));valid_[i]=true;}sliders();
     choose(target,int(std::find(targets.begin(),targets.end(),fields_.value("target",std::string("volume")))-targets.begin()));
     for(auto [id,key]:{std::pair{riseShape,"riseShape"},std::pair{fallShape,"fallShape"}})choose(id,int(std::find(shapes.begin(),shapes.end(),fields_.value(key,std::string("linear")))-shapes.begin()));
-    set(linked,fields_.value("linked",true)?L"Rise / fall linked":L"Rise / fall independent");setting_=false;layout();requestPaint();
+    set(linked,fields_.value("linked",true)?L"Rise / fall linked":L"Rise / fall independent");updateShapeLabel();setting_=false;layout();requestPaint();
   }
   void loadParameters(std::optional<uint32_t> desired={}){
     const int slot=selected(plugin);parameters_=Json::array();choices(parameter,{});if(slot<0||size_t(slot)>=plugins_.size())return;current();
@@ -67,7 +75,7 @@ private:
     showFields(true);if(fields_.at("target")=="parameter")loadParameters(desired);cancelQueued();dirty_=false;++generation_;
     status(L"P"+std::to_wstring(candidate->pattern)+L" · row "+std::to_wstring(candidate->row)+L" · channel "+std::to_wstring(candidate->channel+1)+L" · FX "+std::to_wstring(candidate->column+1)+L" · Changes save automatically");
   }
-  void changed(size_t i,double v){fields_[numeric[i]]=v;if(fields_.value("linked",true)&&(i==5||i==6)){fields_[numeric[i==5?6:5]]=v;setting_=true;if(valid_[i==5?6:5])set(fieldBase+int(i==5?6:5),v);setting_=false;}dirty_=true;++generation_;sliders();scheduleAutomaticGate();requestPaint();}
+  void changed(size_t i,double v){fields_[numeric[i]]=v;if(fields_.value("linked",true)&&(i==5||i==6)){fields_[numeric[i==5?6:5]]=v;setting_=true;if(valid_[i==5?6:5])set(fieldBase+int(i==5?6:5),v);setting_=false;}dirty_=true;++generation_;sliders();updateShapeLabel();scheduleAutomaticGate();requestPaint();}
   void submit(QueuedWrite sent){
     cancelQueued();current();dirty_=true;pending_=true;
     try{
@@ -116,26 +124,27 @@ private:
     if(setting_)return;if(id>=fieldBase&&id<fieldBase+9){if(notification!=EN_CHANGE)return;const auto i=size_t(id-fieldBase);dirty_=true;++generation_;try{auto text=field(id);const auto slash=text.find(L'/');size_t used=0;double v=std::stod(text,&used);if(slash!=std::wstring::npos){if(used!=slash)throw std::runtime_error("Invalid fraction");size_t end=0;const auto denominator=std::stod(text.substr(slash+1),&end);if(end!=text.size()-slash-1||denominator==0)throw std::runtime_error("Invalid fraction");v/=denominator;}else if(used!=text.size())throw std::runtime_error("Invalid number");if(!std::isfinite(v))throw std::runtime_error("Invalid number");valid_[i]=true;changed(i,v/scale(i));}catch(...){valid_[i]=false;cancelAutomaticEdit();cancelQueued();status(L"Enter a finite number or beat fraction");}return;}
     if(id==reload){load();return;}if(id==done){hide();return;}if(id==apply){write(false);return;}if(id==stop||id==stopAll){write(true,id==stopAll);return;}
     if(id==linked){fields_["linked"]=!fields_.value("linked",true);if(fields_["linked"].get<bool>()){fields_["fall"]=fields_["rise"];fields_["fallShape"]=fields_["riseShape"];}showFields();dirty_=true;++generation_;scheduleAutomaticGate();return;}
-    if(notification!=CBN_SELCHANGE)return;dirty_=true;++generation_;
-    if(id==target){fields_["target"]=targets[size_t(selected(target))];fields_["floor"]=selected(target)==2?-1:0;fields_["ceiling"]=selected(target)==1?12:1;if(selected(target)==1)fields_["pitchRange"]=12;showFields();if(selected(target)==3)loadParameters();}
-    else if(id==plugin)loadParameters();else if(id==riseShape||id==fallShape){fields_[id==riseShape?"riseShape":"fallShape"]=shapes[size_t(selected(id))];if(fields_.value("linked",true))fields_[id==riseShape?"fallShape":"riseShape"]=fields_[id==riseShape?"riseShape":"fallShape"];showFields();}
+    if(notification!=CBN_SELCHANGE)return;
+    if(id==target){const int index=selected(target);if(index<0||size_t(index)>=targets.size())return;dirty_=true;++generation_;fields_["target"]=targets[size_t(index)];fields_["floor"]=index==2?-1:0;fields_["ceiling"]=index==1?12:1;if(index==1)fields_["pitchRange"]=12;showFields();if(index==3)loadParameters();}
+    else if(id==plugin){dirty_=true;++generation_;loadParameters();}
+    else if(id==riseShape||id==fallShape){const int index=selected(id);if(index<0||size_t(index)>=shapes.size())return;dirty_=true;++generation_;fields_[id==riseShape?"riseShape":"fallShape"]=shapes[size_t(index)];if(fields_.value("linked",true))fields_[id==riseShape?"fallShape":"riseShape"]=fields_[id==riseShape?"riseShape":"fallShape"];showFields();}
+    else return;
     scheduleAutomaticGate();
   }
-  void layout()override{const auto [w,h]=size();place(heading,16,10,w-32,24);place(target,16,40,w-32,28);const bool parameterTarget=fields_.value("target",std::string())=="parameter";place(plugin,16,76,(w-40)/2,26,parameterTarget);place(parameter,24+(w-40)/2,76,(w-40)/2,26,parameterTarget);
-    for(int i=0;i<9;++i){place(labelBase+i,16,290+32*i,115,24);place(sliderBase+i,132,286+32*i,std::max(20.f,w-246),28);place(fieldBase+i,w-106,286+32*i,90,26);}
-    place(riseShape,16,580,(w-40)/2,26);place(fallShape,24+(w-40)/2,580,(w-40)/2,26);place(linked,16,614,w-32,26);place(shapeLabel,16,644,w-32,32);place(apply,16,682,100,28);place(stop,124,682,126,28);place(stopAll,258,682,w-274,28);place(reload,16,718,126,28);place(done,w-106,718,90,28);place(statusLabel,16,752,w-32,std::max(36.f,h-758));}
+  void layout()override{const auto [w,h]=size();place(heading,16,8,w-32,22);place(target,16,34,w-32,26);const bool parameterTarget=fields_.value("target",std::string())=="parameter";place(plugin,16,66,(w-40)/2,24,parameterTarget);place(parameter,24+(w-40)/2,66,(w-40)/2,24,parameterTarget);
+    for(int i=0;i<9;++i){place(labelBase+i,16,216+28*i,115,22);place(sliderBase+i,132,213+28*i,std::max(20.f,w-246),26);place(fieldBase+i,w-106,213+28*i,90,24);}
+    place(riseShape,16,472,(w-40)/2,24);place(fallShape,24+(w-40)/2,472,(w-40)/2,24);place(linked,16,502,w-32,24);place(shapeLabel,16,530,w-32,24);place(apply,16,558,100,26);place(stop,124,558,126,26);place(stopAll,258,558,w-274,26);place(reload,16,590,126,26);place(done,w-106,590,90,26);place(statusLabel,16,622,w-32,std::max(32.f,h-628));}
   void paint(RenderSurface &s)override{const auto [w,h]=size();s.fill(0,0,w,h,0x18222d);if(fields_.empty()||std::find(valid_.begin(),valid_.end(),false)!=valid_.end()||value("period")<=0||value("floor")>value("ceiling"))return;
     auto shape=[&](const char *key){return Tracker::GateShape(std::find(shapes.begin(),shapes.end(),fields_.value(key,std::string("linear")))-shapes.begin());};Tracker::GateSignal gate{value("floor"),value("ceiling"),value("period"),value("phase"),value("width"),value("rise"),value("fall"),shape("riseShape"),shape("fallShape")};
-    const float left=52,width=w-68,top=120,height=130;const double low=gate.floor==gate.ceiling?gate.floor-.5:gate.floor,high=gate.floor==gate.ceiling?gate.ceiling+.5:gate.ceiling;
-    for(int i=0;i<=4;++i){const float x=left+width*i/4;s.line(x,top,x,top+height,0x354757);s.uiText(wide(std::to_string(gate.period*i/2)),x-12,top+height+5,72,0x8fa8ba);}s.uiText(wide(std::to_string(gate.ceiling)),4,top,48,0x8fa8ba);s.uiText(wide(std::to_string(gate.floor)),4,top+height-18,48,0x8fa8ba);
+    const float left=52,width=w-68,top=98,height=96;const double low=gate.floor==gate.ceiling?gate.floor-.5:gate.floor,high=gate.floor==gate.ceiling?gate.ceiling+.5:gate.ceiling;
+    for(int i=0;i<=4;++i){const float x=left+width*i/4;s.line(x,top,x,top+height,0x354757);s.uiText(wide(std::to_string(gate.period*i/2)),x-12,top+height+3,72,0x8fa8ba);}s.uiText(wide(std::to_string(gate.ceiling)),4,top,48,0x8fa8ba);s.uiText(wide(std::to_string(gate.floor)),4,top+height-16,48,0x8fa8ba);
     double previous=gate.value(0);for(int i=1;i<=1024;++i){const auto v=gate.value(gate.period*2*i/1024);s.line(left+width*(i-1)/1024,top+height-float((previous-low)/(high-low))*height,left+width*i/1024,top+height-float((v-low)/(high-low))*height,0x72dcc6,1.5f);previous=v;}
-    const auto rise=gate.riseShape==Tracker::GateShape::Direct?0:std::min(gate.rise,gate.period*gate.width),fall=gate.fallShape==Tracker::GateShape::Direct?0:std::min(gate.fall,gate.period*(1-gate.width));set(shapeLabel,L"Effective rise "+wide(std::to_string(rise))+L" b · fall "+wide(std::to_string(fall))+L" b");
   }
 public:
   void flushForProjectSave(){if(automaticEdit_)flushAutomaticEdit();if(dirty_||pending_||queued_)throw std::runtime_error("Finish the retained gate field before saving");}
   void flushForHistory(){if(automaticEdit_)flushAutomaticEdit();if(pending_||queued_)throw std::runtime_error("Wait for the gate update before Undo");}
   GateInspectorWindow(HWND parent,Request request,Context context,Capture capture,std::function<Json()> rack):NativeToolWindow(parent),request_(std::move(request)),context_(std::move(context)),capture_(std::move(capture)),rack_(std::move(rack)){
-    minimumWidth_=450;minimumHeight_=830;create(L"ScreamSeq.GateInspector",L"Advanced gate",520,860);for(auto id:{target,plugin,parameter,riseShape,fallShape})combo(id);choices(target,{L"Volume multiplier",L"Pitch offset / semitones",L"Absolute pan",L"Plugin parameter"});for(auto id:{riseShape,fallShape})choices(id,{L"Direct",L"Linear",L"Ease in",L"Ease out",L"Ease in/out"});
+    minimumWidth_=450;minimumHeight_=660;create(L"ScreamSeq.GateInspector",L"Advanced gate",520,690);for(auto id:{target,plugin,parameter,riseShape,fallShape})combo(id);choices(target,{L"Volume multiplier",L"Pitch offset / semitones",L"Absolute pan",L"Plugin parameter"});for(auto id:{riseShape,fallShape})choices(id,{L"Direct",L"Linear",L"Ease in",L"Ease out",L"Ease in/out"});
     for(int i=0;i<9;++i){label(labelBase+i,labels[size_t(i)]);edit(fieldBase+i,L"0",48);add(sliderBase+i,TRACKBAR_CLASSW,labels[size_t(i)],TBS_HORZ|TBS_NOTICKS);NativeInputGate::present(controls_.at(sliderBase+i),TBM_SETRANGE,TRUE,MAKELPARAM(0,10000));}
     label(heading,L"Advanced gate · two cycles · time in beats");label(shapeLabel,L"");label(statusLabel,L"");button(linked,L"Link rise / fall");button(apply,L"Apply gate");button(stop,L"Write stop");button(stopAll,L"Stop all");button(reload,L"Use cursor");button(done,L"Close");finish();clampToOwnerWorkArea();
   }

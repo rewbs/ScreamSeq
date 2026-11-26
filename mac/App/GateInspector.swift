@@ -124,7 +124,7 @@ final class GateInspector:NSView {
       guard let self,self.captureGeneration==token else{return};self.pending=false
       guard let result=reply["result"] as? [String:Any],result["revision"] as? String==capturedRevision,let data=result["data"] as? [String:Any] else{self.failure(reply);return}
       self.commands=data["commands"] as? [[String:Any]] ?? [];self.bindings=data["bindings"] as? [[String:Any]] ?? [];self.plugins=c.0.nativePlugins
-      self.plugin.removeAllItems();for p in self.plugins{self.plugin.addItem(withTitle:p["name"] as? String ?? "Plugin");self.plugin.lastItem?.representedObject=p["instanceID"]}
+      self.plugin.removeAllItems();for p in self.plugins{let item=NSMenuItem(title:p["name"] as? String ?? "Plugin",action:nil,keyEquivalent:"");item.representedObject=p["instanceID"];self.plugin.menu?.addItem(item)}
       let own=self.commands.first{($0["channel"] as? Int)==self.channel&&($0["position"] as? Int ?? 0)/65536==self.row&&($0["column"] as? Int)==self.column}
       let inherited=self.commands.filter{($0["channel"] as? Int)==self.channel&&($0["position"] as? Int ?? 0)/65536<self.row&&($0["native"] as? String)=="gate"}.max{($0["position"] as? Int ?? 0)<($1["position"] as? Int ?? 0)}
       let source=(own?["native"] as? String)=="gate" ? own:own==nil ? inherited:nil
@@ -158,13 +158,15 @@ final class GateInspector:NSView {
     let chosen=selectedParameter;parameter.removeAllItems();selectedParameter=nil
     if selectedPlugin==nil,model.number("binding")==0{selectedPlugin=plugins.first?["instanceID"] as? String}
     guard let id=selectedPlugin,let slot=plugins.firstIndex(where:{$0["instanceID"] as? String==id}) else{status.stringValue="Add an instrument or effect plugin to choose a parameter.";return}
-    plugin.selectItem(at:slot);let token=captureGeneration
+    if let item=plugin.itemArray.first(where:{$0.representedObject as? String==id}){plugin.select(item)}else{plugin.selectItem(at:slot)}
+    let token=captureGeneration
     onRequest("plugin.parameters.get",["slot":slot]){[weak self] reply in
       guard let self,self.captureGeneration==token,self.selectedPlugin==id else{return}
       guard let result=reply["result"] as? [String:Any],result["revision"] as? String==self.revision,let data=result["data"] as? [[String:Any]] else{self.failure(reply);return}
       self.parameters=data.filter{$0["writable"] as? Bool != false};self.parameter.removeAllItems()
-      for p in self.parameters{self.parameter.addItem(withTitle:p["name"] as? String ?? "Parameter");self.parameter.lastItem?.representedObject=p["id"]}
-      if let chosen{self.parameter.selectItem(at:self.parameters.firstIndex(where:{$0["id"] as? Int==chosen}) ?? -1)}
+      for p in self.parameters{let item=NSMenuItem(title:p["name"] as? String ?? "Parameter",action:nil,keyEquivalent:"");item.representedObject=p["id"];self.parameter.menu?.addItem(item)}
+      if let chosen,let item=self.parameter.itemArray.first(where:{$0.representedObject as? Int==chosen}){self.parameter.select(item)}
+      else if chosen != nil{self.parameter.selectItem(at:-1)}
       self.selectedParameter=self.parameter.selectedItem?.representedObject as? Int
     }
   }

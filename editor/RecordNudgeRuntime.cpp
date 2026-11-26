@@ -36,8 +36,9 @@ void RecordNudgeRuntime::prepare(OpenMPT::CSoundFile &song,uint32_t count) noexc
   const double units=s.NativeRowStep(performanceUnitsPerRow);
   const double begin=s.NativeRowPosition(performanceUnitsPerRow),beatStep=s.NativeBeatStep();
   if(units<=0||beatStep<=0)return;
-  const bool entering=pattern_!=s.m_nPattern||order_!=s.m_nCurrentOrder||begin<=previous_;
-  pattern_=s.m_nPattern;order_=s.m_nCurrentOrder;previous_=begin;
+  const bool jump=row_!=UINT32_MAX&&s.m_nRow!=row_&&s.m_nRow!=row_+1;
+  const bool entering=pattern_!=s.m_nPattern||order_!=s.m_nCurrentOrder||begin<=previous_||jump;
+  pattern_=s.m_nPattern;order_=s.m_nCurrentOrder;row_=s.m_nRow;previous_=begin;
   if(entering)beatPosition_=0;
   for(auto &t:targets_) {
     if(entering){const auto found=t.patterns.find(uint16_t(pattern_));t.events=found==t.patterns.end()?nullptr:&found->second;t.curve={};

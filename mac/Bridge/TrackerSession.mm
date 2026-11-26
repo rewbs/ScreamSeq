@@ -134,7 +134,7 @@ NSData *runScanner(NSArray<NSString *> *arguments) {
   return data;
 }
 uint64_t unsignedInteger(id value, uint64_t maximum, const char *message) {
-  if (![value isKindOfClass:NSNumber.class])
+  if (![value isKindOfClass:NSNumber.class] || CFGetTypeID((__bridge CFTypeRef)value) == CFBooleanGetTypeID())
     throw std::runtime_error(message);
   const double number = [value doubleValue];
   if (!std::isfinite(number) || number < 0 || number > double(maximum) || std::floor(number) != number)
@@ -145,23 +145,21 @@ PluginDescriptor descriptor(NSDictionary *item) {
   if (![item isKindOfClass:NSDictionary.class])
     throw std::runtime_error("Invalid Audio Unit description");
   PluginDescriptor d;
-  d.format = [item[@"format"] isKindOfClass:NSString.class] ? [item[@"format"] UTF8String] : "AU";
+  d.format = item[@"format"] ? Automation::string(item[@"format"], 16).UTF8String : "AU";
   if (d.format != "AU" && d.format != "VST3" && d.format != "Built-in")
     throw std::runtime_error("Unsupported native plugin format");
   d.type = uint32_t(unsignedInteger(item[@"type"], UINT32_MAX, "Invalid plugin type"));
   d.subtype = uint32_t(unsignedInteger(item[@"subtype"], UINT32_MAX, "Invalid plugin subtype"));
   d.manufacturer = uint32_t(unsignedInteger(item[@"manufacturer"], UINT32_MAX, "Invalid plugin manufacturer"));
-  d.name = [item[@"name"] isKindOfClass:NSString.class] ? [item[@"name"] UTF8String] : "Plugin";
+  d.name = item[@"name"] ? Automation::string(item[@"name"], 1024).UTF8String : "Plugin";
   if (d.format == "VST3") {
-    if (![item[@"path"] isKindOfClass:NSString.class] || ![item[@"classID"] isKindOfClass:NSString.class] ||
-        [item[@"classID"] length] != 32)
+    d.path = Automation::string(item[@"path"], 32768).UTF8String;
+    d.classID = Automation::string(item[@"classID"], 32).UTF8String;
+    if (d.classID.size() != 32 || std::any_of(d.classID.begin(), d.classID.end(), [](unsigned char c) { return !std::isxdigit(c); }))
       throw std::runtime_error("Invalid VST3 bundle or class identifier");
-    d.path = [item[@"path"] UTF8String];
-    d.classID = [item[@"classID"] UTF8String];
   }
-  if (item[@"isInstrument"] && ![item[@"isInstrument"] isKindOfClass:NSNumber.class])
-    throw std::runtime_error("Invalid plugin instrument flag");
-  d.instrument = d.type == kAudioUnitType_MusicDevice || [item[@"isInstrument"] boolValue];
+  const bool explicitInstrument = item[@"isInstrument"] ? Automation::boolean(item[@"isInstrument"]) : false;
+  d.instrument = d.type == kAudioUnitType_MusicDevice || explicitInstrument;
   if (d.format == "Built-in") {
     d.classID = Automation::string(item[@"classID"], 128).UTF8String;
     if (d.type || d.subtype || d.manufacturer || d.instrument || (item[@"path"] && [Automation::string(item[@"path"]) length]))
@@ -231,9 +229,8 @@ std::vector<PluginState> decodePlugins(NSDictionary *root) {
     NSData *data = item[@"state"];
     if (data.length > 16 * 1024 * 1024)
       throw std::runtime_error("Audio Unit state exceeds 16 MB");
-    if (item[@"bypass"] && ![item[@"bypass"] isKindOfClass:NSNumber.class])
-      throw std::runtime_error("Invalid Audio Unit bypass value");
-    PluginState state{descriptor(item), {}, bool([item[@"bypass"] boolValue])};
+    const bool bypass = item[@"bypass"] ? Automation::boolean(item[@"bypass"]) : false;
+    PluginState state{descriptor(item), {}, bypass};
     state.instanceID = Automation::string(item[@"instanceID"], 128).UTF8String;
     state.audioLayout = Automation::string(item[@"audioLayout"] ?: @"",8192).UTF8String;
     if (state.instanceID.empty() || !instanceIDs.insert(state.instanceID).second)
@@ -253,10 +250,14 @@ std::vector<PluginState> decodePlugins(NSDictionary *root) {
     if (item[@"instrument"])
       state.instrument = uint32_t(unsignedInteger(item[@"instrument"], 255, "Invalid tracker instrument assignment"));
     {
-      auto assignments = decodePluginAssignments(item[@"instrumentAssignments"]);
-      if ((assignments.empty() ? 0 : assignments.front().instrument) != state.instrument)
-        throw std::runtime_error("Primary instrument does not match plugin assignments");
-      setPluginAssignments(state, assignments);
+      if (item[@"instrumentAssignments"]) {
+        auto assignments = decodePluginAssignments(item[@"instrumentAssignments"]);
+        if ((assignments.empty() ? 0 : assignments.front().instrument) != state.instrument)
+          throw std::runtime_error("Primary instrument does not match plugin assignments");
+        setPluginAssignments(state, assignments);
+      } else if (state.instrument) {
+        setPluginAssignments(state, {{state.instrument, 1}});
+      }
     }
     if (data.length) {
       auto begin = static_cast<const std::byte *>(data.bytes);
@@ -1791,7 +1792,7 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
     auto &m = *s.Patterns[0].GetpModCommand(0, 0);
     m.note = uint8_t(std::clamp(note, NSInteger(1), NSInteger(120))); m.instr = 1;
     s.Patterns[0].GetpModCommand(16, 0)->note = NOTE_NOTECUT;
-    _audio->play(preview.snapshotData(),0,false,{},0,nullptr,{},true); _isolatedSamplePreview=YES; _isolatedPreviewSample=sample;
+    _audio->play(preview.snapshotData(),0,true,{},0,nullptr,{},true); _isolatedSamplePreview=YES; _isolatedPreviewSample=sample;
     return YES;
   } catch (const std::exception &e) {
     failure(error, e);
@@ -2503,6 +2504,8 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
 - (BOOL)recordingActive { return _recording && _recording->capturing; }
 - (void)captureRecordingEvent:(uint64_t)timestamp status:(uint8_t)status note:(uint8_t)note velocity:(uint8_t)velocity {
   if(!_recording||!_recording->capturing)return;
+  const uint8_t kind=status&0xf0;
+  if(kind!=0x80&&kind!=0x90)return;
   if(![_recordingRevision isEqual:self.automationRevision]||!_audio->renderer()||timestamp<_recordingLastTimestamp||timestamp<_recordingStartTimestamp){++_recording->missingTime;return;}
   _recordingLastTimestamp=timestamp;
   mach_timebase_info_data_t timebase;mach_timebase_info(&timebase);

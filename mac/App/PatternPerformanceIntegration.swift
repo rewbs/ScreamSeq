@@ -44,7 +44,7 @@ extension AppController {
       guard let self else{return}
       if let error=reply["error"] as? [String:Any] {self.statusLabel.stringValue=error["message"] as? String ?? "Could not change columns";return}
       self.patternView.cursorChannel=channel
-      if count>0 {self.patternView.column=2+count*2;self.patternView.revealCursor()}
+      if count>0 {self.patternView.column=1+count*2;self.patternView.revealCursor()}
       self.statusLabel.stringValue="\(count) FX columns · ? finds effects · Return edits a cell"
     }
   }

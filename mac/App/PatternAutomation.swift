@@ -513,7 +513,7 @@ final class PatternAutomationEditor: NSView, NSTableViewDataSource, NSTableViewD
     curve.selectItem(at: curves.firstIndex(of: point.curve) ?? 1)
     canvas.setAccessibilityValue("Row \(pointRow.stringValue), \(pointValue.stringValue) percent")
   }
-  func previewFormula() {
+  func previewFormula(retries: Int = 0) {
     formulaPreviewGeneration += 1; let generation=formulaPreviewGeneration
     formulaPreviewWork?.cancel()
     guard canvas.points.contains(where:{$0.curve=="scripted"}),let onRequest else { return }
@@ -527,12 +527,12 @@ final class PatternAutomationEditor: NSView, NSTableViewDataSource, NSTableViewD
           // A successful preview must not hide a failed save or revision conflict.
           if !self.hasDraft {self.status.stringValue="Scripted envelope · select a point to edit its formula."}
         } else if let error=response["error"] as? [String:Any] {
-          if error["code"] as? Int == -32002 { self.previewFormula() }
+          if error["code"] as? Int == -32002 && retries < 5 { self.previewFormula(retries: retries + 1) }
           else { self.status.stringValue=error["message"] as? String ?? "Invalid formula" }
         }
       }
     }
-    formulaPreviewWork=work;DispatchQueue.main.asyncAfter(deadline:.now()+0.15,execute:work)
+    formulaPreviewWork=work;DispatchQueue.main.asyncAfter(deadline:.now()+(retries > 0 ? 0.25 : 0.15),execute:work)
   }
   func control(_ control:NSControl,textView:NSTextView,completions words:[String],forPartialWordRange range:NSRange,indexOfSelectedItem index:UnsafeMutablePointer<Int>)->[String]{
     guard control === formula else{return words};index.pointee = -1;return FormulaCatalog.completions(textView.string,range:range)
@@ -552,7 +552,7 @@ final class PatternAutomationEditor: NSView, NSTableViewDataSource, NSTableViewD
       row.isFinite, value.isFinite, row >= 0, row < Double(canvas.rows), value >= 0, value <= 100 else {
       status.stringValue = "Enter a row inside the pattern and a value from 0 to 100%."; return
     }
-    let position=Int((row*256).rounded())
+    let position=max(0,min(canvas.rows*256-1,Int((row*256).rounded())))
     guard !canvas.points.enumerated().contains(where:{$0.offset != canvas.selected && $0.element.position==position}) else{status.stringValue="Another point occupies this row; your fields are retained.";return}
     pointFieldsDirty=false
     canvas.replaceSelected(position: position, value: value / 100, curve: curves[max(0, curve.indexOfSelectedItem)])

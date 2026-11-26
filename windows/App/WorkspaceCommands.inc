@@ -73,6 +73,8 @@
             {songTimingCommand,L"Song / Tempo, meter and groove",L""},
             {songPropertiesCommand,L"Song / Title and channel count",L""},
             {keyboardSettingsCommand,L"Preferences / Musical keyboard and Play-Stop key",L""},
+            {usageAnalyticsToggleCommand,L"Preferences / Toggle Local Usage & Friction Analytics",L""},
+            {usageAnalyticsBookmarkCommand,L"Analytics / Bookmark friction moment…",L""},
             {noteColumnMuteCommand,L"Track / Toggle current note column mute",L""},
             {noteColumnSoloCommand,L"Track / Solo current channel (toggle restores mutes)",L""},
             {noteTrackCreateCommand,L"Track / New note track…",L""},

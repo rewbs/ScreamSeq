@@ -174,8 +174,12 @@
             if(digit<0) return false;
             cell[column==1 ? "instrument" : "parameter"]=(unsigned(column==1 ? c.instrument : c.parameter)*16+digit)&255;
         } else if(column==2 && key>='0' && key<='9') {
-            cell["volumeCommand"]=c.volumeCommand ? c.volumeCommand : 1;
-            cell["volume"]=(c.volume%10)*10+unsigned(key-'0');
+            const unsigned volumeCmd=c.volumeCommand ? c.volumeCommand : 1u;
+            const unsigned digit=unsigned(key-'0');
+            const unsigned shifted=(c.volume%10u)*10u+digit;
+            const unsigned limit=(volumeCmd==1u||volumeCmd==2u)?64u:9u;
+            cell["volumeCommand"]=volumeCmd;
+            cell["volume"]=shifted<=limit ? shifted : digit;
         } else {
             bool found=false;
             for(const auto &command:view->commands.at(column==2 ? "volume" : "effect")) {

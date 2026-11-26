@@ -60,15 +60,17 @@ final class SidechainEditor: NSView, NSTableViewDataSource, NSTableViewDelegate 
     plugins = (data["plugins"] as? [[String: Any]] ?? []).filter { $0["instrument"] as? Bool != true }
     routes = data["sidechains"] as? [[String: Any]] ?? []
     if !plugins.contains(where: { $0["id"] as? String == pluginID }) { pluginID = plugins.first?["id"] as? String }
-    plugin.removeAllItems(); plugin.addItems(withTitles: plugins.map { $0["name"] as? String ?? "Effect" })
-    if let index = plugins.firstIndex(where: { $0["id"] as? String == pluginID }) { plugin.selectItem(at: index) }
-    source.removeAllItems(); source.addItems(withTitles: buses.map { $0["name"] as? String ?? "Bus" })
+    plugin.removeAllItems()
+    for p in plugins { let item = NSMenuItem(title: p["name"] as? String ?? "Effect", action: nil, keyEquivalent: ""); item.representedObject = p["id"] as? String; plugin.menu?.addItem(item) }
+    if let item = plugin.itemArray.first(where: { $0.representedObject as? String == pluginID }) { plugin.select(item) }
+    source.removeAllItems()
+    for b in buses { let item = NSMenuItem(title: b["name"] as? String ?? "Bus", action: nil, keyEquivalent: ""); item.representedObject = b["id"] as? String; source.menu?.addItem(item) }
     updatePorts()
     if buses.isEmpty { status.stringValue = "Enable the Mixer, then add an effect with an auxiliary input." }
   }
   @objc private func selectPlugin() {
-    guard !loading, plugins.indices.contains(plugin.indexOfSelectedItem) else { return }
-    pluginID = plugins[plugin.indexOfSelectedItem]["id"] as? String; inputIndex = nil; updatePorts()
+    guard !loading, let id = plugin.selectedItem?.representedObject as? String else { return }
+    pluginID = id; inputIndex = nil; updatePorts()
   }
   private func updatePorts() {
     let selected = plugins.first { $0["id"] as? String == pluginID }
@@ -80,16 +82,18 @@ final class SidechainEditor: NSView, NSTableViewDataSource, NSTableViewDelegate 
       }
     }
     if !ports.contains(where: { $0["index"] as? Int == inputIndex }) { inputIndex = ports.first?["index"] as? Int }
-    input.removeAllItems(); input.addItems(withTitles: ports.map {
-      "\(($0["index"] as? Int ?? 0) + 1) · \($0["name"] as? String ?? "Input")\($0["active"] as? Bool == true ? "" : " · disabled")"
-    })
-    if let index = ports.firstIndex(where: { $0["index"] as? Int == inputIndex }) { input.selectItem(at: index) }
+    input.removeAllItems()
+    for port in ports {
+      let title = "\((port["index"] as? Int ?? 0) + 1) · \(port["name"] as? String ?? "Input")\(port["active"] as? Bool == true ? "" : " · disabled")"
+      let item = NSMenuItem(title: title, action: nil, keyEquivalent: ""); item.representedObject = port["index"] as? Int; input.menu?.addItem(item)
+    }
+    if let item = input.itemArray.first(where: { $0.representedObject as? Int == inputIndex }) { input.select(item) }
     table.reloadData(); resetSource()
     status.stringValue = ports.isEmpty ? "This effect has no auxiliary input. Choose a compatible effect." : "\(selectedRoutes.count) sources feed this input"
   }
   @objc private func selectInput() {
-    guard !loading, ports.indices.contains(input.indexOfSelectedItem) else { return }
-    inputIndex = ports[input.indexOfSelectedItem]["index"] as? Int; table.reloadData(); resetSource()
+    guard !loading, let index = input.selectedItem?.representedObject as? Int else { return }
+    inputIndex = index; table.reloadData(); resetSource()
   }
   private func resetSource() { gain.stringValue = "0"; pre.state = .off; enabled.state = .on; table.deselectAll(nil) }
   private func configure() {
@@ -104,8 +108,7 @@ final class SidechainEditor: NSView, NSTableViewDataSource, NSTableViewDelegate 
     }
   }
   func apply() {
-    guard !loading, buses.indices.contains(source.indexOfSelectedItem), let value = Double(gain.stringValue), value.isFinite else { return }
-    let sourceID = buses[source.indexOfSelectedItem]["id"] as! String
+    guard !loading, let sourceID = source.selectedItem?.representedObject as? String, let value = Double(gain.stringValue), value.isFinite else { return }
     var sources = selectedRoutes.filter { $0["source"] as? String != sourceID }.map { clean($0) }
     sources.append(["source": sourceID, "gainDB": value, "preFader": pre.state == .on, "enabled": enabled.state == .on]); write(sources)
   }
@@ -126,7 +129,7 @@ final class SidechainEditor: NSView, NSTableViewDataSource, NSTableViewDelegate 
   func tableViewSelectionDidChange(_ notification: Notification) {
     let index = table.selectedRow; guard selectedRoutes.indices.contains(index) else { return }
     let route = selectedRoutes[index]
-    if let index = buses.firstIndex(where: { $0["id"] as? String == route["source"] as? String }) { source.selectItem(at: index) }
+    if let item = source.itemArray.first(where: { $0.representedObject as? String == route["source"] as? String }) { source.select(item) }
     gain.doubleValue = (route["gainDB"] as? NSNumber)?.doubleValue ?? 0
     pre.state = route["preFader"] as? Bool == true ? .on : .off; enabled.state = route["enabled"] as? Bool == true ? .on : .off
   }

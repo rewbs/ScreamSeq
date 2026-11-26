@@ -63,7 +63,8 @@ final class SongAutomationEditor: NSView, NSSearchFieldDelegate {
   private func normalize(_ scalar:Double)->Double {min(1,max(0,(scalar-minimum)/max(1e-12,maximum-minimum)))}
   private func renderPoints(){canvas.points=points.map{EnvelopePoint(position:$0["frame"] as? Int ?? 0,value:normalize(($0["value"] as? NSNumber)?.doubleValue ?? 0),curve:"step")}}
   private func readCanvas(){
-    let existing=Dictionary(uniqueKeysWithValues:points.map{($0["frame"] as! Int,($0["value"] as! NSNumber).doubleValue)})
+    var existing=[Int:Double]()
+    for p in points { if let f=p["frame"] as? Int,let v=(p["value"] as? NSNumber)?.doubleValue { existing[f]=v } }
     points=canvas.points.map{p in let old=existing[p.position];let scalar=old.flatMap{normalize($0)==p.value ? $0:nil} ?? (minimum+p.value*(maximum-minimum));return ["frame":p.position,"value":scalar]}
     changed();updateAccessiblePoint()
   }
@@ -110,7 +111,10 @@ final class SongAutomationEditor: NSView, NSSearchFieldDelegate {
           self.generation==token,self.onContext?().revisionToken==expected,desired==nil || catalog.contains(where:{$0["id"] as? Int==desired}) else{
             self.canvas.allowsEditing=self.parameterID != nil;self.fail((response["error"] as? [String:Any])?["message"] as? String ?? "Captured parameter is unavailable; the editor was retained.");return}
         self.model=context;self.revision=expected;self.slot=chosen;self.pluginID=id;self.catalog=catalog;self.parameterID=desired ?? catalog.first?["id"] as? Int
-        self.points=all.filter{$0["slot"] as? Int==chosen && $0["id"] as? Int==self.parameterID}.map{["frame":$0["frame"]!,"value":$0["value"]!]}.sorted{($0["frame"] as! Int)<($1["frame"] as! Int)}
+        self.points=all.compactMap{entry -> [String:Any]? in
+          guard entry["slot"] as? Int==chosen,entry["id"] as? Int==self.parameterID,let frame=entry["frame"] as? Int,let value=entry["value"] as? NSNumber else{return nil}
+          return ["frame":frame,"value":value]
+        }.sorted{($0["frame"] as? Int ?? 0)<($1["frame"] as? Int ?? 0)}
         self.hasDraft=false;self.fieldDraft=false;self.failed=false;self.generation+=1;self.renderPoints()
         self.canvas.selected=same ? self.points.firstIndex{$0["frame"] as? Int==oldFrame}:(self.points.isEmpty ? nil:0)
         self.canvas.allowsEditing=self.target?["writable"] as? Bool != false && self.parameterID != nil
@@ -136,10 +140,13 @@ final class SongAutomationEditor: NSView, NSSearchFieldDelegate {
   @objc private func changeSnap(){canvas.snap=[480,4800,48000,1][max(0,snap.indexOfSelectedItem)]}
   func showPoint(){guard !fieldDraft else{return};setting=true;defer{setting=false}
     pointIndex.stringValue=String(canvas.selected ?? -1)
-    if let i=canvas.selected,points.indices.contains(i){time.stringValue=unitIndex==0 ? String(format:"%.10g",Double(points[i]["frame"] as! Int)/48000):String(points[i]["frame"] as! Int);value.stringValue=String(format:"%.9g",(points[i]["value"] as! NSNumber).doubleValue)}else{time.stringValue="0";value.stringValue=String(format:"%.9g",(target?["value"] as? NSNumber)?.doubleValue ?? minimum)}
+    if let i=canvas.selected,points.indices.contains(i),let f=points[i]["frame"] as? Int,let v=(points[i]["value"] as? NSNumber)?.doubleValue {
+      time.stringValue=unitIndex==0 ? String(format:"%.10g",Double(f)/48000):String(f)
+      value.stringValue=String(format:"%.9g",v)
+    }else{time.stringValue="0";value.stringValue=String(format:"%.9g",(target?["value"] as? NSNumber)?.doubleValue ?? minimum)}
     displayedPoint=canvas.selected.flatMap { i in
-      guard points.indices.contains(i) else{return nil}
-      return (points[i]["frame"] as! Int,(points[i]["value"] as! NSNumber).doubleValue,time.stringValue,value.stringValue)
+      guard points.indices.contains(i),let f=points[i]["frame"] as? Int,let v=(points[i]["value"] as? NSNumber)?.doubleValue else{return nil}
+      return (f,v,time.stringValue,value.stringValue)
     }
     updateAccessiblePoint()
   }
@@ -160,7 +167,7 @@ final class SongAutomationEditor: NSView, NSSearchFieldDelegate {
     guard !points.enumerated().contains(where:{$0.offset != selected && $0.element["frame"] as? Int==frame}) else{fail("Another point occupies this frame; your fields are retained.");return false}
     var next=points;if let selected,next.indices.contains(selected){next.remove(at:selected)}
     guard next.count<100000 else{fail("Automation is limited to 100000 points.");return false}
-    next.append(["frame":frame,"value":v]);next.sort{($0["frame"] as! Int)<($1["frame"] as! Int)}
+    next.append(["frame":frame,"value":v]);next.sort{($0["frame"] as? Int ?? 0)<($1["frame"] as? Int ?? 0)}
     displayedPoint=(frame,v,time.stringValue,value.stringValue)
     fieldDraft=false;if !(next as NSArray).isEqual(points as NSArray){points=next;renderPoints();canvas.selected=points.firstIndex{$0["frame"] as? Int==frame};changed()};updateAccessiblePoint();return true
   }

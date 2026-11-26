@@ -313,6 +313,10 @@ NativeSong prepareEffectTransform(const Document &doc,const std::vector<PatternR
           for(auto &lane:node.envelopes)if(lane.pattern==pattern)lane.points=curve(region,std::move(lane.points),linked(EnvelopeTargetKind::Graph,node.id,pattern));
           std::erase_if(node.envelopes,[](const auto &lane){return lane.points.empty();});
         }
+        for(auto &source:next.signal.songSources) {
+          for(auto &lane:source.node.envelopes)if(lane.pattern==pattern)lane.points=curve(region,std::move(lane.points),linked(EnvelopeTargetKind::Graph,source.node.id,pattern));
+          std::erase_if(source.node.envelopes,[](const auto &lane){return lane.points.empty();});
+        }
       }
     }
     if(!effects)continue;

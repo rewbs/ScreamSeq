@@ -30,6 +30,7 @@
         case playCursorCommand:return {"shift+space"};case playSelectionCommand:return {"ctrl+space"};case playSelectionCursorCommand:return {"ctrl+shift+space"};
         case widerCommand:return {"ctrl+alt+left"};case narrowerCommand:return {"ctrl+alt+right"};
         case tallerCommand:return {"ctrl+alt+up"};case shorterCommand:return {"ctrl+alt+down"};
+        case usageAnalyticsBookmarkCommand:return {"ctrl+shift+."};
         default:return {};
         }
     }
@@ -92,6 +93,11 @@
         palette->configureShortcuts([this](int id){return workspaceShortcuts->keys(shortcutCommandID(id));},
             [this,change](int id,const auto &keys){change(id,[&]{workspaceShortcuts->set(shortcutCommandID(id),keys);});},
             [this,change](int id){change(id,[&]{workspaceShortcuts->reset(shortcutCommandID(id));});});
+        palette->configureAnalytics(
+            [this]{usageAnalytics.recordPaletteOpen();},
+            [this](const std::wstring &q,size_t n){usageAnalytics.recordPaletteQuery(utf8Path(q),n);},
+            [this](const std::wstring &q,const std::wstring &cmd,size_t n){usageAnalytics.recordPaletteExecute(utf8Path(q),utf8Path(cmd),n);},
+            [this](const std::wstring &q,size_t n,bool ran){usageAnalytics.recordPaletteClose(utf8Path(q),n,ran);});
     }
     void workspaceShortcutChanged() {
         shortcutTimer();

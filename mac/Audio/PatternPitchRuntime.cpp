@@ -9,6 +9,7 @@ PatternPitchRuntime::PatternPitchRuntime(const NativeSong &native,OpenMPT::CSoun
     if(!gate&&command.kind!=PatternCommandKind::PitchSet&&command.kind!=PatternCommandKind::PitchSlide)continue;
     const auto track=std::find_if(native.tracks.begin(),native.tracks.end(),[&](const auto &v){return v.second.id==command.track;});
     const auto pattern=std::find_if(native.patterns.begin(),native.patterns.end(),[&](const auto &v){return v.second.id==command.pattern;});
+    if(track==native.tracks.end()||pattern==native.patterns.end())throw std::invalid_argument("Pitch command has an unresolved pattern or track");
     auto [found,inserted]=targets.emplace(track->first,targets_.size());
     if(inserted){targets_.emplace_back();targets_.back().channel=track->first;}
     if(!gate)targets_[found->second].patterns[pattern->first].push_back({command.position,command.duration,command.column,command.value,command.pitchRange});

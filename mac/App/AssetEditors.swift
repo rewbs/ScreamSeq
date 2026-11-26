@@ -932,7 +932,13 @@ final class InstrumentEditor: NSView, NSTextFieldDelegate {
     var values = [String: Any]()
     for (field, key) in [(name, "name"), (volume, "volume"), (pan, "pan"), (fade, "fadeout"), (sustainPoint, "sustainPoint"), (sustainEnd, "sustainEnd"), (loopStart, "loopStart"), (loopEnd, "loopEnd"), (releaseNode,"releaseNode")] where control === field {
       if key == "name" { values[key] = field.stringValue }
-      else if let number = Int(field.stringValue) { values[key] = number }
+      else if let number = Int(field.stringValue) {
+        values[key] = number
+        if key == "sustainPoint", let end = Int(sustainEnd.stringValue) { values["sustainEnd"] = end }
+        else if key == "sustainEnd", let start = Int(sustainPoint.stringValue) { values["sustainPoint"] = start }
+        else if key == "loopStart", let end = Int(loopEnd.stringValue) { values["loopEnd"] = end }
+        else if key == "loopEnd", let start = Int(loopStart.stringValue) { values["loopStart"] = start }
+      }
     }
     for (popup, key) in [(nna, "nna"), (dct, "dct"), (dna, "dna")] where control === popup { values[key] = popup.indexOfSelectedItem }
     for (button, key) in [(sustain, "sustain"), (looping, "loop"), (filter, "filter"), (carry,"carry")] where control === button { values[key] = button.state == .on }

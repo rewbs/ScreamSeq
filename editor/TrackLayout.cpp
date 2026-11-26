@@ -34,8 +34,10 @@ uint64_t groupNoteColumns(NativeSong &native, std::span<const uint16_t> channels
     commonOutput = bus->output;
   }
   const auto destination = output.value_or(*commonOutput);
-  auto target = std::find_if(native.mixer.buses.begin(), native.mixer.buses.end(), [&](const auto &b) { return b.id == destination; });
-  require(target != native.mixer.buses.end() && target->kind != MixerBusKind::Track, "Choose a group, return or Master destination");
+  if (destination != 0) {
+    auto target = std::find_if(native.mixer.buses.begin(), native.mixer.buses.end(), [&](const auto &b) { return b.id == destination; });
+    require(target != native.mixer.buses.end() && target->kind != MixerBusKind::Track, "Choose a group, return or Master destination");
+  }
   track.bus = native.makeEntity().id;
   for (auto id : track.columns)
     std::find_if(native.mixer.buses.begin(), native.mixer.buses.end(), [&](const auto &b) { return b.id == id; })->output = track.bus;

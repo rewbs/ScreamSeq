@@ -36,6 +36,7 @@ inline PatternActivityCatalog patternActivityCatalog(Document &doc,uint16_t patt
   if(!native.mixer.active())buses.insert(native.masterID);
   const auto &notes=native.signal.noteRouting;
   const auto receivesNotes=[&](const ActivityPlugin &plugin){
+    for(const auto &route:notes.routes)if(route.enabled&&route.plugin==plugin.id&&route.sourceKind==NoteSourceKind::Channel&&route.source==track&&(!result.playback.samples.empty()||!result.playback.instruments.empty()))return true;
     for(auto i:result.playback.instruments){const auto id=native.instruments.at(i).id;
       if(std::find(plugin.assignments.begin(),plugin.assignments.end(),i)!=plugin.assignments.end()&&std::find(notes.suppressedAssignments.begin(),notes.suppressedAssignments.end(),id)==notes.suppressedAssignments.end())return true;
       for(const auto &route:notes.routes)if(route.enabled&&route.plugin==plugin.id&&((route.sourceKind==NoteSourceKind::Channel&&route.source==track)||(route.sourceKind==NoteSourceKind::Instrument&&route.source==id)))return true;
@@ -69,7 +70,16 @@ inline PatternActivityCatalog patternActivityCatalog(Document &doc,uint16_t patt
   for(const auto &assignment:native.signal.instrumentAssignments)for(auto instrument:result.playback.instruments)if(native.instruments.at(instrument).id==assignment.target)graphs.insert(assignment.graph);
   // Replay graph Start/Stop/Clear in engine order, including prior patterns.
   std::map<uint64_t,std::set<uint64_t>> persistent;
-  std::map<std::pair<int,int>,std::pair<unsigned,PatternCommand>> gates;
+  using GateKey=std::tuple<int,std::string,uint32_t>;
+  auto gateKey=[&](const PatternCommand &c)->GateKey{
+    const int target=int(c.arguments[0]);
+    if(target==int(GateTarget::Parameter)){
+      const auto found=native.performance.bindings.find(gateBinding(c));
+      if(found!=native.performance.bindings.end())return {target,found->second.plugin,found->second.parameter};
+    }
+    return {target,std::string{},0u};
+  };
+  std::map<GateKey,std::pair<unsigned,PatternCommand>> gates;
   std::map<int,std::pair<unsigned,PatternCommand>> continuing;
   using RowKey=std::pair<uint64_t,uint32_t>;
   std::map<RowKey,std::vector<const PatternCommand *>> commandsByRow;
@@ -82,9 +92,11 @@ inline PatternActivityCatalog patternActivityCatalog(Document &doc,uint16_t patt
     if(o>=song.Order().size())return;const auto p=song.Order()[o];if(!native.patterns.contains(p))return;
     const auto id=native.patterns.at(p).id;
     if(const auto found=commandsByRow.find({id,r});found!=commandsByRow.end())for(const auto *command:found->second){const auto &c=*command;
-      if(c.kind==PatternCommandKind::Native)continuing[activityNativeFamily(c)]={p,c};
-      if(c.native==NativePatternOp::Gate)gates[{int(c.arguments[0]),int(gateBinding(c))}]={p,c};
-      else if(c.native==NativePatternOp::GateStop){if(c.arguments[0]==4)gates.clear();else gates.erase({int(c.arguments[0]),int(gateBinding(c))});}
+      if(c.kind==PatternCommandKind::Native){
+        continuing[activityNativeFamily(c)]={p,c};
+        if(c.native==NativePatternOp::Gate)gates[gateKey(c)]={p,c};
+        else if(c.native==NativePatternOp::GateStop){if(c.arguments[0]==4)gates.clear();else gates.erase(gateKey(c));}
+      }
     }
     if(const auto found=graphsByRow.find({id,r});found!=graphsByRow.end())for(const auto *entry:found->second){const auto &command=*entry;
       auto &active=persistent[command.target];
@@ -99,7 +111,7 @@ inline PatternActivityCatalog patternActivityCatalog(Document &doc,uint16_t patt
     auto &link=add("Pattern FX","effect",label+" · active, inherited from pattern "+std::to_string(source.first)+" row "+std::to_string(source.second.position/65536));link.pattern=source.first;link.row=source.second.position/65536;link.column=source.second.column;
     for(const auto &[index,t]:native.tracks)if(t.id==source.second.track){link.channel=index;break;}
   }};
-  for(const auto &[key,source]:gates)inherited(source,"GT · "+std::string(std::array{"volume","pitch","pan","parameter"}.at(size_t(key.first))));
+  for(const auto &[key,source]:gates)inherited(source,"GT · "+std::string(std::array{"volume","pitch","pan","parameter"}.at(size_t(std::get<0>(key)))));
   for(const auto &[family,source]:continuing)if(result.playback.nativeFamilies.contains(family)){
     const auto &info=nativePatternCommand(source.second.native);inherited(source,std::string(info.code)+" · "+std::string(info.name));
   }

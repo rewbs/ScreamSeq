@@ -33,6 +33,17 @@ void SampleCaptureBuffer::prepare(uint32_t rate, uint32_t inputs, uint32_t first
   end_.store(uint32_t(End::None), std::memory_order_release);
 }
 
+void SampleCaptureBuffer::reset() noexcept {
+  end_.store(uint32_t(End::Stopped), std::memory_order_release);
+  storage_.clear();
+  storage_.shrink_to_fit();
+  sampleRate_ = inputChannels_ = firstChannel_ = channels_ = capacity_ = 0;
+  frames_.store(0, std::memory_order_relaxed);
+  peak_.store(0, std::memory_order_relaxed);
+  clipped_.store(0, std::memory_order_relaxed);
+  systemError_.store(0, std::memory_order_relaxed);
+}
+
 void SampleCaptureBuffer::finish(End reason, int32_t status) noexcept {
   if(reason == End::None) return;
   uint32_t expected = uint32_t(End::None);
@@ -270,7 +281,7 @@ void SampleRecorder::start(const Options &options) {
     // no UI/API client polls. This thread never reads or frees PCM storage.
     self.monitor.start([&self] { return self.capture.reading().capturing; },
                        [&self] { AudioOutputUnitStop(self.unit); });
-  } catch(...) { self.close(); throw; }
+  } catch(...) { self.close(); self.capture.reset(); throw; }
 }
 void SampleRecorder::stop() noexcept { impl_->close(); }
 SampleCaptureBuffer::Reading SampleRecorder::reading() {

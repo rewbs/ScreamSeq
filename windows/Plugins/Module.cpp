@@ -24,13 +24,23 @@ std::string narrow(const std::wstring &s){
 }
 fs::path nativePath(const std::string &s){check(!s.empty(),"Empty Windows path");return fs::path(wide(s));}
 bool validClassID(const std::string &s) noexcept {return s.size()==32&&std::all_of(s.begin(),s.end(),[](unsigned char c){return (c>='0'&&c<='9')||(c>='a'&&c<='f')||(c>='A'&&c<='F');});}
+static bool hasVst3Extension(const fs::path &p) noexcept {
+ const auto ext = p.extension().native();
+ return _wcsicmp(ext.c_str(), L".vst3") == 0;
+}
 std::string modulePath(const std::string &s){
  auto p=nativePath(s);check(p.is_absolute(),"VST3 requires an absolute Windows path; foreign paths are not retargeted");
  p=fs::canonical(p);
  if(fs::is_directory(p)){
-  auto d=p/L"Contents"/nativeBundleDirectory;check(fs::is_directory(d),"VST3 has no Windows binary matching the host architecture");
+  fs::path d;
+#if defined(_M_ARM64EC)
+  if(fs::is_directory(p/L"Contents"/L"arm64ec-win")) d=p/L"Contents"/L"arm64ec-win";
+  else
+#endif
+  d=p/L"Contents"/nativeBundleDirectory;
+  check(fs::is_directory(d),"VST3 has no Windows binary matching the host architecture");
   std::vector<fs::path> matches;
-  for(const auto &entry:fs::directory_iterator(d))if(entry.is_regular_file()&&entry.path().extension()==L".vst3")matches.push_back(entry.path());
+  for(const auto &entry:fs::directory_iterator(d))if(entry.is_regular_file()&&hasVst3Extension(entry.path()))matches.push_back(entry.path());
   check(matches.size()==1,"VST3 native bundle binary is missing or ambiguous");p=fs::canonical(matches[0]);
  }
  check(fs::is_regular_file(p),"VST3 module missing");return narrow(p.native());
@@ -55,12 +65,14 @@ Module::Module(const std::string &p,const std::string &expected):pin(CreateFileW
  dll=LoadLibraryExW(wide(f.path).c_str(),nullptr,LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR|LOAD_LIBRARY_SEARCH_SYSTEM32);
  check(dll!=nullptr,"LoadLibraryExW failed loading native VST3 or its dependencies");
  try{
-  auto init=reinterpret_cast<bool(*)()>(GetProcAddress(dll,"InitDll"));auto exit=GetProcAddress(dll,"ExitDll");
+  auto init=reinterpret_cast<bool(*)()>(GetProcAddress(dll,"InitDll"));
   auto get=reinterpret_cast<IPluginFactory*(*)()>(GetProcAddress(dll,"GetPluginFactory"));
-  check(init&&exit&&get,"VST3 module exports incomplete");entered=init();check(entered,"VST3 InitDll failed");factory=get();check(factory!=nullptr,"VST3 factory unavailable");
+  check(get!=nullptr,"VST3 module exports incomplete");
+  if(init){entered=init();check(entered,"VST3 InitDll failed");}
+  factory=get();check(factory!=nullptr,"VST3 factory unavailable");
  }catch(...){cleanup();throw;}
 }
-void Module::cleanup() noexcept{if(factory){factory->release();factory=nullptr;}if(dll){if(entered)reinterpret_cast<bool(*)()>(GetProcAddress(dll,"ExitDll"))();entered=false;FreeLibrary(dll);dll=nullptr;}}
+void Module::cleanup() noexcept{if(factory){factory->release();factory=nullptr;}if(dll){if(entered){if(auto exit=reinterpret_cast<bool(*)()>(GetProcAddress(dll,"ExitDll")))exit();}entered=false;FreeLibrary(dll);dll=nullptr;}}
 Module::~Module(){cleanup();}
 Scan scanInThisProcess(const std::string &p){
  Scan s;s.file=fingerprint(p);Module module(s.file.path,s.file.sha256);IPluginFactory2 *extended=nullptr;

@@ -68,16 +68,26 @@ struct WasapiDevice::Impl {
   Options options;
   std::wstring endpoint;
   bool opened = false;
-  std::atomic<bool> active{false};
+  std::atomic<bool> active{false}, workerExited{false};
   std::atomic<std::int32_t> initResult{E_FAIL}, startResult{E_FAIL};
   std::atomic<std::uint32_t> rate{0}, period{0}, bufferFrames{0}, channels{0}, mmcssError{0};
   std::atomic<Mode> mode{Mode::Closed};
   std::atomic<std::int32_t> error{0}, fallbackError{0};
   std::atomic<std::uint64_t> callbackCount{0}, framesRendered{0}, maxCallback{0}, maxService{0}, maxGap{0};
   std::atomic<std::uint64_t> overruns{0}, starvation{0}, timeouts{0}, faults{0};
-  std::atomic<std::uint64_t> clockGeneration{0},clockHostTime{0},clockDiscontinuities{0};
+  std::atomic<std::uint64_t> clockSeq{0}, clockGeneration{0}, clockHostTime{0}, clockDiscontinuities{0};
   std::atomic<bool> clockValid{false};
   DeadlineEvidence deadlineEvidence;
+
+  void writeClock(std::uint64_t generation, std::uint64_t hostTime, bool valid, bool discontinuity) noexcept {
+    const auto seq = clockSeq.load(std::memory_order_relaxed);
+    clockSeq.store(seq + 1, std::memory_order_release);
+    clockGeneration.store(generation, std::memory_order_relaxed);
+    clockHostTime.store(hostTime, std::memory_order_relaxed);
+    if (discontinuity) clockDiscontinuities.fetch_add(1, std::memory_order_relaxed);
+    clockValid.store(valid, std::memory_order_relaxed);
+    clockSeq.store(seq + 2, std::memory_order_release);
+  }
 
   void fail(HRESULT hr) noexcept {
     error.store(static_cast<std::int32_t>(hr));
@@ -96,6 +106,7 @@ struct WasapiDevice::Impl {
     if (!eventsValid()) { fail(E_OUTOFMEMORY); return false; }
     ResetEvent(stopEvent.value); ResetEvent(startEvent.value);
     ResetEvent(readyEvent.value); ResetEvent(startedEvent.value);
+    workerExited.store(false, std::memory_order_release);
     initResult = E_FAIL; startResult = E_FAIL;
     try { worker = std::thread([this, reopening] { threadMain(reopening); }); }
     catch (...) { fail(E_OUTOFMEMORY); return false; }
@@ -202,8 +213,9 @@ struct WasapiDevice::Impl {
     const auto capacity = bufferFrames.load();
     const auto hz = rate.load();
     PresentationClock presentation;
-    presentation.reset(hz,clockFrequency,capacity,clockGeneration.fetch_add(1)+1);
-    clockValid.store(false);clockHostTime.store(0);
+    const auto gen = clockGeneration.load(std::memory_order_relaxed) + 1;
+    presentation.reset(hz,clockFrequency,capacity,gen);
+    writeClock(gen, 0, false, false);
     LARGE_INTEGER frequency{}; QueryPerformanceFrequency(&frequency);
     const auto qpcHz = static_cast<std::uint64_t>(frequency.QuadPart);
     const auto nanoseconds = [qpcHz](std::uint64_t delta) noexcept { return delta * 1000000000ULL / qpcHz; };
@@ -250,10 +262,7 @@ struct WasapiDevice::Impl {
       UINT64 position=0,qpc=0;
       const auto clockResult=clock?clock->GetPosition(&position,&qpc):E_NOINTERFACE;
       const auto time=presentation.buffer(position,qpc,hostTime100ns(),clockResult==S_OK);
-      clockValid.store(false,std::memory_order_release);
-      clockGeneration.store(time.generation);clockHostTime.store(time.hostTime);
-      if(time.discontinuity)clockDiscontinuities.fetch_add(1);
-      clockValid.store(time.valid,std::memory_order_release);
+      writeClock(time.generation, time.hostTime, time.valid, time.discontinuity);
       hr = render->GetBuffer(available, &output);
       if (FAILED(hr)) { fail(hr);failedStream=true; break; }
       // Bounded, preallocated stereo scratch; no ownership/destruction in this path.
@@ -293,12 +302,13 @@ struct WasapiDevice::Impl {
     active.store(false);
     const auto stoppedAt=hostTime100ns();hr = client->Stop();
     if (FAILED(hr)) {fail(hr);failedStream=true;}
-    clockValid.store(false,std::memory_order_release);
-    if(failedStream){clockGeneration.fetch_add(1);clockDiscontinuities.fetch_add(1);}
-    if(timedCallback)timedCallback(context,samples.data(),0,RenderTime{stoppedAt,clockGeneration.load(),hz,false,failedStream,true});
+    const auto finalGen = clockGeneration.load(std::memory_order_relaxed) + (failedStream ? 1 : 0);
+    writeClock(finalGen, clockHostTime.load(std::memory_order_relaxed), false, failedStream);
+    if(timedCallback)timedCallback(context,samples.data(),0,RenderTime{stoppedAt,finalGen,hz,false,failedStream,true});
   }
 
   void threadMain(bool reopening) noexcept {
+    struct ExitMark { std::atomic<bool> &flag; ~ExitMark() { flag.store(true, std::memory_order_release); } } exitMark{workerExited};
     // Every COM interface, activation, use and release stays in this MTA thread.
     Apartment apartment;
     bool ready = false;
@@ -407,7 +417,19 @@ bool WasapiDevice::openTimed(TimedRenderCallback callback,void* context,const Op
   impl_->opened=true;return true;
 }
 WasapiDevice::ClockStatus WasapiDevice::clockStatus()const noexcept {
-  return {impl_->clockGeneration.load(),impl_->clockHostTime.load(),impl_->clockDiscontinuities.load(),impl_->clockValid.load()};
+  for (unsigned attempt = 0; attempt < 16; ++attempt) {
+    const auto before = impl_->clockSeq.load(std::memory_order_acquire);
+    if (before & 1u) continue;
+    const ClockStatus snapshot{
+      impl_->clockGeneration.load(std::memory_order_relaxed),
+      impl_->clockHostTime.load(std::memory_order_relaxed),
+      impl_->clockDiscontinuities.load(std::memory_order_relaxed),
+      impl_->clockValid.load(std::memory_order_relaxed)
+    };
+    std::atomic_thread_fence(std::memory_order_acquire);
+    if (impl_->clockSeq.load(std::memory_order_relaxed) == before) return snapshot;
+  }
+  return {impl_->clockGeneration.load(std::memory_order_relaxed),impl_->clockHostTime.load(std::memory_order_relaxed),impl_->clockDiscontinuities.load(std::memory_order_relaxed),impl_->clockValid.load(std::memory_order_relaxed)};
 }
 std::uint32_t WasapiDevice::sampleRate() const noexcept { return impl_->rate.load(); }
 std::uint32_t WasapiDevice::periodFrames() const noexcept { return impl_->period.load(); }
@@ -416,7 +438,7 @@ bool WasapiDevice::start() {
   if (!impl_->opened) { impl_->fail(E_UNEXPECTED); return false; }
   if (impl_->active.load()) return true;
   // Completed or faulted workers must be joined before explicit reconfiguration.
-  if (impl_->worker.joinable() && impl_->startResult.load() != E_FAIL) impl_->stop();
+  if (impl_->worker.joinable() && (impl_->workerExited.load(std::memory_order_acquire) || impl_->startResult.load() != E_FAIL)) impl_->stop();
   if (!impl_->worker.joinable() && !impl_->launch(true)) return false;
   ResetEvent(impl_->startedEvent.value);
   SetEvent(impl_->startEvent.value);

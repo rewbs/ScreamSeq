@@ -66,7 +66,7 @@ set(EDITOR_SOURCES
   StateVariableFilter FractionalDelay Distortion LofiMat CabinetVoicing CabinetSimulator
   Dynamics Maximizer SampleProcessing SampleWaveform SampleDocument SampleArchive
   Sampling SampleClipboard SampleSplice SampleCopy SampleDrawing SampleSnap SampleLoopCrossfade
-  SignalGraph SignalGroupBypass NoteRouting GraphEditing GraphClipboard SignalRuntime SignalGroupRuntime SongGroupRuntime SongModulation GraphPresentation ParameterProvenance)
+  SignalGraph SignalGroupBypass NoteRouting GraphEditing GraphClipboard SignalRuntime SignalGroupRuntime SongGroupRuntime SongModulation GraphPresentation ParameterProvenance UsageAnalytics)
 list(TRANSFORM EDITOR_SOURCES PREPEND "${ROOT}/editor/")
 list(TRANSFORM EDITOR_SOURCES APPEND ".cpp")
 add_library(TrackerEditor STATIC ${EDITOR_SOURCES} "${ROOT}/tracklib/SampleEdit.cpp")
@@ -771,6 +771,12 @@ if(BUILD_TESTING)
   add_test(NAME document-departure COMMAND document-departure-tests)
   set_tests_properties(document-departure PROPERTIES LABELS "portable;functional;drafts;no-hardware" TIMEOUT 30)
   add_dependencies(portable-tests document-departure-tests)
+  add_executable(usage-analytics-tests "${ROOT}/editor/Tests/UsageAnalyticsTests.cpp")
+  target_link_libraries(usage-analytics-tests PRIVATE TrackerEditor)
+  target_include_directories(usage-analytics-tests PRIVATE "${ROOT}" "${ROOT}/include/nlohmann-json/include")
+  add_test(NAME usage-analytics COMMAND usage-analytics-tests)
+  set_tests_properties(usage-analytics PROPERTIES LABELS "portable;functional;no-hardware" TIMEOUT 30)
+  add_dependencies(portable-tests usage-analytics-tests)
   add_executable(scratch-gesture-api-tests Tests/ScratchGestureOperationsTests.cpp Session/TimelineOperations.cpp)
   target_link_libraries(scratch-gesture-api-tests PRIVATE ScreamSeqProject)
   if(MSVC)

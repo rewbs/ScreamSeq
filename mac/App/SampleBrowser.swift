@@ -115,10 +115,10 @@ final class SampleBrowser: NSView, NSTableViewDataSource, NSTableViewDelegate, N
     let content = stack(.vertical, [stack(.horizontal, [Theme.label("Sample library", size: 23, weight: .semibold), NSView(), shortcuts]),
       locations, search, filtering, body, detail, metadata, waveform, audition, multisampling, loading, recovery, status], spacing: 12)
     content.stretchAcrossAxis(); content.fill(self, inset: 22)
-    imports.onDraft = { [weak self] in self!.completionDraft }
+    imports.onDraft = { [weak self] in self?.completionDraft ?? .init(generation: 0, fields: [:], paths: [], tags: []) }
     imports.composing = { [weak self] in self?.hasComposition == true }
     imports.onChange = { [weak self] in guard let self else { return }; self.completionChanged(self.imports.status) }
-    libraryChanges.onDraft = { [weak self] in self!.completionDraft }
+    libraryChanges.onDraft = { [weak self] in self?.completionDraft ?? .init(generation: 0, fields: [:], paths: [], tags: []) }
     libraryChanges.composing = { [weak self] in self?.hasComposition == true }
     libraryChanges.onChange = { [weak self] in guard let self else { return }; self.completionChanged(self.libraryChanges.status) }
     libraryChanges.onAdopt = { [weak self] state in self?.updateLibrary(state) }
@@ -129,15 +129,21 @@ final class SampleBrowser: NSView, NSTableViewDataSource, NSTableViewDelegate, N
   func updateLibrary(_ data: [String: Any]) {
     if retainedWork || hasComposition { deferredLibraryState = data; return }
     libraryState = data; deferredLibraryState = nil
-    let selectedRoot = roots.indices.contains(root.indexOfSelectedItem - 1) ? roots[root.indexOfSelectedItem - 1] : nil
-    roots = data["roots"] as? [String] ?? []; root.removeAllItems(); root.addItem(withTitle: "All libraries")
-    for path in roots { root.addItem(withTitle: URL(fileURLWithPath: path).lastPathComponent); root.lastItem?.toolTip = path }
+    let selectedRoot = root.selectedItem?.representedObject as? String
+    roots = data["roots"] as? [String] ?? []; root.removeAllItems()
+    let allItem = NSMenuItem(title: "All libraries", action: nil, keyEquivalent: ""); allItem.representedObject = nil; root.menu?.addItem(allItem)
+    for path in roots {
+      let item = NSMenuItem(title: URL(fileURLWithPath: path).lastPathComponent, action: nil, keyEquivalent: "")
+      item.representedObject = path; item.toolTip = path; root.menu?.addItem(item)
+    }
     // A concurrent folder removal must not silently retarget a browser query.
     if let selectedRoot, !roots.contains(selectedRoot) {
-      roots.append(selectedRoot); root.addItem(withTitle: "Unavailable · " + URL(fileURLWithPath: selectedRoot).lastPathComponent)
-      root.lastItem?.toolTip = selectedRoot
+      roots.append(selectedRoot)
+      let item = NSMenuItem(title: "Unavailable · " + URL(fileURLWithPath: selectedRoot).lastPathComponent, action: nil, keyEquivalent: "")
+      item.representedObject = selectedRoot; item.toolTip = selectedRoot; root.menu?.addItem(item)
     }
-    if let selectedRoot, let index = roots.firstIndex(of: selectedRoot) { root.selectItem(at: index + 1) }
+    if let selectedRoot, let item = root.itemArray.first(where: { $0.representedObject as? String == selectedRoot }) { root.select(item) }
+    else { root.selectItem(at: 0) }
     rescanButton.isEnabled = data["indexing"] as? Bool != true
     if let error = data["error"] as? String { status.stringValue = error }
     else if data["indexing"] as? Bool == true { status.stringValue = "Indexing in the background. Cached results remain available." }
@@ -147,7 +153,7 @@ final class SampleBrowser: NSView, NSTableViewDataSource, NSTableViewDelegate, N
   }
   var query: SampleLibraryQuery {
     SampleLibraryQuery(text: search.stringValue, tags: selectedTags,
-      root: roots.indices.contains(root.indexOfSelectedItem - 1) ? roots[root.indexOfSelectedItem - 1] : nil,
+      root: root.selectedItem?.representedObject as? String,
       tagText: tagSearch.stringValue)
   }
   func requestSearch(append: Bool = false, loadWhenReady: Bool = false) {
@@ -265,7 +271,7 @@ final class SampleBrowser: NSView, NSTableViewDataSource, NSTableViewDelegate, N
     .init(generation: inputGeneration, fields: [
       "search": (search.currentEditor() as? NSTextView)?.string ?? search.stringValue,
       "tags": (tagSearch.currentEditor() as? NSTextView)?.string ?? tagSearch.stringValue,
-      "root": roots.indices.contains(root.indexOfSelectedItem - 1) ? roots[root.indexOfSelectedItem - 1] : "",
+      "root": root.selectedItem?.representedObject as? String ?? "",
       "instruments": String(createInstruments.state.rawValue), "autoPreview": String(autoPreview.state.rawValue), "gain": String(volume.doubleValue)
     ], paths: selectedPaths, tags: selectedTags)
   }

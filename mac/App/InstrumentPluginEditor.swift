@@ -34,14 +34,14 @@ final class InstrumentPluginEditor: NSView, NSTextFieldDelegate {
       identity: model.instruments.first(where: { $0["index"] as? Int == instrument })?["id"] as? String ?? ""))
     baseline = .init(name: "", plugin: "", channel: 1)
     super.init(frame: NSRect(x: 0, y: 0, width: 640, height: 370))
-    plugin.addItem(withTitle: "No plugin · use sample keymap"); plugin.lastItem?.representedObject = ""
+    let noneItem = NSMenuItem(title: "No plugin · use sample keymap", action: nil, keyEquivalent: ""); noneItem.representedObject = ""; plugin.menu?.addItem(noneItem)
     var selectedChannel = 1
     for item in model.nativePlugins where item["isInstrument"] as? Bool == true {
       guard let id = item["instanceID"] as? String else { continue }
-      plugin.addItem(withTitle: item["name"] as? String ?? "Instrument plugin"); plugin.lastItem?.representedObject = id
+      let menuItem = NSMenuItem(title: item["name"] as? String ?? "Instrument plugin", action: nil, keyEquivalent: ""); menuItem.representedObject = id; plugin.menu?.addItem(menuItem)
       let route = (item["instrumentAssignments"] as? [[String: Any]] ?? []).first { $0["instrument"] as? Int == instrument }
       if (instrument > 0 && (route != nil || item["instrument"] as? Int == instrument)) || id == selectedPlugin {
-        plugin.selectItem(at: plugin.numberOfItems - 1); selectedChannel = route?["channel"] as? Int ?? 1
+        plugin.select(menuItem); selectedChannel = route?["channel"] as? Int ?? 1
       }
     }
     if isCreating, selectedPlugin == nil, plugin.numberOfItems > 1 { plugin.selectItem(at: 1) }
@@ -65,7 +65,7 @@ final class InstrumentPluginEditor: NSView, NSTextFieldDelegate {
       name, stack(.horizontal, [plugin, addButton!]), stack(.horizontal, [channel, rack]), status,
       stack(.horizontal, [reloadButton!, NSView(), applyButton!]), stack(.horizontal, [reviewButton!, acceptButton!, NSView()])], spacing: 12)
     name.isHidden = !isCreating; body.stretchAcrossAxis(); body.fill(self, inset: 20)
-    workflow.onDraft = { [weak self] in self!.draft }; workflow.composing = { [weak self] in self?.composing == true }
+    workflow.onDraft = { [weak self] in self?.draft ?? .init(generation: 0, fields: .init(name: "", plugin: "", channel: 1)) }; workflow.composing = { [weak self] in self?.composing == true }
     workflow.onChange = { [weak self] in guard let self else { return }; self.status.stringValue = self.workflow.status; self.updateControls() }
     workflow.onObserved = { [weak self] snapshot, slot, observedName, replace in self?.adopt(snapshot, slot: slot, name: observedName, replace: replace) }
     workflow.onSaved = { [weak self] slot, _ in self?.onSaved?(slot) }
@@ -96,8 +96,9 @@ final class InstrumentPluginEditor: NSView, NSTextFieldDelegate {
     if replace {
       setting = true
       let desired = slot == 0 ? rawFields.plugin : route?.plugin ?? ""
-      plugin.removeAllItems(); plugin.addItem(withTitle: "No plugin · use sample keymap"); plugin.lastItem?.representedObject = ""
-      for item in snapshot.plugins { plugin.addItem(withTitle: item.name); plugin.lastItem?.representedObject = item.identity }
+      plugin.removeAllItems()
+      let noneItem = NSMenuItem(title: "No plugin · use sample keymap", action: nil, keyEquivalent: ""); noneItem.representedObject = ""; plugin.menu?.addItem(noneItem)
+      for item in snapshot.plugins { let menuItem = NSMenuItem(title: item.name, action: nil, keyEquivalent: ""); menuItem.representedObject = item.identity; plugin.menu?.addItem(menuItem) }
       if let item = plugin.itemArray.first(where: { $0.representedObject as? String == desired }) { plugin.select(item) }
       else if slot == 0, plugin.numberOfItems > 1 { plugin.selectItem(at: 1) }
       if slot > 0 { channel.selectItem(withTag: route?.channel ?? 1) }

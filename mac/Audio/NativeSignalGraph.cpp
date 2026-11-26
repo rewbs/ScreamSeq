@@ -614,7 +614,8 @@ void NativeSignalGraph::refreshLatencies(std::vector<MixerProcessorInfo> &mixerP
       for (auto &p : i->processors->entries) {
         p.endpoint->settleStopped();p.endpoint->current().plugin->refreshLatency();
         p.endpoint->current().latency=uint32_t(std::llround(p.endpoint->current().plugin->latency()*rate_));
-        uint64_t inputs = 1, outputs = 1;
+        uint64_t inputs = 1 | p.endpoint->current().plugin->preparedAuxiliaryInputs();
+        uint64_t outputs = 1 | p.endpoint->current().plugin->preparedAuxiliaryOutputs();
         for (const auto &bus : p.endpoint->current().plugin->buses()) if (bus.active && bus.supported && bus.index < 64)
           (bus.input ? inputs : outputs) |= uint64_t(1) << bus.index;
         info.push_back({p.id, uint32_t(std::llround(p.endpoint->current().plugin->latency() * rate_)), inputs, outputs});

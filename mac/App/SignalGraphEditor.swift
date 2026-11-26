@@ -15,17 +15,34 @@ final class SignalGraphEditor: NSView, NSSearchFieldDelegate {
   // definition it described. A field whose text differs is an uncommitted edit:
   // refreshes for that same target leave it alone.
   private var shownFields=[ObjectIdentifier:(target:String,text:String)]()
+  private func fieldMatches(_ field:NSTextField,_ expected:String)->Bool {
+    if field.stringValue == expected { return true }
+    if let a=Double(field.stringValue.trimmingCharacters(in:.whitespaces)),let b=Double(expected.trimmingCharacters(in:.whitespaces)),a.isFinite,b.isFinite {
+      return a == b
+    }
+    return false
+  }
+  private func fieldVisible(_ field:NSTextField)->Bool {
+    var current:NSView?=field
+    while let v=current {
+      if v.isHidden { return false }
+      if v === self { return true }
+      current=v.superview
+    }
+    return false
+  }
   private func show(_ field:NSTextField,_ text:String,target:String){
-    let key=ObjectIdentifier(field),edited=shownFields[key].map{$0.target==target && field.stringValue != $0.text} ?? false
+    let key=ObjectIdentifier(field),edited=shownFields[key].map{$0.target==target && !fieldMatches(field,$0.text)} ?? false
     shownFields[key]=(target,text);if !edited && field.stringValue != text{field.stringValue=text}
   }
   private func show(_ field:NSTextField,_ number:Double,target:String){show(field,String(format:"%.12g",number),target:target)}
-  private var hasUncommittedFields:Bool{[name,libraryName,libraryNumber,assignAmount,assignWet,rate,phase,attack,release,controller,sourceAmount].contains{field in shownFields[ObjectIdentifier(field)].map{field.stringValue != $0.text} ?? false}}
+  private var hasUncommittedFields:Bool{[name,libraryName,libraryNumber,assignAmount,assignWet,rate,phase,attack,release,controller,sourceAmount].contains{field in fieldVisible(field) && (shownFields[ObjectIdentifier(field)].map{!fieldMatches(field,$0.text)} ?? false)}}
+  var moveContext:[String]{[projectionDocument,graphID ?? "",filterID ?? "",nodeSearch.stringValue,String(nodeCategory.indexOfSelectedItem),graphOrigin ?? "",graphTarget ?? "",processingGroupID ?? ""]}
   var pendingMoves=[String:(Double,Double)](),pendingMoveContext=[String]()
   func flushMoves(){
     guard !loading,!pendingMoves.isEmpty else{return}
     let moves=pendingMoves,context=pendingMoveContext;pendingMoves=[:]
-    guard context==[projectionDocument]+viewContext else{return}
+    guard context==moveContext else{return}
     moveNodes(moves.map{($0.key,$0.value.0,$0.value.1)})
   }
   func reload(){operationFailure=nil;shownFields=[:];pendingMoves=[:];hasDraft=false;load()}
@@ -104,7 +121,6 @@ final class SignalGraphEditor: NSView, NSSearchFieldDelegate {
   var lastSignalData=[String:Any]()
   let copyObservation=GraphCopyObservation(frame:.zero)
   var signalNamePrefixes=[String:[String]](),signalPortNames=[String:(node:String,raw:String,shown:String)]()
-  lazy var enableRouting=ActionButton("Enable routing"){[weak self] in self?.mutate("mixer.enable",[:])}
   let envelopeEditor=GraphEnvelopeEditor(frame:.zero)
   let pluginControls=GraphPluginControls(frame:.zero)
   let rackControls=GraphRackControls(frame:.zero)
@@ -274,12 +290,14 @@ final class SignalGraphEditor: NSView, NSSearchFieldDelegate {
     let drawing=stack(.vertical,[scroll,signalScope,envelopeEditor],spacing:2);drawing.stretchAcrossAxis()
     let body=stack(.horizontal,[drawing,inspectorScroll],spacing:2);body.stretchAcrossAxis()
     let more = ActionMenuButton { [weak self] in self?.actionMenu() ?? NSMenu() }
-    breadcrumbs.orientation = .horizontal;breadcrumbs.spacing=3
+    breadcrumbs.orientation = .horizontal;breadcrumbs.spacing=3;breadcrumbs.setContentCompressionResistancePriority(.defaultLow,for:.horizontal)
     let toolbar=stack(.horizontal,[breadcrumbs,NSView(),filter,ActionButton("Add…", prominent:true){[weak self] in self?.showAdd()},more],spacing:5)
     let add = NSView(); add.isHidden = true
     instrumentPicker.setAccessibilityLabel("Sample instrument graph target")
-    nodeSearch.placeholderString="Filter nodes…";nodeSearch.setAccessibilityLabel("Filter graph nodes");nodeSearch.delegate=self;nodeSearch.sendsSearchStringImmediately=true;nodeSearch.sendsWholeSearchString=false;nodeSearch.fixed(width:200)
-    nodeCategory.addItems(withTitles:["All node types","Channels & buses","Plugins & subgraphs","Modulation sources"]);nodeCategory.setAccessibilityLabel("Graph node type filter");nodeCategory.target=self;nodeCategory.action = #selector(changeNodeFilter)
+    nodeSearch.placeholderString="Filter nodes…";nodeSearch.setAccessibilityLabel("Filter graph nodes");nodeSearch.delegate=self;nodeSearch.sendsSearchStringImmediately=true;nodeSearch.sendsWholeSearchString=false
+    nodeSearch.setContentCompressionResistancePriority(.defaultLow,for:.horizontal)
+    NSLayoutConstraint.activate([nodeSearch.widthAnchor.constraint(greaterThanOrEqualToConstant:90),nodeSearch.widthAnchor.constraint(lessThanOrEqualToConstant:200)])
+    nodeCategory.addItems(withTitles:["All node types","Channels & buses","Plugins & subgraphs","Modulation sources"]);nodeCategory.setAccessibilityLabel("Graph node type filter");nodeCategory.target=self;nodeCategory.action = #selector(changeNodeFilter);nodeCategory.setContentCompressionResistancePriority(.defaultLow,for:.horizontal)
     let filters=stack(.horizontal,[nodeSearch,nodeCategory,ActionButton("Clear filters"){[weak self] in self?.clearNodeFilters()},filterCount,NSView()],spacing:5)
     copyObservation.onChange={[weak self] in self?.applyCopyObservation()}
     routingStatus.isHidden=true;routingStatus.setAccessibilityLabel("Routing playback state")
@@ -449,7 +467,6 @@ final class SignalGraphEditor: NSView, NSSearchFieldDelegate {
     connectionPreview.prepare(definition)
     rebuildSignalNames()
     let previousSource=chosen(source),previousTarget=chosen(destination),previousConnection=chosen(connection)
-    enableRouting.isHidden = !buses.isEmpty
     canvas.emptyMessage = buses.isEmpty && graphID==nil ? "Open or create a song to connect channels, instruments and effects." : "Create a subgraph to start connecting sound."
     let scope=graphID != nil
     if configuredScope != scope {configuredScope=scope;connectionGain.doubleValue=scope ? 1 : 0;connectionKind.removeAllItems();connectionKind.addItems(withTitles:scope ? ["Audio","Modulation"] : ["Main output","Send","Graph sidechain","Graph auxiliary","Plugin sidechain","Plugin auxiliary","Direct plugin audio","Stage audio","Mix into main","Modulation","Follower input"])}
@@ -575,24 +592,26 @@ final class SignalGraphEditor: NSView, NSSearchFieldDelegate {
     operationFailure=nil;status.stringValue="Applying graph change…"
     var p=params
     if ["graph.node.add","graph.song.source.add"].contains(method),let processingGroupID{p["parent"]=processingGroupID}
-    if p["expectedRevision"] == nil {p["expectedRevision"]=revision}
-    startMutation(method,p,document:projectionDocument,context:viewContext,after:after)
+    let hasExplicitRevision = p["expectedRevision"] != nil
+    startMutation(method,p,explicitRevision:hasExplicitRevision,document:projectionDocument,context:viewContext,after:after)
   }
-  private func startMutation(_ method:String,_ params:[String:Any],document:String,context:[String],attempt:Int=0,
+  private func startMutation(_ method:String,_ params:[String:Any],explicitRevision:Bool,document:String,context:[String],attempt:Int=0,
                              after:(([String:Any])->Void)?) {
     guard projectionDocument==document else{error(["error":["message":"The song changed; this graph edit was cancelled"]]);return}
     if loading {
       guard attempt<10 else{error(["error":["message":"The graph is still busy; retry this edit shortly"]]);return}
       DispatchQueue.main.asyncAfter(deadline:.now()+0.05*Double(attempt+1)){[weak self] in
-        self?.startMutation(method,params,document:document,context:context,attempt:attempt+1,after:after)
+        self?.startMutation(method,params,explicitRevision:explicitRevision,document:document,context:context,attempt:attempt+1,after:after)
       }
       return
     }
+    var p=params
+    if !explicitRevision { p["expectedRevision"]=revision }
     loading=true
-    requestGraph(method,params,document:document){[weak self] response in
+    requestGraph(method,p,document:document){[weak self] response in
       guard let self else{return};self.loading=false
       guard let result=response["result"] as? [String:Any]else{
-        self.deferredGraphCommand=nil;self.rebuild();self.error(response);return
+        self.deferredGraphCommand=nil;self.pendingMoves=[:];self.fieldDraft=false;self.shownFields=[:];self.rebuild();self.inspect();self.configureConnectionInspector();self.error(response);return
       }
       let sameContext=self.projectionDocument==document && self.viewContext==context
       if sameContext {

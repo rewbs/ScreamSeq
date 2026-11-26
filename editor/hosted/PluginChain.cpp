@@ -111,7 +111,7 @@ bool PluginChain::parameter(uint32_t slot, uint32_t id, float value) noexcept {
   return enqueueParameters({&change,1});
 }
 size_t PluginChain::bypassStorageBytes() const noexcept {
-  size_t bytes=0;for(const auto &plugin:plugins_)bytes+=plugin->bypassStorageBytes();return bytes;
+  size_t bytes=0;for(const auto &entry:retainedRack_)bytes+=entry->plugin->bypassStorageBytes();return bytes;
 }
 bool PluginChain::bypass(size_t slot,bool value) noexcept {
   if(slot>=rack_.size())return false;

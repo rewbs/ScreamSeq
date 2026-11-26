@@ -110,6 +110,7 @@ final class MixerEditor: NSView, NSTableViewDataSource, NSTableViewDelegate, NST
   var onOpenPlugin: ((String) -> Void)?, onPluginControls: ((String) -> Void)?
   var onAddPlugin: ((String) -> Void)?
   private var destinations = [[String: Any]](), effects = [[String: Any]](), instruments = [[String: Any]]()
+  private var detachedEffects = Set<String>()
   private var draft = [String: Any](), commitWanted = false
   private var controlRequestInFlight = false
   private var committingControls = [String: Any]()
@@ -134,7 +135,6 @@ final class MixerEditor: NSView, NSTableViewDataSource, NSTableViewDelegate, NST
   private var shownChoice = [ObjectIdentifier: String](), shownSend: (key: String, value: NSDictionary)?
   private var routingView: NSView!
   let inspector = NSView(), routingScroll = verticalScrollView()
-  private var enableButton: ActionButton!
   var selected: [String: Any]? { buses.first { $0["id"] as? String == selectedID } }
   override init(frame: NSRect) {
     super.init(frame: frame)
@@ -203,7 +203,8 @@ final class MixerEditor: NSView, NSTableViewDataSource, NSTableViewDelegate, NST
         ActionMenuButton("Insert actions…") { [weak self] in self?.insertMenu(self?.rack.selectedID) ?? NSMenu() }, NSView()]),
       Theme.label("SENDS", size: 10, color: Theme.muted, weight: .semibold),
       stack(.horizontal, [send, ActionButton("Remove send") { [weak self] in self?.removeSend() }]),
-      stack(.horizontal, [sendTarget, sendGain, Theme.label("dB", size: 11), preSend, sendEnabled,
+      stack(.horizontal, [sendTarget, sendGain, Theme.label("dB", size: 11)]),
+      stack(.horizontal, [preSend, sendEnabled, NSView(),
         ActionButton("Set send") { [weak self] in self?.setSend() }]),
       Theme.label("INSTRUMENT INPUT", size: 10, color: Theme.muted, weight: .semibold),
       stack(.horizontal, [source, ActionButton("Audio buses…") { [weak self] in self?.configureInstrument() }, ActionButton("Route here") { [weak self] in self?.routeInstrument() }]),
@@ -229,7 +230,6 @@ final class MixerEditor: NSView, NSTableViewDataSource, NSTableViewDelegate, NST
     list.heightAnchor.constraint(equalTo: contentRow.heightAnchor).isActive = true
     routingScroll.heightAnchor.constraint(equalTo: contentRow.heightAnchor).isActive = true
     let body = NSView(); contentRow.fill(body); strips.fill(body)
-    enableButton = ActionButton("Enable mixer") { [weak self] in self?.mutate("mixer.enable", [:]) }
     reloadButton = ActionButton("Reload saved state") { [weak self] in self?.reload() }
     reloadButton?.isHidden = true
     reloadButton?.setContentCompressionResistancePriority(.required, for: .horizontal)
@@ -318,7 +318,10 @@ final class MixerEditor: NSView, NSTableViewDataSource, NSTableViewDelegate, NST
     }
     selectedID = id; showSelected(); refreshStrips(); return true
   }
-  func controlTextDidChange(_ notification: Notification) { scheduleAutomaticEdit() }
+  func controlTextDidChange(_ notification: Notification) {
+    guard notification.object as? NSTextField !== sendGain else { return }
+    scheduleAutomaticEdit()
+  }
   private func scheduleAutomaticEdit() {
     automaticWork?.cancel()
     guard !needsReload else { return }
@@ -397,8 +400,13 @@ final class MixerEditor: NSView, NSTableViewDataSource, NSTableViewDelegate, NST
     request("mixer.get", ["includeImplicit": true]) { data, _ in self.update(data) }
   }
   private func reloadDraftSnapshot() -> NSDictionary {
+    let stripFields = strips.visible.keys.sorted().compactMap { index -> String? in
+      guard let strip = strips.visible[index] else { return nil }
+      return "\(strip.busID):\(strip.gain.stringValue):\(strip.preGain.stringValue)"
+    }
     let snapshot: [String: Any] = ["bus": selectedID ?? "", "draft": draft,
      "text": [name, color, timing, sendGain].map(\.stringValue) + controls.map { $0.value.stringValue },
+     "strips": stripFields,
      "choices": [output, insert, effect, send, sendTarget, source].map { chosen($0) ?? "" },
      "checks": [mute, solo, preSend, sendEnabled].map { $0.state.rawValue }]
     return snapshot as NSDictionary
@@ -451,7 +459,8 @@ final class MixerEditor: NSView, NSTableViewDataSource, NSTableViewDelegate, NST
     implicit = data["implicit"] as? Bool ?? false
     active = (data["active"] as? Bool ?? false) || implicit; buses = data["buses"] as? [[String: Any]] ?? []
     plugins = data["plugins"] as? [[String: Any]] ?? []; sources = data["instruments"] as? [[String: Any]] ?? []
-    enableButton.isHidden = true; inspector.isHidden = !active
+    detachedEffects = Set(data["detached"] as? [String] ?? []).union((data["detachedChains"] as? [[String: Any]] ?? []).flatMap { $0["plugins"] as? [String] ?? [] })
+    inspector.isHidden = !active
     if let target = pendingNavigation {
       pendingNavigation = nil
       if buses.contains(where: { $0["id"] as? String == target }) {
@@ -500,6 +509,20 @@ final class MixerEditor: NSView, NSTableViewDataSource, NSTableViewDelegate, NST
         self.refreshStrips(); self.finishWaiters(false); return
       }
       guard capturedRaw == self.rawSnapshot(), !self.hasMarkedText else {
+        if method == "mixer.bus.set", adoptRevision, !self.hasMarkedText {
+          let acceptedRevision = result["revision"] as? String ?? self.revision
+          self.revision = acceptedRevision
+          if !committing.isEmpty {
+            self.acceptRaw(self.rawSubmission); self.rawSubmission = [:]
+            if let busID = params["bus"] as? String,
+               let index = self.buses.firstIndex(where: { $0["id"] as? String == busID }) {
+              for (key, value) in committing { self.buses[index][key] = value }
+            }
+          }
+          self.refreshStrips()
+          if self.hasRawDraft || !self.draft.isEmpty { self.scheduleAutomaticEdit() }
+          self.finishWaiters(false); return
+        }
         self.draft = committing.merging(self.draft) { _, newer in newer }
         self.needsReload = true; self.commitWanted = false
         self.status.stringValue = "Newer mixer fields kept at their captured revision. Reload saved state to review the result."
@@ -595,6 +618,16 @@ final class MixerEditor: NSView, NSTableViewDataSource, NSTableViewDelegate, NST
     shownText[key] = text
     if !edited && field.stringValue != text { field.stringValue = text }
   }
+  private func effectiveInserts(for bus: [String: Any]) -> [String] {
+    var inserts = bus["inserts"] as? [String] ?? []
+    if bus["kind"] as? String == "master" {
+      let assigned = Set(buses.flatMap { $0["inserts"] as? [String] ?? [] }).union(detachedEffects)
+      inserts += plugins.filter {
+        $0["instrument"] as? Bool != true && !assigned.contains($0["id"] as? String ?? "")
+      }.compactMap { $0["id"] as? String }
+    }
+    return inserts
+  }
   private func showSelected() {
     guard let bus = selected else { return }
     let sameBus = shownBus != nil && shownBus == selectedID; shownBus = selectedID
@@ -611,7 +644,7 @@ final class MixerEditor: NSView, NSTableViewDataSource, NSTableViewDelegate, NST
     fill(output, [(title: "Disconnected", id: "")] + targets, saved: bus["output"] as? String ?? "", sameBus: sameBus)
     fill(sendTarget, targets, saved: nil, sameBus: sameBus)
     output.isEnabled = bus["kind"] as? String != "master"
-    let inserts = bus["inserts"] as? [String] ?? []
+    let inserts = effectiveInserts(for: bus)
     let previousInsert = rack.selectedID
     fill(insert, inserts.map { id in (title: plugins.first { $0["id"] as? String == id }?["name"] as? String ?? "Unavailable plugin", id: id) }, saved: nil, sameBus: sameBus)
     rack.update(inserts.compactMap { id in
@@ -673,10 +706,18 @@ final class MixerEditor: NSView, NSTableViewDataSource, NSTableViewDelegate, NST
     cell.setAccessibilityLabel("\(bus["kind"] as? String ?? "bus") \(cell.stringValue)")
     return cell
   }
-  @objc private func changeMute() { control("mute", value: mute.state == .on, final: true) }
-  @objc private func changeSolo() { control("solo", value: solo.state == .on, final: true) }
+  @objc private func changeMute() {
+    let next = mute.state == .on
+    mute.state = (shownFlags["mute"] ?? false) ? .on : .off
+    control("mute", value: next, final: true)
+  }
+  @objc private func changeSolo() {
+    let next = solo.state == .on
+    solo.state = (shownFlags["solo"] ?? false) ? .on : .off
+    control("solo", value: next, final: true)
+  }
   func selectInsert(_ id: String) {
-    if let index = (selected?["inserts"] as? [String] ?? []).firstIndex(of: id) { insert.selectItem(at: index) }
+    if let bus = selected, let index = effectiveInserts(for: bus).firstIndex(of: id) { insert.selectItem(at: index) }
   }
   func insertMenu(_ id: String?) -> NSMenu {
     let menu = NSMenu(title: "Mixer inserts"); menu.autoenablesItems = false
@@ -718,22 +759,22 @@ final class MixerEditor: NSView, NSTableViewDataSource, NSTableViewDelegate, NST
   }
   func openInsert(controls: Bool = false) {
     guard !loading, !hasPendingControls else { return }
-    let values = selected?["inserts"] as? [String] ?? []
+    let values = selected.map { effectiveInserts(for: $0) } ?? []
     guard let id = chosen(insert), values.contains(id) else { return }
     guard plugins.contains(where: { $0["id"] as? String == id }) else { return }
     if controls { onPluginControls?(id) } else { onOpenPlugin?(id) }
   }
   private func addInsert() {
     guard let id = chosen(effect), !id.isEmpty, effects.contains(where: { $0["id"] as? String == id }) else { return }
-    var values = selected?["inserts"] as? [String] ?? []; values.append(id); setInserts(values)
+    var values = selected.map { effectiveInserts(for: $0) } ?? []; values.append(id); setInserts(values)
   }
   private func removeInsert() {
-    var values = selected?["inserts"] as? [String] ?? []
+    var values = selected.map { effectiveInserts(for: $0) } ?? []
     guard let id = chosen(insert), let index = values.firstIndex(of: id) else { return }
     values.remove(at: index); setInserts(values)
   }
   private func moveInsert(_ direction: Int) {
-    var values = selected?["inserts"] as? [String] ?? []
+    var values = selected.map { effectiveInserts(for: $0) } ?? []
     guard let id = chosen(insert), let index = values.firstIndex(of: id), values.indices.contains(index + direction) else { return }
     values.swapAt(index, index + direction); setInserts(values)
   }
@@ -791,8 +832,20 @@ final class MixerEditor: NSView, NSTableViewDataSource, NSTableViewDelegate, NST
     }
   }
   private func removeSend() {
-    guard let selectedID, let current = chosenSend else { return }; var values = selected?["sends"] as? [[String: Any]] ?? []
-    values.remove(at: current.index); mutate("mixer.sends.set", ["bus": selectedID, "sends": values])
+    guard let selectedID, let current = chosenSend else { return }
+    guard !loading, !needsReload, !hasRawDraft, draft.isEmpty, committingControls.isEmpty, !hasMarkedText else {
+      status.stringValue = "Finish or reload the other mixer fields before removing this send."; return
+    }
+    var values = selected?["sends"] as? [[String: Any]] ?? []
+    values.remove(at: current.index)
+    request("mixer.sends.set", ["bus": selectedID, "sends": values, "expectedRevision": revision]) { _, _ in
+      if let busIndex = self.buses.firstIndex(where: { $0["id"] as? String == selectedID }) {
+        self.buses[busIndex]["sends"] = values
+      }
+      self.shownSendFields = [:]; self.shownSend = nil
+      self.showSendList(keeping: nil); self.refreshStrips()
+      self.status.stringValue = "Send removed · ⌘Z to undo"
+    }
   }
   /// The instrument output chosen in the source popup, by plugin ID and port.
   private var chosenInstrument: [String: Any]? {

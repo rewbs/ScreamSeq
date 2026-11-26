@@ -76,9 +76,11 @@ class RenderSurface {
         context_->DrawTextLayout(D2D1::Point2F(x,y),layout,brush_.Get(),D2D1_DRAW_TEXT_OPTIONS_CLIP);
     }
 	HANDLE ready_{};
-	// Signalled stand-in while the device-dependent resources are discarded, so
-	// frame waits wake and the next begin() recreates them.
+	// Signalled stand-in while the device-dependent resources are discarded or
+	// after a DXGI waitable token was already consumed before an aborted frame,
+	// so frame waits wake and the next present() replenishes the DXGI semaphore.
 	HANDLE fallbackReady_{};
+	bool readyConsumed_ = false;
 	UINT width_{}, height_{};
 	float dpi_ = 96;
 	std::wstring adapter_;
@@ -98,6 +100,7 @@ class RenderSurface {
 		if(context_) context_->SetTarget(nullptr);
 		bitmap_.Reset(); brush_.Reset(); context_.Reset(); d2dDevice_.Reset();
 		if(ready_) { CloseHandle(ready_); ready_ = nullptr; }
+		readyConsumed_ = false;
 		swap_.Reset();
 		if(immediate_) { immediate_->ClearState(); immediate_->Flush(); }
 		immediate_.Reset(); device_.Reset();
@@ -172,7 +175,8 @@ public:
 	~RenderSurface() { discard(); if(fallbackReady_) CloseHandle(fallbackReady_); }
 	RenderSurface(const RenderSurface &) = delete;
 	RenderSurface &operator=(const RenderSurface &) = delete;
-	HANDLE ready() const { return ready_ ? ready_ : fallbackReady_; }
+	HANDLE ready() const { return (ready_ && !readyConsumed_) ? ready_ : fallbackReady_; }
+	void markReadyConsumed() noexcept { if(ready_) readyConsumed_ = true; }
 	// True while the device-dependent resources are discarded after a device
 	// loss. The caller requests another frame; begin() then recreates them.
 	bool lost() const { return !context_; }
@@ -261,6 +265,7 @@ public:
 		if(!swap_) return S_FALSE;
 		const HRESULT result = swap_->Present(1, 0);
 		if(deviceLost(result)) { discard(); return S_FALSE; }
+		if(SUCCEEDED(result)) readyConsumed_ = false;
 		return result;
 	}
 	HRESULT frameStatistics(DXGI_FRAME_STATISTICS &stats) { return swap_ ? swap_->GetFrameStatistics(&stats) : DXGI_ERROR_DEVICE_REMOVED; }

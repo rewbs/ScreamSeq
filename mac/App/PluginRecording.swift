@@ -184,10 +184,11 @@ final class PluginRecordingView: NSView, NSTableViewDataSource, NSTableViewDeleg
   }
   func loadScopes() {
     let selected = scope.selectedItem?.representedObject as? String
-    scope.removeAllItems(); scope.addItem(withTitle: "All rack plugins")
+    scope.removeAllItems()
+    let allItem = NSMenuItem(title: "All rack plugins", action: nil, keyEquivalent: ""); scope.menu?.addItem(allItem)
     for plugin in onPlugins?() ?? [] {
-      scope.addItem(withTitle: plugin.name); scope.lastItem?.representedObject = plugin.id
-      if plugin.id == selected { scope.selectItem(at: scope.numberOfItems - 1) }
+      let item = NSMenuItem(title: plugin.name, action: nil, keyEquivalent: ""); item.representedObject = plugin.id; scope.menu?.addItem(item)
+      if plugin.id == selected { scope.select(item) }
     }
   }
   private var loss: NSDictionary {

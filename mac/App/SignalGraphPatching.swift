@@ -107,7 +107,7 @@ extension SignalGraphEditor {
     let positions=incoming.filter{provenance.sources[$0.0]==nil}
     if positions.isEmpty{rebuild();return}
     guard !loading else{
-      let context=[projectionDocument]+viewContext
+      let context=moveContext
       if pendingMoveContext != context {pendingMoves=[:]};pendingMoveContext=context
       for(id,x,y)in positions{pendingMoves[id]=(x,y)}
       return

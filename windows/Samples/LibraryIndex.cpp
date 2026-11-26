@@ -128,7 +128,23 @@ std::shared_ptr<const LibraryIndex> LibraryIndex::scan(const std::vector<std::st
       try{
       const auto file=iterator->path();WIN32_FILE_ATTRIBUTE_DATA info{};const bool available=GetFileAttributesExW(file.c_str(),GetFileExInfoStandard,&info)!=0;const auto name=file.filename().native();
       const auto extension=fold(pathText(file.extension()));const bool package=extension==".vst3"||extension==".app"||extension==".component";
-      const bool skip=!available||name==L"__MACOSX"||name.starts_with(L'.')||package||(info.dwFileAttributes&(FILE_ATTRIBUTE_HIDDEN|FILE_ATTRIBUTE_SYSTEM|FILE_ATTRIBUTE_REPARSE_POINT));
+      bool skipReparse=false;
+      if(available&&(info.dwFileAttributes&FILE_ATTRIBUTE_REPARSE_POINT)){
+        WIN32_FIND_DATAW fd{};HANDLE fh=FindFirstFileW(file.c_str(),&fd);
+        if(fh==INVALID_HANDLE_VALUE)skipReparse=true;
+        else{
+          FindClose(fh);
+          const DWORD tag=fd.dwReserved0;
+          const bool cloud=(tag&0xFFFFF000u)==0x90000000u||tag==0x80000021u;
+          const bool mountPoint=tag==IO_REPARSE_TAG_MOUNT_POINT;
+          if(!cloud&&!mountPoint)skipReparse=true;
+          else if(mountPoint){
+            std::error_code ec;const auto resolved=std::filesystem::weakly_canonical(file,ec);
+            if(ec||!seen.insert("dir:"+pathKey(pathText(resolved))).second)skipReparse=true;
+          }
+        }
+      }
+      const bool skip=!available||name==L"__MACOSX"||name.starts_with(L'.')||package||(info.dwFileAttributes&(FILE_ATTRIBUTE_HIDDEN|FILE_ATTRIBUTE_SYSTEM))||skipReparse;
       if(skip)iterator.disable_recursion_pending();
       else if(!(info.dwFileAttributes&(FILE_ATTRIBUTE_DIRECTORY|FILE_ATTRIBUTE_DEVICE))&&extension.size()>1&&std::binary_search(extensions().begin(),extensions().end(),extension.substr(1))){
         const auto filePath=pathText(file);const auto key=pathKey(filePath);
@@ -141,7 +157,7 @@ std::shared_ptr<const LibraryIndex> LibraryIndex::scan(const std::vector<std::st
         }
       }
       }catch(const std::invalid_argument &){warn("Skipped an entry whose name or path cannot be indexed in "+root);iterator.disable_recursion_pending();}
-      need(entries.size()<maximumFiles,"Library exceeds 250,000 files. Choose smaller sample folders.");
+      need(entries.size()<=maximumFiles,"Library exceeds 250,000 files. Choose smaller sample folders.");
       iterator.increment(error);if(error){warn("Cannot read part of "+root);error.clear();}
     }
   }

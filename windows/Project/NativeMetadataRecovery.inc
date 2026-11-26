@@ -9,6 +9,17 @@ Tracker::NativeSong recoverNativeMetadata(Json &metadata,const Tracker::Document
   if(!source.contains("version")||source.at("version")!=17)
     report.warn("Unsupported native metadata version; recovered understood fields",false,true);
   source["version"]=17;
+  // Legacy v3-v5 mixers lacked sidechains (v4) and bus.prePan (v6). Backfill
+  // before running the v17 decoder so legacy mixers recover instead of dropping.
+  if(source.contains("mixer")&&source["mixer"].is_object()) {
+    auto &mixer=source["mixer"];
+    if(!mixer.contains("sidechains")){mixer["sidechains"]=Json::array();report.warn("Defaulted missing legacy mixer sidechains",false,true);}
+    if(mixer.contains("buses")&&mixer["buses"].is_array()) {
+      size_t backfilled=0;
+      for(auto &bus:mixer["buses"])if(bus.is_object()&&!bus.contains("prePan")){bus["prePan"]=0.0;++backfilled;}
+      if(backfilled)report.warn("Defaulted missing legacy mixer bus prePan fields",false,true);
+    }
+  }
   // Optional unreleased metadata17 extension; older songs have no bank.
   if(!source.contains("scratchGestures"))source["scratchGestures"]=Json::array();
   for(const char *key:{"automation","mixer","noteTracks","columnMutes","performance","preciseNotes","signalGraph","envelopeBank"})if(!source.contains(key)){
@@ -92,7 +103,7 @@ Tracker::NativeSong recoverNativeMetadata(Json &metadata,const Tracker::Document
   if(const auto *gestures=get(source,"/scratchGestures")){
     if(!gestures->is_array())report.warn("Skipped incompatible native metadata section /scratchGestures",true);
     else{Json kept=Json::array();std::set<uint16_t> slots;size_t budget=model.bytes();const auto count=std::min<size_t>(gestures->size(),255);
-      for(size_t i=0;i<count;++i)try{const auto &entry=(*gestures)[i];const auto id=uint16_t(ScratchJSON::integer(field(entry,"id"),1,255));const auto gesture=ScratchJSON::decode(entry);need(!slots.contains(id),"Duplicate scratch gesture slot");const auto bytes=sizeof(id)+Tracker::scratchGestureBytes(gesture);need(budget+bytes<=16*1024*1024,"Scratch gesture exceeds native metadata budget");slots.insert(id);budget+=bytes;kept.push_back(entry);}
+      for(size_t i=0;i<count;++i)try{const auto &entry=(*gestures)[i];const auto id=uint16_t(ScratchJSON::integer(field(entry,"id"),1,255,true));const auto gesture=ScratchJSON::decode(entry,false,true);need(!slots.contains(id),"Duplicate scratch gesture slot");const auto bytes=sizeof(id)+Tracker::scratchGestureBytes(gesture);need(budget+bytes<=16*1024*1024,"Scratch gesture exceeds native metadata budget");slots.insert(id);budget+=bytes;kept.push_back(entry);}
       catch(const std::exception &){report.warn("Skipped incompatible metadata entry /scratchGestures/"+std::to_string(i),true);}
       if(count<gestures->size())report.warn("Skipped excess scratch gesture entries beyond 255 slots",true);
       auto candidate=active;candidate["scratchGestures"]=std::move(kept);if(!attempt(std::move(candidate)))report.warn("Skipped incompatible native metadata section /scratchGestures",true);
@@ -109,7 +120,7 @@ Tracker::NativeSong recoverNativeMetadata(Json &metadata,const Tracker::Document
     if(!attempt(std::move(candidate))){
       if(!signal->is_object())report.warn("Skipped incompatible native metadata section /signalGraph",true);
       else {
-        for(const char *key:{"library","lanes","assignments","instrumentAssignments","songSources","noteRouting","commands","inputs","outputs","stageConnections","songModulation","groups","layout","presentation"})section(std::string("/signalGraph/")+key,true);
+        for(const char *key:{"library","lanes","assignments","instrumentAssignments","songSources","noteRouting","commands","inputs","outputs","stageConnections","songModulation","trims","groups","layout","presentation"})section(std::string("/signalGraph/")+key,true);
         for(auto i=signal->begin();i!=signal->end();++i)if(!base["signalGraph"].contains(i.key()))active["signalGraph"][i.key()]=i.value();
       }
     }

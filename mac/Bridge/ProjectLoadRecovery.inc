@@ -16,8 +16,28 @@ NativeSong recoverNativeSong(id raw, const Document &document, ProjectLoadRecove
   });
   if(![source[@"version"] isEqual:@17])report.warn("Read known fields from incompatible native metadata version "+std::string([[source[@"version"] description] UTF8String]?:"missing")+" (current: 17).",false,true);
   source[@"version"]=@17;
+  if([source[@"mixer"] isKindOfClass:NSDictionary.class]) {
+    NSMutableDictionary *mixer=[source[@"mixer"] mutableCopy];
+    if(!mixer[@"sidechains"]){mixer[@"sidechains"]=@[];report.warn("Defaulted missing legacy mixer sidechains.",false,true);}
+    if([mixer[@"buses"] isKindOfClass:NSArray.class]) {
+      NSMutableArray *buses=[mixer[@"buses"] mutableCopy];size_t backfilled=0;
+      for(NSUInteger i=0;i<buses.count;++i)if([buses[i] isKindOfClass:NSDictionary.class]&&!buses[i][@"prePan"]) {
+        NSMutableDictionary *bus=[buses[i] mutableCopy];bus[@"prePan"]=@0.0;buses[i]=bus;++backfilled;
+      }
+      if(backfilled){mixer[@"buses"]=buses;report.warn("Defaulted missing legacy mixer bus prePan fields.",false,true);}
+    }
+    source[@"mixer"]=mixer;
+  }
   for(NSString *key in defaults)if(!source[key] && ![key isEqual:@"masterID"]) {
     source[key]=defaults[key];if([key isEqual:@"scratchGestures"])continue;report.warn("Missing native metadata section '"+std::string(key.UTF8String)+"'; used the embedded song/default.",true);
+  }
+  for(NSString *parent in @[@"performance",@"signalGraph",@"envelopeBank"])if([source[parent] isKindOfClass:NSDictionary.class]&&[defaults[parent] isKindOfClass:NSDictionary.class]) {
+    NSMutableDictionary *section=[source[parent] mutableCopy];bool changed=false;
+    for(NSString *subkey in defaults[parent])if(!section[subkey]) {
+      section[subkey]=defaults[parent][subkey];changed=true;
+      report.warn("Defaulted missing native field '"+std::string(parent.UTF8String)+"/"+std::string(subkey.UTF8String)+"'.",false,true);
+    }
+    if(changed)source[parent]=section;
   }
   // Older NF/NR files used row units. Convert only while opening a file, with
   // the signature of the actual embedded pattern, preserving musical duration.
