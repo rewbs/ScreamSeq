@@ -3,8 +3,29 @@ name: ScreamSeq Windows
 on:
   push:
     branches: [main]
-  pull_request:
-    branches: [main]
+    paths-ignore:
+      - 'doc/**'
+      - '.agents/**'
+      - 'README.md'
+      - 'CONTRIBUTING.md'
+      - 'AGENTS.md'
+      - 'mac/*.md'
+      - 'windows/*.md'
+      - 'assets/branding/BRANDING.md'
+      - '.github/scripts/**'
+      - '.github/workflows/ScreamSeq-macOS.yml'
+      - 'mac/App/**'
+      - 'mac/Bridge/**'
+      - 'mac/Plugins/**'
+      - 'mac/Audio/*.mm'
+      - 'mac/Tests/*.mm'
+      - 'mac/Tests/*.swift'
+      - 'mac/Tests/*.py'
+      - 'mac/CMakeLists.txt'
+      - 'mac/*.sh'
+      - 'mac/*.py'
+      - 'mac/Info.plist'
+      - 'mac/.clang-format'
   workflow_dispatch:
     inputs:
       retained_app_run:
@@ -55,16 +76,21 @@ jobs:
         run: |
           python -B -m unittest discover -s editor/Tests/Conformance -p test_api_vectors.py -v *>&1 | Tee-Object screamseq-windows-api-preflight.log
           if ($LASTEXITCODE -ne 0) { throw 'API inventory preflight failed; no build started.' }
+      - name: Restore ccache
+        uses: hendrikmuhs/ccache-action@e91f31892a1d1b8c44424b1a94c0b7f52d337168 # v1.2.26
+        with:
+          key: screamseq-windows-x64
+          max-size: 1G
       - name: Build native application and all test targets once
         id: build
         shell: pwsh
         run: |
-          ./windows/build.ps1 -Architecture x64 -BuildDirectory bin/windows-ci -Jobs 2 *>&1 | Tee-Object screamseq-windows.log
+          ./windows/build.ps1 -Architecture x64 -BuildDirectory bin/windows-ci -Generator 'Ninja Multi-Config' -CompilerLauncher ccache -Jobs ([int]$env:NUMBER_OF_PROCESSORS) *>&1 | Tee-Object screamseq-windows.log
       - name: Portable and worker tests from the grouped build
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         shell: pwsh
         run: |
-          ctest --test-dir bin/windows-ci -C Release --output-on-failure --no-tests=error -L '^(portable|worker|api)$' *>&1 | Tee-Object screamseq-windows-model.log
+          ctest --test-dir bin/windows-ci -C Release --output-on-failure --no-tests=error --parallel $env:NUMBER_OF_PROCESSORS -L '^(portable|worker|api)$' *>&1 | Tee-Object screamseq-windows-model.log
           if ($LASTEXITCODE -ne 0) { throw 'Portable or worker checks failed.' }
       - name: Retain the built app for reciprocal checks without rebuilding
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
@@ -225,7 +251,7 @@ jobs:
             bin/windows-ci/Testing/Temporary/*.log
             bin/windows-ci/CMakeFiles/CMakeConfigureLog.yaml
           if-no-files-found: warn
-          retention-days: 14
+          retention-days: 7
   retained-app:
     if: github.event_name == 'workflow_dispatch' && inputs.retained_app_run != ''
     uses: ./.github/workflows/ScreamSeq-Retained.yml

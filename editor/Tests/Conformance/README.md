@@ -175,13 +175,15 @@ Blank means the normal grouped build; a run ID selects the reusable
 These follow-up runs have separate concurrency identities and cannot cancel the
 normal build. The source run must have uploaded its archive and identity manifest;
 an unfinished run without those artifacts is not a reusable build.
-Mac dispatch additionally accepts `retained_runner=macos-15|macos-15-intel|both`;
-use one architecture when only its artifact is ready or its inputs changed. Main
-pushes and PRs retain the two-architecture matrix. A manual full build may select
-`build_runner=macos-15|macos-15-intel|both` when only one architecture needs rebuilding.
-Mac normal builds archive the completed app before qualification and also retain
-the final logs artifact. `retained_artifact_kind=app` selects that early archive if
-later qualification timed out; default `logs` selects the final evidence bundle.
+Mac dispatch additionally accepts `retained_runner=macos-15|macos-15-intel|both`
+(default `macos-15`); select `macos-15-intel` or `both` when Intel verification is
+needed. Main pushes build `macos-15` only (PRs do not trigger automatic CI runs). A
+manual full build accepts `build_runner=macos-15|macos-15-intel|both` (default
+`macos-15`) to rebuild one or both architectures.
+Mac manual full builds archive the completed app before qualification and all runs
+retain the final logs artifact. `retained_artifact_kind=app` selects that early archive
+from a manual dispatch if later qualification timed out; default `logs` selects the
+final evidence bundle.
 An early archive establishes build identity, not success of tests that never ran.
 For changes confined to the standalone Mac interface harness, dispatch Mac with
 `qualification=interface`, an empty `retained_app_run`, and the required

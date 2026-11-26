@@ -3,8 +3,32 @@ name: ScreamSeq macOS
 on:
   push:
     branches: [main]
-  pull_request:
-    branches: [main]
+    paths-ignore:
+      - 'doc/**'
+      - '.agents/**'
+      - 'README.md'
+      - 'CONTRIBUTING.md'
+      - 'AGENTS.md'
+      - 'mac/*.md'
+      - 'windows/*.md'
+      - 'assets/branding/BRANDING.md'
+      - '.github/workflows/ScreamSeq-Windows.yml'
+      - 'windows/App/**'
+      - 'windows/Audio/**'
+      - 'windows/Api/**'
+      - 'windows/Plugins/**'
+      - 'windows/Resources/**'
+      - 'windows/Samples/**'
+      - 'windows/cmake/**'
+      - 'windows/Tools/**'
+      - 'windows/Tests/Api/**'
+      - 'windows/Tests/HostedProject/**'
+      - 'windows/Tests/Samples/**'
+      - 'windows/Tests/Workspace/**'
+      - 'windows/Tests/*.py'
+      - 'windows/CMakeLists.txt'
+      - 'windows/build.ps1'
+      - 'windows/.gitignore'
   workflow_dispatch:
     inputs:
       qualification:
@@ -13,10 +37,10 @@ on:
         options: [full, interface, stock]
         default: full
       build_runner:
-        description: 'Architecture for a manually requested full build; pushes and PRs build both'
+        description: 'Architecture for a manually requested full build; pushes build macos-15 only'
         type: choice
-        options: [both, macos-15, macos-15-intel]
-        default: both
+        options: [macos-15, macos-15-intel, both]
+        default: macos-15
       retained_app_run:
         description: 'Existing Mac build run ID; blank performs a normal build'
         type: string
@@ -24,8 +48,8 @@ on:
       retained_runner:
         description: 'Architecture for retained-app or interface-only qualification'
         type: choice
-        options: [both, macos-15, macos-15-intel]
-        default: both
+        options: [macos-15, macos-15-intel, both]
+        default: macos-15
       retained_artifact_kind:
         description: 'Final logs artifact, or early app archive if qualification timed out'
         type: choice
@@ -54,7 +78,7 @@ permissions:
   actions: read
 
 concurrency:
-  group: screamseq-macos-${{ github.workflow }}-${{ github.ref }}-${{ inputs.qualification || 'full' }}-${{ inputs.build_runner || 'both' }}-${{ inputs.retained_app_run || 'build' }}-${{ inputs.retained_runner || 'both' }}-${{ inputs.fixture_run || 'baseline' }}-${{ inputs.fixture_artifact }}-${{ inputs.extended_exchange || false }}
+  group: screamseq-macos-${{ github.workflow }}-${{ github.ref }}-${{ inputs.qualification || 'full' }}-${{ inputs.build_runner || 'macos-15' }}-${{ inputs.retained_app_run || 'build' }}-${{ inputs.retained_runner || 'macos-15' }}-${{ inputs.fixture_run || 'baseline' }}-${{ inputs.fixture_artifact }}-${{ inputs.extended_exchange || false }}
   cancel-in-progress: true
 
 jobs:
@@ -64,14 +88,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        runner: ${{ fromJSON(inputs.build_runner == 'macos-15' && '["macos-15"]' || inputs.build_runner == 'macos-15-intel' && '["macos-15-intel"]' || '["macos-15","macos-15-intel"]') }}
+        runner: ${{ fromJSON(github.event_name == 'workflow_dispatch' && inputs.build_runner == 'both' && '["macos-15","macos-15-intel"]' || github.event_name == 'workflow_dispatch' && inputs.build_runner == 'macos-15-intel' && '["macos-15-intel"]' || '["macos-15"]') }}
     runs-on: ${{ matrix.runner }}
     # Intel's clean build plus unchanged acceptance suites can exceed an hour.
     # Keep individual test deadlines; allow the job to finish without rebuilding.
     timeout-minutes: ${{ matrix.runner == 'macos-15-intel' && 90 || 60 }}
     env:
       SCREAMSEQ_BUILD_DIR: bin/mac-ci
-      SCREAMSEQ_BUILD_JOBS: "2"
+      SCREAMSEQ_COMPILER_LAUNCHER: ccache
       RESONANCE_DEVELOPMENT_BUILD: "1"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -85,6 +109,14 @@ jobs:
         run: |
           set -o pipefail
           python -B -m unittest discover -s editor/Tests/Conformance -p test_api_vectors.py -v 2>&1 | tee screamseq-macos-api-preflight.log
+      - name: Restore ccache
+        uses: hendrikmuhs/ccache-action@e91f31892a1d1b8c44424b1a94c0b7f52d337168 # v1.2.26
+        with:
+          key: screamseq-macos-${{ matrix.runner }}
+          max-size: 1G
+      - name: Configure parallel build jobs
+        shell: bash
+        run: echo "SCREAMSEQ_BUILD_JOBS=$(sysctl -n hw.ncpu)" >> "$GITHUB_ENV"
       - name: Build C++ targets and Swift application from a clean tree
         id: build
         shell: bash
@@ -109,7 +141,7 @@ jobs:
           (build / 'native-app-identity.json').write_text(json.dumps(identity, indent=2) + '\n')
           PY
       - name: Preserve the completed app before qualification
-        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        if: ${{ github.event_name == 'workflow_dispatch' && !cancelled() && steps.build.outcome == 'success' }}
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: screamseq-macos-${{ matrix.runner }}-app
@@ -119,13 +151,13 @@ jobs:
             bin/mac-ci/native-app-identity.json
             bin/mac-ci/ScreamSeq.app/Contents/Resources/BuildInfo.json
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 7
       - name: Native model and host tests
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         shell: bash
         run: |
           set -o pipefail
-          ctest --test-dir "$SCREAMSEQ_BUILD_DIR" --output-on-failure --timeout 120 -j 2 2>&1 | tee screamseq-macos-tests.log
+          ctest --test-dir "$SCREAMSEQ_BUILD_DIR" --output-on-failure --timeout 120 -j "$SCREAMSEQ_BUILD_JOBS" 2>&1 | tee screamseq-macos-tests.log
       - name: Swift recovery and picker tests
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         shell: bash
@@ -204,13 +236,13 @@ jobs:
             bin/mac-ci/parity-conformance/**
             bin/mac-ci/ScreamSeq.app/Contents/Resources/BuildInfo.json
           if-no-files-found: warn
-          retention-days: 14
+          retention-days: 7
   retained-app:
     if: github.event_name == 'workflow_dispatch' && inputs.retained_app_run != '' && inputs.qualification == 'full'
     strategy:
       fail-fast: false
       matrix:
-        runner: ${{ fromJSON(inputs.retained_runner == 'macos-15' && '["macos-15"]' || inputs.retained_runner == 'macos-15-intel' && '["macos-15-intel"]' || '["macos-15","macos-15-intel"]') }}
+        runner: ${{ fromJSON(inputs.retained_runner == 'both' && '["macos-15","macos-15-intel"]' || inputs.retained_runner == 'macos-15-intel' && '["macos-15-intel"]' || '["macos-15"]') }}
     uses: ./.github/workflows/ScreamSeq-Retained.yml
     with:
       runner: ${{ matrix.runner }}
@@ -226,7 +258,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        runner: ${{ fromJSON(inputs.retained_runner == 'macos-15' && '["macos-15"]' || inputs.retained_runner == 'macos-15-intel' && '["macos-15-intel"]' || '["macos-15","macos-15-intel"]') }}
+        runner: ${{ fromJSON(inputs.retained_runner == 'both' && '["macos-15","macos-15-intel"]' || inputs.retained_runner == 'macos-15-intel' && '["macos-15-intel"]' || '["macos-15"]') }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 20
     env:
@@ -259,7 +291,7 @@ jobs:
             bin/mac-interface/interface-tests.sha256
             bin/mac-interface/InterfaceSource.json
           if-no-files-found: warn
-          retention-days: 14
+          retention-days: 7
   stock-pcm:
     if: github.event_name == 'workflow_dispatch' && inputs.qualification == 'stock'
     name: Pinned stock PCM (macos-15)
@@ -267,12 +299,14 @@ jobs:
     timeout-minutes: 45
     env:
       SCREAMSEQ_BUILD_DIR: bin/mac-stock-pcm
-      SCREAMSEQ_BUILD_JOBS: "2"
       SCREAMSEQ_AUDIO_BLOCKS: "512,17,4096"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
+      - name: Configure parallel build jobs
+        shell: bash
+        run: echo "SCREAMSEQ_BUILD_JOBS=$(sysctl -n hw.ncpu)" >> "$GITHUB_ENV"
       - name: Fetch the exact retained upstream oracle commit
         shell: bash
         run: git fetch --no-tags --depth=1 origin f83cedb0cd5446e4dfaa83ac97e3087107e26767
@@ -322,4 +356,4 @@ jobs:
             bin/mac-stock-pcm/harness-identity.json
             bin/mac-stock-pcm/CMakeCache.txt
           if-no-files-found: warn
-          retention-days: 14
+          retention-days: 7
