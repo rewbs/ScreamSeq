@@ -8,8 +8,8 @@ final class GraphTrimControls:NSStackView,NSTextFieldDelegate {
   var edit:(([String:Any])->Void)?
   private var target=[String:Any](),identity="",revision="",ports=[[String:Any]](),request=0
   private var sources=[[String:Any]]()
-  private var selectedKey="",shownGain="",loading=false
-  var hasDraft:Bool {(gain.currentEditor() != nil && gain.stringValue != shownGain) || minimum.currentEditor() != nil || maximum.currentEditor() != nil}
+  private var selectedKey="",shownGain="",shownMin="",shownMax="",loading=false
+  var hasDraft:Bool {(gain.currentEditor() != nil && gain.stringValue != shownGain) || (minimum.currentEditor() != nil && minimum.stringValue != shownMin) || (maximum.currentEditor() != nil && maximum.stringValue != shownMax)}
   init(){super.init(frame:.zero);orientation = .vertical;alignment = .leading;spacing=5
     minimum.fixed(width:56);maximum.fixed(width:56);minimum.setAccessibilityLabel("Trim modulation minimum dB");maximum.setAccessibilityLabel("Trim modulation maximum dB");modulationSource.setAccessibilityLabel("Trim modulation source")
     gain.fixed(width:70);gain.delegate=self;gain.target=self;gain.action=#selector(commitGain)
@@ -33,28 +33,31 @@ final class GraphTrimControls:NSStackView,NSTextFieldDelegate {
       guard let self,self.request==generation,self.identity==key else{return};self.loading=false
       guard let data=(response["result"] as? [String:Any] ?? response)["data"] as? [String:Any],let rows=data["ports"] as? [[String:Any]] else{self.isHidden=true;return}
       self.sources=data["sources"] as? [[String:Any]] ?? [];self.ports=rows;self.isHidden=rows.isEmpty;self.port.removeAllItems()
-      for row in rows{self.port.addItem(withTitle:(row["output"] as? Bool==true ? "Out · ":"In · ")+(row["name"] as? String ?? "Audio"));self.port.lastItem?.representedObject=row["key"]}
+      for row in rows{let item=NSMenuItem(title:(row["output"] as? Bool==true ? "Out · ":"In · ")+(row["name"] as? String ?? "Audio"),action:nil,keyEquivalent:"");item.representedObject=row["key"];self.port.menu?.addItem(item)}
       self.port.selectItem(at:rows.firstIndex{$0["key"] as? String==self.selectedKey} ?? 0);self.showPort()
     }
   }
   private func showPort(){guard ports.indices.contains(port.indexOfSelectedItem)else{return};let row=ports[port.indexOfSelectedItem];selectedKey=row["key"] as? String ?? "";shownGain=String(format:"%.2f",(row["gainDB"] as? NSNumber)?.doubleValue ?? 0);gain.stringValue=shownGain
-    link.removeAllItems();link.addItem(withTitle:"Independent");link.lastItem?.representedObject=""
-    for p in ports where (p["output"] as? Bool)==(!(row["output"] as? Bool ?? false)){link.addItem(withTitle:p["name"] as? String ?? "Audio");link.lastItem?.representedObject=p["key"]}
+    link.removeAllItems()
+    let independentItem=NSMenuItem(title:"Independent",action:nil,keyEquivalent:"");independentItem.representedObject="";link.menu?.addItem(independentItem)
+    for p in ports where (p["output"] as? Bool)==(!(row["output"] as? Bool ?? false)){let item=NSMenuItem(title:p["name"] as? String ?? "Audio",action:nil,keyEquivalent:"");item.representedObject=p["key"];link.menu?.addItem(item)}
     let edges=row["modulation"] as? [[String:Any]] ?? [];let edge=edges.first ?? [:]
-    modulationSource.removeAllItems();modulationSource.addItem(withTitle:"None");modulationSource.lastItem?.representedObject=""
-    for source in sources{modulationSource.addItem(withTitle:source["name"] as? String ?? "Source");modulationSource.lastItem?.representedObject=source["id"]}
+    modulationSource.removeAllItems()
+    let noneItem=NSMenuItem(title:"None",action:nil,keyEquivalent:"");noneItem.representedObject="";modulationSource.menu?.addItem(noneItem)
+    for source in sources{let item=NSMenuItem(title:source["name"] as? String ?? "Source",action:nil,keyEquivalent:"");item.representedObject=source["id"];modulationSource.menu?.addItem(item)}
     modulationSource.selectItem(at:modulationSource.itemArray.firstIndex{($0.representedObject as? String)==(edge["source"] as? String ?? "")} ?? 0)
-    minimum.stringValue=String(format:"%.2f",(edge["minimumDB"] as? NSNumber)?.doubleValue ?? 0);maximum.stringValue=String(format:"%.2f",(edge["maximumDB"] as? NSNumber)?.doubleValue ?? 6)
+    shownMin=String(format:"%.2f",(edge["minimumDB"] as? NSNumber)?.doubleValue ?? 0);shownMax=String(format:"%.2f",(edge["maximumDB"] as? NSNumber)?.doubleValue ?? 6)
+    minimum.stringValue=shownMin;maximum.stringValue=shownMax
     for control in [modulationSource,minimum,maximum] as [NSControl]{control.isEnabled=edges.count<=1;control.toolTip=edges.count>1 ? "Multiple sources are configured through the graph API":nil}
     link.selectItem(at:link.itemArray.firstIndex{($0.representedObject as? String)==(row["linkTo"] as? String ?? "")} ?? 0)
   }
   private func commitModulation(){guard !loading,modulationSource.isEnabled,!selectedKey.isEmpty,let lo=Double(minimum.stringValue),let hi=Double(maximum.stringValue),lo.isFinite,hi.isFinite,(-96...96).contains(lo),(-96...96).contains(hi) else{return}
-    var p=target;p["expectedRevision"]=revision;p["port"]=selectedKey;let source=modulationSource.selectedItem?.representedObject as? String ?? ""
-    p["modulation"]=source.isEmpty ? []:[["source":source,"minimumDB":lo,"maximumDB":hi]];edit?(p)
+    var p=target;p["port"]=selectedKey;let source=modulationSource.selectedItem?.representedObject as? String ?? ""
+    p["modulation"]=source.isEmpty ? []:[["source":source,"minimumDB":lo,"maximumDB":hi]];shownMin=minimum.stringValue;shownMax=maximum.stringValue;edit?(p)
   }
   @objc private func selectPort(){showPort()}
-  @objc private func selectLink(){guard !loading,!selectedKey.isEmpty else{return};var p=target;p["expectedRevision"]=revision;p["port"]=selectedKey;let key=link.selectedItem?.representedObject as? String ?? "";p["linkTo"]=key.isEmpty ? NSNull():key as Any;edit?(p)}
-  private func setGain(_ value:Double){guard !loading,value.isFinite,(-48...48).contains(value),!selectedKey.isEmpty else{return};var p=target;p["expectedRevision"]=revision;p["port"]=selectedKey;p["gainDB"]=value;shownGain=gain.stringValue;edit?(p)}
+  @objc private func selectLink(){guard !loading,!selectedKey.isEmpty else{return};var p=target;p["port"]=selectedKey;let key=link.selectedItem?.representedObject as? String ?? "";p["linkTo"]=key.isEmpty ? NSNull():key as Any;edit?(p)}
+  private func setGain(_ value:Double){guard !loading,value.isFinite,(-48...48).contains(value),!selectedKey.isEmpty else{return};var p=target;p["port"]=selectedKey;p["gainDB"]=value;let formatted=String(format:"%.2f",value);gain.stringValue=formatted;shownGain=formatted;edit?(p)}
   @objc private func commitGain(){guard gain.stringValue != shownGain,let value=Double(gain.stringValue),value.isFinite,(-48...48).contains(value)else{return};setGain(value)}
   func controlTextDidEndEditing(_ notification:Notification){commitGain()}
 }

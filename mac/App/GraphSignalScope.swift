@@ -23,9 +23,10 @@ final class GraphListenControls:NSView {
     guard let port,let value=Double(gain.stringValue),value.isFinite,(-60...12).contains(value) else{onError?("Monitor gain must be between −60 and +12 dB");return}
     select(port,gain:value)
   }
-  private func send() {
+  private func send(retries:Int=0) {
     guard !pending,let request=queued,let onRequest else{return};queued=nil;pending=true
-    var params:[String:Any]=["port":request.port as Any? ?? NSNull(),"expectedRevision":revision.isEmpty ? currentRevision?() ?? "":revision]
+    let sentRevision=revision.isEmpty ? currentRevision?() ?? "":revision
+    var params:[String:Any]=["port":request.port as Any? ?? NSNull(),"expectedRevision":sentRevision]
     if request.port != nil {params["gainDB"]=request.gain}
     onRequest("graph.listen.set",params){[weak self] response in
       guard let self else{return};self.pending=false
@@ -33,11 +34,15 @@ final class GraphListenControls:NSView {
         self.revision=result["revision"] as? String ?? "";self.update(result["data"] as? [String:Any] ?? [:])
       } else {
         self.onError?((response["error"] as? [String:Any])?["message"] as? String ?? "Monitor unavailable")
-        if (response["error"] as? [String:Any])?["code"] as? Int == -32001 {
+        if (response["error"] as? [String:Any])?["code"] as? Int == -32001, retries < 3 {
           if self.queued==nil {self.queued=request};self.pending=true
           onRequest("graph.listen.get",[:]){[weak self] reply in
             guard let self else{return};self.pending=false
-            if let result=reply["result"] as? [String:Any] {self.revision=result["revision"] as? String ?? "";self.send()}
+            if let result=reply["result"] as? [String:Any],let nextRevision=result["revision"] as? String,!nextRevision.isEmpty,nextRevision != sentRevision {
+              self.revision=nextRevision;self.send(retries:retries+1)
+            } else {
+              self.queued=nil
+            }
           };return
         }
         self.revision=""
@@ -90,10 +95,11 @@ final class GraphSignalScope:NSView {
     if port != activePort {plot.value=[:];detail.stringValue="Starting capture…"}
     synchronize()
   }
-  private func synchronize() {
+  private func synchronize(retries:Int=0) {
     guard !pending,requestedPort != activePort,let onRequest else{return}
     let captured=requestedPort;pending=true
-    onRequest("graph.scope.watch",["port":captured as Any? ?? NSNull(),"expectedRevision":revision.isEmpty ? currentRevision?() ?? "":revision]){[weak self] response in
+    let sentRevision=revision.isEmpty ? currentRevision?() ?? "":revision
+    onRequest("graph.scope.watch",["port":captured as Any? ?? NSNull(),"expectedRevision":sentRevision]){[weak self] response in
       guard let self else{return};self.pending=false
       if let result=response["result"] as? [String:Any] {
         self.activePort=captured;self.revision=result["revision"] as? String ?? self.revision
@@ -101,13 +107,15 @@ final class GraphSignalScope:NSView {
       } else {
         self.detail.stringValue=(response["error"] as? [String:Any])?["message"] as? String ?? "Capture unavailable"
         self.revision=""
-        if (response["error"] as? [String:Any])?["code"] as? Int == -32001 {
+        if (response["error"] as? [String:Any])?["code"] as? Int == -32001, retries < 3 {
           // Closing a hidden graph must also retire capture after a concurrent
           // edit. Its inspector revision may no longer receive refreshes.
           self.pending=true
           onRequest("graph.scope.get",[:]){[weak self] response in
             guard let self else{return};self.pending=false
-            if let result=response["result"] as? [String:Any] {self.revision=result["revision"] as? String ?? "";self.synchronize()}
+            if let result=response["result"] as? [String:Any],let nextRevision=result["revision"] as? String,!nextRevision.isEmpty,nextRevision != sentRevision {
+              self.revision=nextRevision;self.synchronize(retries:retries+1)
+            }
           }
         }
       }

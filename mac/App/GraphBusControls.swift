@@ -32,6 +32,7 @@ final class GraphBusControls:NSView {
       return
     }
     let targetChanged=identity != bus?["id"] as? String
+    if targetChanged { finish = false }
     identity=bus?["id"] as? String;saved=bus ?? [:];self.revision=revision
     let level=(saved["gainDB"] as? NSNumber)?.doubleValue ?? 0
     // Pattern edits advance the revision without changing mixer controls. Do
@@ -96,10 +97,10 @@ final class GraphBusControls:NSView {
         self.pending=false;self.message.stringValue=error;self.onChanged?();return
       }
       self.saved=bus;self.revision=rev
-      func done(_ restored:Bool){self.pending=false;self.previewed=false;self.context(bus,revision:rev);self.applyNextContext();self.message.stringValue=error+(restored ? "":" · audition reset failed; stop playback to reset");self.onChanged?()}
+      func done(_ restored:Bool){self.pending=false;self.previewed=false;self.shownLevel=nil;self.context(bus,revision:rev);self.applyNextContext();self.message.stringValue=error+(restored ? "":" · audition reset failed; stop playback to reset");self.onChanged?()}
       guard self.previewed else{done(true);return}
       var restore=bus.filter{["preGainDB","prePan","gainDB","pan","width","mute","solo"].contains($0.key)}
-      restore["bus"]=id;restore["expectedRevision"]=rev
+      restore["bus"]=id;restore["expectedRevision"]=rev;restore["preview"]=true
       onRequest("mixer.bus.set",restore){reply in done(reply["result"] != nil)}
     }
   }

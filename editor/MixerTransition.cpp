@@ -262,7 +262,7 @@ bool MixerTransition::begin(uint32_t frames,uint64_t position) noexcept {
   if(auto *previous=plans_.previous()) {
     previous->runtime->begin(frames,position);
     if(next) {
-      if(!current.runtime->activateHistory()){reject();return true;}
+      if(!current.runtime->activateHistory()){reject();if(plans_.current().begin)plans_.current().begin(plans_.current().processors.get(),frames,position,true);return true;}
       if(current.adopt)current.adopt(current.processors.get(),previous->processors.get());
       if(!current.bridge&&current.activateAudio)current.activateAudio(current.processors.get(),previous->processors.get(),position);
       // Feed the new plan actual ongoing sources until its compensation/DSP
@@ -273,7 +273,7 @@ bool MixerTransition::begin(uint32_t frames,uint64_t position) noexcept {
   current.runtime->begin(frames,position);
   if(current.bridge&&plans_.previous()){
     auto &bridge=*current.bridge;auto &previous=*plans_.previous();
-    if(next){if(!bridge.before.plan->runtime->activateHistory()||!bridge.after.plan->runtime->activateHistory()){reject();return true;}}
+    if(next){if(!bridge.before.plan->runtime->activateHistory()||!bridge.after.plan->runtime->activateHistory()){reject();if(plans_.current().begin)plans_.current().begin(plans_.current().processors.get(),frames,position,true);return true;}}
     bridge.before.plan->runtime->begin(frames,position);bridge.after.plan->runtime->begin(frames,position);
     previous.renderInput=!bridge.activated;current.renderInput=bridge.activated;
     previous.dryInput=bridge.before.plan->runtime.get();current.dryInput=bridge.after.plan->runtime.get();
@@ -358,11 +358,11 @@ bool MixerTransition::evaluateMorph(Plan &before,Plan &after,std::span<const Dir
   };
   for(const auto &step:morph.steps){
     const auto a=step.before,b=step.after;
-    if(step.kind==3){auto &p=a.processor!=SIZE_MAX?before:after;const auto location=a.processor!=SIZE_MAX?a:b;if(!p.runtime->processorInput(location.bus,location.processor))return false;continue;}
+    if(step.kind==3){const bool isBefore=a.processor!=SIZE_MAX;auto &p=isBefore?before:after;const auto location=isBefore?a:b;if(!p.runtime->processorInput(location.bus,location.processor)){if(isBefore)return false;candidateFailed=true;}continue;}
     if(step.kind!=1){
-      auto &p=a.bus!=SIZE_MAX?before:after;const auto bus=a.bus!=SIZE_MAX?a.bus:b.bus;
-      if(step.kind==0){const auto input=source(p,bus);if(!p.runtime->beginBus(bus,input.left,input.right))return false;}
-      else if(!p.runtime->finishBus(bus))return false;
+      const bool isBefore=a.bus!=SIZE_MAX;auto &p=isBefore?before:after;const auto bus=isBefore?a.bus:b.bus;
+      if(step.kind==0){const auto input=source(p,bus);if(!p.runtime->beginBus(bus,input.left,input.right)){if(isBefore)return false;candidateFailed=true;}}
+      else if(!p.runtime->finishBus(bus)){if(isBefore)return false;candidateFailed=true;}
       continue;
     }
     auto input=[&](Plan &p,InputMorph::Location location,auto &silence)->float * {
@@ -371,7 +371,8 @@ bool MixerTransition::evaluateMorph(Plan &before,Plan &after,std::span<const Dir
       std::fill_n(silence.data(),frames_*2,0.f);return silence.data();
     };
     auto *old=input(before,a,morph.silentBefore),*next=input(after,b,morph.silentAfter);
-    if((a.processor!=SIZE_MAX&&!old)||(b.processor!=SIZE_MAX&&!next))return false;
+    if(a.processor!=SIZE_MAX&&!old)return false;
+    if(b.processor!=SIZE_MAX&&!next){candidateFailed=true;next=nullptr;}
     if(old&&next){
       // Moving between a silent slot and an audible chain already fades at
       // the graph output. Feed the audible side fully during that handoff;
@@ -417,7 +418,7 @@ bool MixerTransition::evaluateMorph(Plan &before,Plan &after,std::span<const Dir
       }
     }
     if(old && (a.bus!=SIZE_MAX||before.catalog[a.processor].scheduledSource) && !before.runtime->finishProcessor(a.bus,a.processor))return false;
-    if(next && (b.bus!=SIZE_MAX||after.catalog[b.processor].scheduledSource) && !after.runtime->finishProcessor(b.bus,b.processor))return false;
+    if(next && (b.bus!=SIZE_MAX||after.catalog[b.processor].scheduledSource) && !after.runtime->finishProcessor(b.bus,b.processor))candidateFailed=true;
   }
   before.runtime->complete();after.runtime->complete();
   candidateFailed|=after.runtime->failed();return !before.runtime->failed();

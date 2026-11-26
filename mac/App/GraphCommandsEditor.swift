@@ -31,8 +31,8 @@ final class GraphCommandsEditor:NSView, NSTextFieldDelegate {
     status.maximumNumberOfLines=3;status.lineBreakMode = .byWordWrapping
     func labeled(_ label:String,_ control:NSView)->NSView{let title=Theme.label(label,size:12);title.fixed(width:95);return stack(.horizontal,[title,control])}
     let content=stack(.vertical,[context,labeled("Channel / group",target),labeled("Lane",column),labeled("Action",kind),labeled("Subgraph",graph),
-      stack(.horizontal,[labeled("Row",row),labeled("Offset %",offset)]),
-      stack(.horizontal,[labeled("Amount %",amount),labeled("Wet %",wet)]),tails,
+      labeled("Row",row),labeled("Offset %",offset),
+      labeled("Amount %",amount),labeled("Wet %",wet),tails,
       stack(.horizontal,[insertButton,ActionButton("Remove"){[weak self] in self?.apply(remove:true)},ActionButton("Open graph"){[weak self] in if let self,let id=self.graph.selectedItem?.representedObject as? String{self.onGraph?(id)}}]),
       more,
       Theme.label("R: this row · S: until stopped · X: stop named · CLR: clear persistent\nA: update Amount · W: update wet mix. Repeating S updates the existing chain.\nProcessing order: row-only → persistent → ordinary channel graph.",size:11,color:Theme.muted),status,NSView()],spacing:10)
@@ -54,7 +54,7 @@ final class GraphCommandsEditor:NSView, NSTextFieldDelegate {
       self.graph.removeAllItems();for d in library{let item=NSMenuItem(title:"\(d["number"] as? Int ?? 0) · \(d["name"] as? String ?? "Subgraph")",action:nil,keyEquivalent:"");item.representedObject=d["id"];self.graph.menu?.addItem(item)}
       if let draft {
         for (popup,id) in [(self.target,keptTarget),(self.graph,keptGraph ?? "")]{if let index=popup.itemArray.firstIndex(where:{$0.representedObject as? String==id}){popup.selectItem(at:index)}}
-        self.baseline=draft;self.status.stringValue="Saved. Edits made meanwhile are kept as a draft · Apply command to save them.";return
+        self.baseline=draft;self.updateActionButton();self.status.stringValue="Saved. Edits made meanwhile are kept as a draft · Apply changes to save them.";return
       }
       let selected=self.preferredTarget ?? current.0.tracks.first{$0["index"] as? Int==current.2}?["id"] as? String
       if let index=self.target.itemArray.firstIndex(where:{$0.representedObject as? String==selected}){self.target.selectItem(at:index)}
@@ -62,17 +62,28 @@ final class GraphCommandsEditor:NSView, NSTextFieldDelegate {
       self.status.stringValue=buses.isEmpty ? "Open or create a song to add graph commands" : "Ready · editing this panel preserves the pattern cursor"
     }
   }
+  private func updateActionButton(){
+    insertButton.title = existingCommand ? "Apply changes" : "Insert command"
+    insertButton.isHidden = existingCommand && !hasDraft
+  }
+  func controlTextDidChange(_ notification:Notification){updateActionButton()}
   @objc func selectionChanged(){let r=row.integerValue,c=column.indexOfSelectedItem
     if let event=commands.first(where:{$0["target"] as? String==bus && ($0["position"] as? Int ?? 0)/65536==r && $0["column"] as? Int==c}){
       kind.selectItem(withTitle:event["kind"] as? String ?? "row");if let index=graph.itemArray.firstIndex(where:{$0.representedObject as? String==event["graph"] as? String}){graph.selectItem(at:index)}
       offset.doubleValue=Double((event["position"] as? Int ?? 0)%65536)*100/65536;amount.doubleValue=(event["amount"] as? Double ?? 1)*100;wet.doubleValue=(event["wet"] as? Double ?? 1)*100;tails.state=(event["tails"] as? Bool ?? false) ? .on : .off
     }else{offset.stringValue="0"}
-    baseline=fields;insertButton.isHidden=existingCommand
+    baseline=fields;updateActionButton()
   }
-  @objc private func commitExistingCommand(){if existingCommand && hasDraft{apply()}}
+  @objc private func commitExistingCommand(){updateActionButton();if existingCommand && hasDraft{apply()}}
   func controlTextDidEndEditing(_ notification:Notification){commitExistingCommand()}
   func enableLane(){guard !bus.isEmpty else{return};mutate("graph.commands.set",["pattern":captured.pattern,"lanes":[["target":bus,"count":max(column.indexOfSelectedItem+1,(data["lanes"] as? [[String:Any]] ?? []).first{$0["target"] as? String==bus}?["count"] as? Int ?? 0)]]])}
-  func apply(remove:Bool=false){guard !pending,!bus.isEmpty,let r=Int(row.stringValue),r>=0,r<captured.rows,let percent=Double(offset.stringValue),percent.isFinite,percent>=0,percent<100,let a=Double(amount.stringValue),a.isFinite,a>=0,a<=100,let w=Double(wet.stringValue),w.isFinite,w>=0,w<=100 else{status.stringValue="Use a valid row, offset from 0 to below 100%, and Amount/Wet from 0 to 100%";return}
+  func apply(remove:Bool=false){
+    guard !pending,!bus.isEmpty,let r=Int(row.stringValue),r>=0,r<captured.rows else{status.stringValue="Use a valid row inside the pattern";return}
+    var percent=0.0,a=100.0,w=100.0
+    if !remove {
+      guard let p=Double(offset.stringValue),p.isFinite,p>=0,p<100,let av=Double(amount.stringValue),av.isFinite,av>=0,av<=100,let wv=Double(wet.stringValue),wv.isFinite,wv>=0,wv<=100 else{status.stringValue="Use a valid row, offset from 0 to below 100%, and Amount/Wet from 0 to 100%";return}
+      percent=p;a=av;w=wv
+    }
     let column=self.column.indexOfSelectedItem,kind=self.kind.titleOfSelectedItem ?? "row",graph=self.graph.selectedItem?.representedObject as? String ?? ""
     guard remove || kind=="clear" || !graph.isEmpty else{status.stringValue="Create or select a subgraph first";return}
     var events=commands.filter{!($0["target"] as? String==bus && ($0["position"] as? Int ?? 0)/65536==r && $0["column"] as? Int==column)}.map{event -> [String:Any] in var c=event;c.removeValue(forKey:"pattern");return c}

@@ -31,7 +31,7 @@ target_sources(TrackerEditor PRIVATE "${ROOT}/editor/MixerDryBridge.cpp" "${ROOT
 target_sources(TrackerEditor PRIVATE "${ROOT}/editor/SampleImport.cpp")
 target_sources(TrackerEditor PRIVATE "${ROOT}/editor/Sampling.cpp")
 target_sources(TrackerEditor PRIVATE "${ROOT}/editor/SongTiming.cpp" "${ROOT}/editor/PreciseNoteRuntime.cpp" "${ROOT}/editor/RecordNudgeRuntime.cpp" "${ROOT}/editor/ScratchGesture.cpp" "${ROOT}/editor/ScratchRuntime.cpp" "${ROOT}/editor/NativePatternRuntime.cpp" "${ROOT}/editor/NativeTimingRuntime.cpp" "${ROOT}/editor/NoteRecording.cpp")
-target_sources(TrackerEditor PRIVATE "${ROOT}/editor/PatternGateRuntime.cpp")
+target_sources(TrackerEditor PRIVATE "${ROOT}/editor/PatternGateRuntime.cpp" "${ROOT}/editor/UsageAnalytics.cpp")
 target_sources(TrackerEditor PRIVATE "${ROOT}/editor/InstrumentEnvelopeTools.cpp" "${ROOT}/editor/EnvelopeBank.cpp")
 target_sources(TrackerEditor PRIVATE "${ROOT}/editor/StateVariableFilter.cpp" "${ROOT}/editor/FractionalDelay.cpp" "${ROOT}/editor/Distortion.cpp" "${ROOT}/editor/LofiMat.cpp" "${ROOT}/editor/CabinetVoicing.cpp" "${ROOT}/editor/CabinetSimulator.cpp" "${ROOT}/editor/Dynamics.cpp" "${ROOT}/editor/Maximizer.cpp" "${ROOT}/editor/SampleProcessing.cpp" "${ROOT}/editor/SampleWaveform.cpp" "${ROOT}/editor/SampleDocument.cpp" "${ROOT}/editor/SampleArchive.cpp" "${ROOT}/editor/SampleClipboard.cpp" "${ROOT}/editor/SampleSplice.cpp" "${ROOT}/editor/SampleCopy.cpp" "${ROOT}/editor/SampleDrawing.cpp" "${ROOT}/editor/SampleSnap.cpp" "${ROOT}/editor/SampleLoopCrossfade.cpp")
 add_library(TrackerMac STATIC Plugins/PluginPreset.mm Plugins/PluginLibrary.mm Bridge/TrackerSession.mm Audio/AudioDevice.mm Audio/MidiInput.mm Audio/AudioExport.mm)

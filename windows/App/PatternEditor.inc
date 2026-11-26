@@ -223,7 +223,8 @@
                 if(effectSelected<0||SendMessageW(controls.at(effectKind),CB_GETCURSEL,0,0)<0)throw std::runtime_error("Choose an FX command");
                 const auto submittedGeneration=effectDraftGeneration;
                 Json command=readEffectFields(),binding=nullptr;int bindingIndex=-1;
-                if(command.contains("binding")){const auto selected=SendMessageW(controls.at(effectBinding),CB_GETCURSEL,0,0);binding=effectBindingChoices.at(size_t(selected));bindingIndex=int(selected);}
+                const bool hasBinding=command.contains("binding")||(command.contains("parameters")&&command.at("parameters").is_object()&&command.at("parameters").contains("binding"));
+                if(hasBinding){const auto selected=SendMessageW(controls.at(effectBinding),CB_GETCURSEL,0,0);if(selected>=0&&size_t(selected)<effectBindingChoices.size()){binding=effectBindingChoices.at(size_t(selected));bindingIndex=int(selected);}}
                 Json params={{"expectedRevision",effectDraftRevision},{"pattern",effectDraftPattern},{"row",effectDraftRow},{"channel",effectDraftChannel},{"column",effectDraftColumn},{"command",command}};
                 if(binding.is_object()&&binding.contains("plugin")) {
                     auto snapshot=documentOperation("pattern.effects.get",{{"pattern",effectDraftPattern}});auto commands=snapshot.at("commands");

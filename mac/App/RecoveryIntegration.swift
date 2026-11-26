@@ -40,9 +40,9 @@ extension AppController {
     recoveryWriter.async { store.prune(protecting: [id]) }
   }
   func autosave(force: Bool = false, reply: AutomationServer.Reply? = nil) {
-    // A timed copy waits for an application-modal dialog, as it always has:
-    // the dialog's own action must not find the document busy.
-    if reply == nil && NSApp.modalWindow != nil { return }
+    // A timed copy waits for an application-modal dialog or attached sheet, so
+    // the dialog's own action does not find the document busy.
+    if reply == nil && (NSApp.modalWindow != nil || window.attachedSheet != nil) { return }
     if sessionReading, !busy, let reply {
       deferUntilIdle({ [weak self] in self?.autosave(force: force, reply: reply) },
         cancel: { reply(AutomationServer.error(-32002, "The application is shutting down")) })
@@ -184,14 +184,18 @@ extension AppController {
         }
         let wasPlaying = self.session.playing
         try self.session.openPath(file.path)
+        let untrustedPlugins = self.session.unresolvedPluginLocations as? [[String: Any]] ?? []
         let revision = self.session.automationRevision
         DispatchQueue.main.async {
           self.busy = false; self.documentURL = nil; self.recoveryID = UUID().uuidString
           self.recoveryLastRevision = nil; self.recoveryLastDate = nil; self.recoveryLastCopy = nil; self.recoveryError = nil
           self.dirty = true; self.selectedOrder = 0; self.model.pattern = 0
           self.recordingTakeID = self.session.recordingTakeID; self.recordingFinishing = self.recordingTakeID != nil
-          self.patternView.firstRow = 0; self.patternView.muted.removeAll(); self.refreshAll(); self.updateRecoveryStatus()
+          self.patternView.firstRow = 0; self.patternView.muted.removeAll(); self.refreshAll()
+          if let first = self.model.orders.first, first != self.model.pattern { self.model.pattern = first; self.refreshPattern() }
+          self.updateRecoveryStatus()
           self.statusLabel.stringValue = self.recordingTakeID == nil ? "Recovered song · Save As to keep this version" : "Recovered song and recording take · use Pattern → Finish Recording Take"
+          self.offerPluginTrust(untrustedPlugins)
           reply(["result": ["revision": revision, "data": ["id": id, "hasRecording": self.recordingTakeID != nil], "changed": true, "playbackStopped": wasPlaying]])
           self.drainNotes()
         }

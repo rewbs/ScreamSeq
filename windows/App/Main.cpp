@@ -1,5 +1,6 @@
 // Native Windows editor integration. Full Mac UI/plugin parity is not claimed.
 #include "editor/TrackerDocument.hpp"
+#include "editor/UsageAnalytics.hpp"
 #include "common/mptString.h"
 #include "soundlib/mod_specifications.h"
 #include "soundlib/ModInstrument.h"
@@ -15,6 +16,7 @@
 #include "WorkspaceLayouts.hpp"
 #include "WorkspaceLayoutWindow.hpp"
 #include "CommandPalette.hpp"
+#include "UsageBookmarkBar.hpp"
 #include "NativeContextMenu.hpp"
 #include "NativeTextSearch.hpp"
 #include "NativeMenuBar.hpp"
@@ -172,6 +174,7 @@ constexpr int playCommand=101, stopCommand=102, followCommand=103, composeComman
     curveApply=486,curveReload=487,curveSetPoint=488,curveDelete=489,curveRamp=490,curveClear=491,
     curveFit=492,curveZoomIn=493,curveZoomOut=494,curvePreview=495,curveEnable=496,curveBank=497,curveExpand=498,curveReference=499,
     graphCommandsCommand=500,graphLanesFocus=501,parameterAutomationCommand=502,instrumentEnvelopeCommand=503,absoluteAutomationCommand=504,sampleDetailCommand=505,auditionCommand=506,sampleBrowseCommand=511,audioSettingsCommand=512,scratchGesturesCommand=576,gateInspectorCommand=665,
+    usageAnalyticsToggleCommand=666,usageAnalyticsBookmarkCommand=667,
     sampleRecordCommand=577,patternRenderSampleCommand=578,patternRenderInstrumentCommand=579,patternRenderOptionsCommand=580,graphTrimsCommand=581;
 std::wstring wide(const std::string &text) {
 	int size = MultiByteToWideChar(CP_UTF8, 0, text.data(), static_cast<int>(text.size()), nullptr, 0);
@@ -283,6 +286,11 @@ public:
 	uint64_t contextRevision = 0;
     std::optional<unsigned> inputInstrumentOverride;
 	ScreamSeq::WorkspaceState workspaceState;
+	Tracker::UsageAnalytics usageAnalytics;
+	std::unique_ptr<ScreamSeq::UsageBookmarkBar> usageBookmarkBar;
+	std::wstring lastAnalyticsStatus;
+	std::string lastAnalyticsLayout = "Compose";
+	std::string activeCommandSource = "shortcut";
 	bool playbackLoop = true;
 	Json playbackRegion = Json::object();
 	ScreamSeq::Api::SessionSnapshot snapshot() override {
@@ -583,8 +591,10 @@ public:
             }
             // Complete the owned task even if presentation is lost; unwinding
             // with a pending worker-to-main playback hook would deadlock join.
-            if(surface && !IsIconic(window) && !presentationError && presentationNeeded() && WaitForSingleObject(surface->ready(),0)==WAIT_OBJECT_0)
+            if(surface && !IsIconic(window) && !presentationError && presentationNeeded() && WaitForSingleObject(surface->ready(),0)==WAIT_OBJECT_0) {
+                surface->markReadyConsumed();
                 try {draw();} catch(...) {presentationError=std::current_exception();}
+            }
             MsgWaitForMultipleObjectsEx(0,nullptr,4,QS_ALLINPUT,MWMO_INPUTAVAILABLE);
         }
         controller->service();auto result=future.get();
@@ -834,8 +844,6 @@ public:
 		self.preparedPlayback->render(samples, frames,time);
         if(!frames)return;
         if(self.silentOutput) {std::fill_n(samples,size_t(frames)*2,0.0f);return;}
-		// Demo monitor attenuation is explicit; never touches endpoint/master volume.
-		for(size_t i = 0; i < size_t(frames) * 2; ++i) samples[i] *= 0.1f;
 	}
     #include "Audition.inc"
     #include "MusicalTyping.inc"
@@ -865,6 +873,7 @@ public:
         // renderer, restarting the device, flushing edits or touching a take.
         if(device.running()&&!auditionOnly&&renderer)renderer->loop(enabled);
         playbackLoop=enabled;frameRequested=true;refreshPlaybackLoopControl();
+        usageAnalytics.recordTransport(enabled?"loop_on":"loop_off",device.running()&&!auditionOnly);
     }
     void play(const Json &settings) override {rejectDepartureInput();startPlayback(settings,false);startRecordingIfArmed();}
     void startPlayback(Json settings,bool audition,std::function<Json()> resolveSettings={}) {
@@ -901,8 +910,8 @@ public:
             }
 			if(!device.start()) throw std::runtime_error("WASAPI start failed");
             auditionOnly=audition;
-			if(!audition){playbackLoop = settings.value("loop",playbackLoop); playbackRegion = settings;refreshPlaybackLoopControl();}
-			status = (audition?L"Audition / song position stopped / ":L"Playing / monitor -20 dB / ") + std::to_wstring(lastRate) + L" Hz / " + std::to_wstring(lastPeriod) + L" frames";
+			if(!audition){playbackLoop = settings.value("loop",playbackLoop); playbackRegion = settings;refreshPlaybackLoopControl();usageAnalytics.recordTransport("play",true);}
+			status = (audition?L"Audition / song position stopped / ":L"Playing / ") + std::to_wstring(lastRate) + L" Hz / " + std::to_wstring(lastPeriod) + L" frames";
 		} catch(...) { device.close(); throw; }
 	}
     void stop() override {
@@ -918,8 +927,37 @@ public:
         midiNotes.clear();
         ++stopGeneration;pendingAuditionCount=0;auditionOnly=false;
 		device.stop(); lastAudio = device.stats();
+		usageAnalytics.recordTransport("stop",false);
 		if(!departureAdopted)status = L"Stopped / Play starts at the selected pattern occurrence / cursor remains independent";
 	}
+    std::string analyticsCommandLabel(int id) const {
+        const auto found=std::find_if(workspaceCommands.begin(),workspaceCommands.end(),[&](const auto &entry){return entry.id==id;});
+        return found==workspaceCommands.end()?std::string():utf8Path(found->label);
+    }
+    void observeAnalyticsStatus() {
+        if(status==lastAnalyticsStatus)return;
+        lastAnalyticsStatus=status;
+        usageAnalytics.recordStatusMessage(utf8Path(status),workspaceState.focus);
+    }
+    void toggleUsageAnalytics() {
+        usageAnalytics.toggleEnabled();
+        refreshMenuBar();
+        if(usageAnalytics.suppressed())status=L"Local usage analytics is suppressed in test/inspection mode";
+        else if(usageAnalytics.enabled())status=L"Local usage & friction analytics enabled / Ctrl+Shift+. bookmarks friction";
+        else status=L"Local usage & friction analytics disabled";
+        frameRequested=true;
+    }
+    void triggerUsageBookmark(const std::string &trigger) {
+        const auto id=usageAnalytics.recordBookmark(trigger);
+        if(!usageBookmarkBar) {
+            usageBookmarkBar=std::make_unique<ScreamSeq::UsageBookmarkBar>(window,[this](const std::string &bid,const std::wstring &note){
+                usageAnalytics.recordBookmarkNote(bid,utf8Path(note));
+                status=L"Usage bookmark note saved";
+                frameRequested=true;
+            });
+        }
+        usageBookmarkBar->present(id,usageAnalytics.enabled());
+    }
     #include "WorkspaceLayouts.inc"
     #include "WorkspaceDocking.inc"
     #include "WorkspaceCommands.inc"
@@ -1308,8 +1346,8 @@ LRESULT CALLBACK windowProc(HWND window, UINT message, WPARAM wp, LPARAM lp) {
             if(LOWORD(wp)==mixerOutput&&HIWORD(wp)!=CBN_SELCHANGE)return 0;
             if(LOWORD(wp)==mixerList&&HIWORD(wp)!=LBN_SELCHANGE)return 0;
             if(LOWORD(wp)==effectSearch){if(HIWORD(wp)==EN_CHANGE)app->filterEffects();return 0;}
-            if((LOWORD(wp)>=effectValue&&LOWORD(wp)<=effectRange)||(LOWORD(wp)>=effectFieldBase&&LOWORD(wp)<effectFieldBase+10)){if(HIWORD(wp)==EN_CHANGE)app->effectFieldChanged();return 0;}
-            if((LOWORD(wp)==effectUnits||(LOWORD(wp)>=effectChoiceBase&&LOWORD(wp)<effectChoiceBase+10))&&HIWORD(wp)!=CBN_SELCHANGE)return 0;
+            if((LOWORD(wp)>=effectValue&&LOWORD(wp)<=effectRange)||(LOWORD(wp)>=effectFieldBase&&LOWORD(wp)<effectFieldBase+16)){if(HIWORD(wp)==EN_CHANGE)app->effectFieldChanged();return 0;}
+            if((LOWORD(wp)==effectUnits||(LOWORD(wp)>=effectChoiceBase&&LOWORD(wp)<effectChoiceBase+16))&&HIWORD(wp)!=CBN_SELCHANGE)return 0;
             if((LOWORD(wp)==effectKind||LOWORD(wp)==effectBinding)&&HIWORD(wp)!=CBN_SELCHANGE)return 0;
             if(LOWORD(wp)==pluginValue) {if(HIWORD(wp)==EN_CHANGE)app->pluginFieldChanged();return 0;}
             if(LOWORD(wp)==pluginParameterSearch||LOWORD(wp)==pluginProgramSearch) {if(HIWORD(wp)==EN_CHANGE)app->filterPluginChoices(LOWORD(wp)==pluginProgramSearch);return 0;}
@@ -1439,6 +1477,31 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
             try{library=std::filesystem::path(local)/L"org.resonance.tracker"/L"plugin-library-v1.json";}catch(...){CoTaskMemFree(local);throw;}CoTaskMemFree(local);
         }
 		Application app(projectPath,inspection,std::move(catalogue),std::move(library));app.silentOutput=silentOutput;
+        {
+            const bool suppressAnalytics=inspection||automation||audioTest||seconds>0;
+            Tracker::UsageAnalytics::Config analyticsCfg;
+            analyticsCfg.platform="windows";
+            analyticsCfg.suppressed=suppressAnalytics;
+            if(!suppressAnalytics) {
+                auto envPath=[](const wchar_t *name)->std::filesystem::path {
+                    wchar_t buf[32768]{};
+                    const DWORD n=GetEnvironmentVariableW(name,buf,32768);
+                    return (n>0&&n<32768)?std::filesystem::path(buf):std::filesystem::path();
+                };
+                std::filesystem::path baseDir;
+                PWSTR local{};
+                if(SUCCEEDED(SHGetKnownFolderPath(FOLDERID_LocalAppData,KF_FLAG_DONT_VERIFY,nullptr,&local))) {
+                    try{baseDir=std::filesystem::path(local)/L"org.resonance.tracker";}catch(...){CoTaskMemFree(local);throw;}
+                    CoTaskMemFree(local);
+                }
+                analyticsCfg.configPath=envPath(L"SCREAMSEQ_ANALYTICS_CONFIG");
+                if(analyticsCfg.configPath.empty()&&!baseDir.empty())analyticsCfg.configPath=baseDir/L"usage-analytics-config.json";
+                analyticsCfg.logPath=envPath(L"SCREAMSEQ_ANALYTICS_LOG");
+                if(analyticsCfg.logPath.empty()&&!baseDir.empty())analyticsCfg.logPath=baseDir/L"usage-analytics.jsonl";
+            }
+            app.usageAnalytics.configure(std::move(analyticsCfg));
+            app.usageAnalytics.recordAppStart(projectPath.empty()?"demo":utf8Path(projectPath.filename()));
+        }
         app.audioOptions.diagnosticThreadCycles=diagnosticThreadCycles;
 		WindowOwner windowOwner{window};
         if(!inspection&&!audioTest){
@@ -1494,8 +1557,10 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
             if(!renderPending) ++app.idleWaits;
             // A ready swapchain stays signaled without Present. Exclude it while
             // stopped/unchanged, otherwise the idle loop spins at full CPU.
-            const auto wait=app.presentationBackoff.waitMilliseconds(GetTickCount64(),app.rulerFuture.valid()?25:drawFailures?100:1000);
+            const bool activityPending=app.activityFuture.valid()||(app.activityObserved!=app.activityAttempted&&!app.activityObserved.empty());
+            const auto wait=app.presentationBackoff.waitMilliseconds(GetTickCount64(),(app.rulerFuture.valid()||activityPending)?25:drawFailures?100:1000);
 			auto result = MsgWaitForMultipleObjectsEx(renderPending?1:0, renderPending?&event:nullptr, wait, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
+			if(renderPending && result == WAIT_OBJECT_0) app.surface->markReadyConsumed();
 			MSG message{};
 			while(PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE)) {
 				if(message.message == WM_QUIT) { closed = true; break; }
@@ -1537,6 +1602,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
 			if(seconds && (ScreamSeq::ticks() - start) / app.frequency >= seconds) break;
             if(audioTest && !audioTestAllowStop && !app.device.running()) throw std::runtime_error("Audio device stopped during test");
 		}
+		app.usageAnalytics.recordAppStop();
 		app.api.reset();
 		app.shutdownMidi();
 		app.shutdownRecovery();

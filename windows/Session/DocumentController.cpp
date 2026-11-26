@@ -636,9 +636,6 @@ Json DocumentController::operation(const std::string &method,Json params) {
     Json reply=Json::object();if(auto warning=plugins_->takeEditorWarning();!warning.empty())reply["pluginEditorWarning"]=std::move(warning);
     return reply;
   }
-  if(method=="document.save" || replacing || (method=="sample.renderSelection"&&!flag(params,"dryRun")) || method.starts_with("plugin.") || method.starts_with("history.") || method.starts_with("graph.") || method.starts_with("mixer.") || method.starts_with("track.") || method.starts_with("envelope.") || method.starts_with("automation.pattern.") || method=="automation.get" || method=="automation.replaceLane" || method=="automation.recorded.edit" || method=="automation.recorded.clear") {
-    flushEditors(true);
-  }
   auto writes=DocumentOperations::writes();auto timelineWrites=TimelineOperations::writes();writes.insert(writes.end(),timelineWrites.begin(),timelineWrites.end());
   const auto assetWrites=AssetOperations::writes();writes.insert(writes.end(),assetWrites.begin(),assetWrites.end());
   const auto patternWrites=PatternOperations::writes();writes.insert(writes.end(),patternWrites.begin(),patternWrites.end());
@@ -657,6 +654,11 @@ Json DocumentController::operation(const std::string &method,Json params) {
     if(!params.contains("expectedRevision") || !params["expectedRevision"].is_string()) throw Api::ApiError(-32602,"expectedRevision is required");
     if(params["expectedRevision"]!=revision()) throw Api::ApiError(-32001,"Song changed on document worker; read and rebase");
     params.erase("expectedRevision");
+  }
+  if(method=="document.save" || replacing || (method=="sample.renderSelection"&&!flag(params,"dryRun")) || method.starts_with("plugin.") || method.starts_with("history.") || method.starts_with("graph.") || method.starts_with("mixer.") || method.starts_with("track.") || method.starts_with("envelope.") || method.starts_with("automation.pattern.") || method=="automation.get" || method=="automation.replaceLane" || method=="automation.recorded.edit" || method=="automation.recorded.clear") {
+    flushEditors(true);
+  }
+  if(write) {
     // A document mutation/save uses the accepted baseline. Never serialize or
     // carry a temporary audible value into another edit or plugin topology.
     if(method!="document.exportModule"&&method!="document.exportAudio"&&!flag(params,"dryRun")&&

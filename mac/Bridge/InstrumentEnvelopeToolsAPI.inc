@@ -45,6 +45,12 @@
             } else require(false,"Unknown instrument envelope tool");
             const bool dry=p[@"dryRun"]?boolean(p[@"dryRun"]):false;
             const auto transformed=transformInstrumentEnvelope(before,maximum,tool);const bool changed=!sameInstrumentEnvelope(before,transformed.envelope);
+            if(changed&&transformed.envelope.empty()){
+              const auto targetKind=[kind isEqual:@"volume"]?EnvelopeTargetKind::Volume:[kind isEqual:@"pan"]?EnvelopeTargetKind::Pan:EnvelopeTargetKind::Pitch;
+              const auto &links=_document->native().envelopeLinks;
+              require(std::none_of(links.begin(),links.end(),[&](const auto &l){return l.target.kind==targetKind&&l.target.owner==identity;}),
+                "Unlink this instrument envelope from its song template before clearing it");
+            }
             result=@{@"before":info(before),@"after":info(transformed.envelope),@"wouldChange":@(changed),@"dryRun":@(dry),
               @"clippedValues":@(transformed.clipped),@"roundedValues":@(transformed.rounded),@"reanchoredMarkers":@(transformed.reanchored)};
             if(changed&&!dry){_audio->stop();_document->transaction([&](CSoundFile &current){instrumentEnvelope(*current.Instruments[index],kind)=transformed.envelope;});}

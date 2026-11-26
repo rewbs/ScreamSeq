@@ -33,6 +33,12 @@ class CommandPalette {
 	std::function<std::vector<std::string>(int)> readShortcut_;
 	std::function<void(int,const std::vector<std::string>&)> writeShortcut_;
 	std::function<void(int)> resetShortcut_;
+	std::function<void()> onOpen_;
+	std::function<void(const std::wstring &,size_t)> onQuery_;
+	std::function<void(const std::wstring &,const std::wstring &,size_t)> onExecute_;
+	std::function<void(const std::wstring &,size_t,bool)> onClose_;
+	std::wstring lastQuery_;
+	bool executedInSession_=false;
 	std::vector<std::string> recording_;
 	std::optional<int> recordingCommand_;
 	bool sequenceRecording_=false, suppressCharacters_=false;
@@ -156,6 +162,8 @@ class CommandPalette {
 	void close() {
 		KillTimer(window_,1);
 		cancelRecording(L"");
+		const bool wasVisible=window_&&IsWindowVisible(window_);
+		if(wasVisible&&onClose_)onClose_(lastQuery_,matches_.size(),executedInSession_);
 		ShowWindow(window_,SW_HIDE);auto target=previousFocus_;
 		if(!IsWindow(target)||!IsWindowVisible(target)||!IsWindowEnabled(target))target=owner_;
 		SetActiveWindow(GetAncestor(target,GA_ROOT));SetFocus(target);
@@ -168,7 +176,10 @@ class CommandPalette {
 		const auto at=SendMessageW(list_,LB_GETCURSEL,0,0);
 		if(at<0||static_cast<size_t>(at)>=matches_.size())return;
 		const auto index=matches_[size_t(at)];if(!unavailable_[index].empty()){selectionChanged();return;}
-		const int id=commands_[index].id;close();run_(id);
+		const int id=commands_[index].id;
+		executedInSession_=true;
+		if(onExecute_)onExecute_(lastQuery_,commands_[index].label,matches_.size());
+		close();run_(id);
 	}
 	void selectionChanged() {
 		const auto at=SendMessageW(list_,LB_GETCURSEL,0,0);
@@ -250,6 +261,8 @@ class CommandPalette {
 		}
 		if(!matches_.empty())ScreamSeq::NativeInputGate::present(list_,LB_SETCURSEL,selected,0);
 		SendMessageW(list_,WM_SETREDRAW,TRUE,0);InvalidateRect(list_,nullptr,TRUE);selectionChanged();
+		lastQuery_=phrase;
+		if(!retainSelected&&onQuery_)onQuery_(phrase,matches_.size());
 	}
 	void draw(const DRAWITEMSTRUCT &d) {
 		const int saved=SaveDC(d.hDC);const bool contrast=highContrast(),selected=(d.itemState&ODS_SELECTED)!=0;
@@ -342,6 +355,7 @@ class CommandPalette {
 			SetBkColor(reinterpret_cast<HDC>(w),color);SetDCBrushColor(reinterpret_cast<HDC>(w),color);return reinterpret_cast<LRESULT>(GetStockObject(DC_BRUSH));
 		}
 		case WM_ERASEBKGND:{RECT r{};GetClientRect(h,&r);fill(reinterpret_cast<HDC>(w),r,highContrast()?GetSysColor(COLOR_WINDOW):RGB(22,31,41));return 1;}
+		case WM_SETTINGCHANGE:case WM_THEMECHANGED:{const BOOL dark=highContrast()?FALSE:TRUE;DwmSetWindowAttribute(h,DWMWA_USE_IMMERSIVE_DARK_MODE,&dark,sizeof(dark));InvalidateRect(h,nullptr,TRUE);return 0;}
 		case WM_DPICHANGED:{auto r=reinterpret_cast<RECT *>(l);SetWindowPos(h,nullptr,r->left,r->top,r->right-r->left,r->bottom-r->top,SWP_NOZORDER|SWP_NOACTIVATE);p->layout();return 0;}
 		}
 		return DefWindowProcW(h,m,w,l);
@@ -353,6 +367,12 @@ public:
 	}
 	void configureAvailability(std::function<std::wstring(int,HWND)> read) {
 		availability_=std::move(read);if(window_){refreshAvailability();if(availability_&&IsWindowVisible(window_))SetTimer(window_,1,250,nullptr);}
+	}
+	void configureAnalytics(std::function<void()> onOpen,
+		std::function<void(const std::wstring &,size_t)> onQuery,
+		std::function<void(const std::wstring &,const std::wstring &,size_t)> onExecute,
+		std::function<void(const std::wstring &,size_t,bool)> onClose) {
+		onOpen_=std::move(onOpen);onQuery_=std::move(onQuery);onExecute_=std::move(onExecute);onClose_=std::move(onClose);
 	}
 	void configureShortcuts(std::function<std::vector<std::string>(int)> read,
 		std::function<void(int,const std::vector<std::string>&)> write,std::function<void(int)> reset) {
@@ -377,7 +397,7 @@ public:
 			auto instance=GetModuleHandleW(nullptr);WNDCLASSW wc{};wc.lpfnWndProc=proc;wc.hInstance=instance;wc.lpszClassName=L"ScreamSeqCommands";wc.hCursor=LoadCursorW(nullptr,IDC_ARROW);RegisterClassW(&wc);
 			window_=CreateWindowExW(WS_EX_TOOLWINDOW|WS_EX_CONTROLPARENT,wc.lpszClassName,L"Commands",WS_OVERLAPPED|WS_CAPTION|WS_SYSMENU|WS_THICKFRAME|WS_CLIPCHILDREN,CW_USEDEFAULT,CW_USEDEFAULT,870,530,owner_,nullptr,instance,this);
 			if(!window_)return;
-			const BOOL dark=TRUE;DwmSetWindowAttribute(window_,DWMWA_USE_IMMERSIVE_DARK_MODE,&dark,sizeof(dark));
+			const BOOL dark=highContrast()?FALSE:TRUE;DwmSetWindowAttribute(window_,DWMWA_USE_IMMERSIVE_DARK_MODE,&dark,sizeof(dark));
 			heading_=CreateWindowExW(0,L"STATIC",L"Search commands, panels and shortcuts",WS_CHILD|WS_VISIBLE|SS_LEFT,0,0,0,0,window_,nullptr,instance,nullptr);
 			edit_=CreateWindowExW(WS_EX_CLIENTEDGE,L"EDIT",L"",WS_CHILD|WS_VISIBLE|WS_TABSTOP|ES_AUTOHSCROLL,0,0,0,0,window_,reinterpret_cast<HMENU>(INT_PTR(searchID)),instance,nullptr);
 			SendMessageW(edit_,EM_SETLIMITTEXT,256,0);SendMessageW(edit_,EM_SETCUEBANNER,TRUE,reinterpret_cast<LPARAM>(L"Try ‘sample loop’, ‘routing’ or ‘Ctrl+S’"));
@@ -389,7 +409,7 @@ public:
 			setButton_=button(setID,L"Set shortcut");sequenceButton_=button(sequenceID,L"Set sequence");clearButton_=button(clearID,L"Clear");resetButton_=button(resetID,L"Reset default");
 			for(auto control:{edit_,list_,runButton_,setButton_,sequenceButton_,clearButton_,resetButton_})SetWindowSubclass(control,input,1,reinterpret_cast<DWORD_PTR>(this));position();layout();
 		}
-		explicitSelection_=false;ScreamSeq::NativeInputGate::text(edit_,L"");filter();ShowWindow(window_,SW_SHOW);SetActiveWindow(window_);SetFocus(edit_);if(availability_)SetTimer(window_,1,250,nullptr);
+		explicitSelection_=false;executedInSession_=false;lastQuery_.clear();ScreamSeq::NativeInputGate::text(edit_,L"");filter(true);ShowWindow(window_,SW_SHOW);SetActiveWindow(window_);SetFocus(edit_);if(availability_)SetTimer(window_,1,250,nullptr);if(onOpen_)onOpen_();
 	}
 };
 }

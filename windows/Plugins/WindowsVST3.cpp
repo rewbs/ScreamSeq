@@ -135,10 +135,12 @@ struct Attributes : IAttributeList {
     return n;
   }
   tresult PLUGIN_API setInt(AttrID k, int64 v) override {
+    if (!k) return kInvalidArgument;
     ints[k] = v;
     return kResultOk;
   }
   tresult PLUGIN_API getInt(AttrID k, int64 &v) override {
+    if (!k) return kInvalidArgument;
     auto i = ints.find(k);
     if (i == ints.end())
       return kResultFalse;
@@ -146,10 +148,12 @@ struct Attributes : IAttributeList {
     return kResultOk;
   }
   tresult PLUGIN_API setFloat(AttrID k, double v) override {
+    if (!k) return kInvalidArgument;
     floats[k] = v;
     return kResultOk;
   }
   tresult PLUGIN_API getFloat(AttrID k, double &v) override {
+    if (!k) return kInvalidArgument;
     auto i = floats.find(k);
     if (i == floats.end())
       return kResultFalse;
@@ -157,10 +161,12 @@ struct Attributes : IAttributeList {
     return kResultOk;
   }
   tresult PLUGIN_API setString(AttrID k, const TChar *v) override {
+    if (!k || !v) return kInvalidArgument;
     strings[k] = v;
     return kResultOk;
   }
   tresult PLUGIN_API getString(AttrID k, TChar *v, uint32 bytes) override {
+    if (!k || !v) return kInvalidArgument;
     auto i = strings.find(k);
     if (i == strings.end() || bytes < 2)
       return kResultFalse;
@@ -170,13 +176,14 @@ struct Attributes : IAttributeList {
     return kResultOk;
   }
   tresult PLUGIN_API setBinary(AttrID k, const void *v, uint32 n) override {
-    if (n > 16 * 1024 * 1024)
+    if (!k || (n && !v) || n > 16 * 1024 * 1024)
       return kInvalidArgument;
     auto p = static_cast<const uint8_t *>(v);
-    binaries[k] = {p, p + n};
+    binaries[k] = n ? std::vector<uint8_t>{p, p + n} : std::vector<uint8_t>{};
     return kResultOk;
   }
   tresult PLUGIN_API getBinary(AttrID k, const void *&v, uint32 &n) override {
+    if (!k) return kInvalidArgument;
     auto i = binaries.find(k);
     if (i == binaries.end())
       return kResultFalse;
@@ -207,15 +214,17 @@ struct Host : IHostApplication {
   uint32 PLUGIN_API addRef() override{return ++refs;}
   uint32 PLUGIN_API release() override{auto n=--refs;if(!n)delete this;return n;}
   QUERY_ONE(IHostApplication) tresult PLUGIN_API getName(String128 name) override {
+    if (!name) return kInvalidArgument;
     std::fill(name, name + 128, 0);
     std::copy_n(u"ScreamSeq", 10, name);
     return kResultOk;
   }
   tresult PLUGIN_API createInstance(TUID cid, TUID iid, void **out) override {
+    if (!out) return kInvalidArgument;
     *out = nullptr;
-    if (same(cid, IMessage::iid) && same(iid, IMessage::iid))
+    if (same(cid, IMessage::iid) && (same(iid, IMessage::iid) || same(iid, FUnknown::iid)))
       *out = static_cast<IMessage *>(new Message);
-    if (same(cid, IAttributeList::iid) && same(iid, IAttributeList::iid))
+    if (same(cid, IAttributeList::iid) && (same(iid, IAttributeList::iid) || same(iid, FUnknown::iid)))
       *out = static_cast<IAttributeList *>(new Attributes);
     return *out ? kResultOk : kNoInterface;
   }
@@ -455,11 +464,20 @@ struct NativeBackend::Impl {
       catch(...){fail(Failure::ParameterCatalog);return kResultFalse;}
     }
     if (flags & kLatencyChanged) latencySerial.fetch_add(1,std::memory_order_release);
-    if (controller && (flags & kParamValuesChanged))
+    if (controller && values && (flags & kParamValuesChanged))
       for (size_t i = 0; i < metadata.size(); ++i) {
+        if (!metadata[i].writable) continue;
         auto value = controller->getParamNormalized(metadata[i].id);
-        if (value != values[i].load())
-          performEdit(metadata[i].id, value);
+        if (!std::isfinite(value) || value < 0 || value > 1) continue;
+        const float current = float(value);
+        if (current != values[i].load(std::memory_order_relaxed)) {
+          if (!edits.full()) performEdit(metadata[i].id, value);
+          else {
+            values[i].store(current, std::memory_order_relaxed);
+            if (i < controllerValues.size()) controllerValues[i] = current;
+            if (pendingEdits) (void)pendingEdits->publish(i, current);
+          }
+        }
       }
     return kResultOk;
   }
@@ -470,7 +488,8 @@ struct NativeBackend::Impl {
   }
   RECT outerSize(int width,int height) const {
     RECT r{0,0,width,height};
-    if(!AdjustWindowRectEx(&r,DWORD(GetWindowLongPtrW(window,GWL_STYLE)),FALSE,DWORD(GetWindowLongPtrW(window,GWL_EXSTYLE))))
+    const UINT dpi = window ? GetDpiForWindow(window) : 96;
+    if(!AdjustWindowRectExForDpi(&r,DWORD(GetWindowLongPtrW(window,GWL_STYLE)),FALSE,DWORD(GetWindowLongPtrW(window,GWL_EXSTYLE)),dpi))
       throw std::runtime_error("Cannot calculate VST3 editor frame");
     return r;
   }
@@ -561,6 +580,16 @@ struct NativeBackend::Impl {
       if(self && msg==WM_TIMER){pluginMainCall([&]{if(!self->resizeBusy)self->syncController();self->drainEditorEdits();});return 0;}
       if(self && msg==WM_SIZE){if(w!=SIZE_MINIMIZED)pluginMainCall([&]{self->userSized();});return 0;}
       if(self && msg==WM_SIZING && l){pluginMainCall([&]{self->userSizing(*reinterpret_cast<RECT*>(l),w);});return TRUE;}
+      if(self && msg==WM_DPICHANGED && l){
+        const auto *suggested=reinterpret_cast<const RECT*>(l);
+        pluginMainCall([&]{
+          if(self->window&&self->viewWidth>0&&self->viewHeight>0){
+            const auto outer=self->outerSize(self->viewWidth,self->viewHeight);
+            SetWindowPos(self->window,nullptr,suggested->left,suggested->top,outer.right-outer.left,outer.bottom-outer.top,SWP_NOZORDER|SWP_NOACTIVATE);
+          }
+        });
+        return 0;
+      }
     }catch(...){if(self)self->fail(Failure::EditorException);return 0;}
     return DefWindowProcW(hwnd,msg,w,l);
   }
@@ -580,7 +609,15 @@ struct NativeBackend::Impl {
   }
   void syncController(){
     if(!controller||failed)return;
-    for(size_t i=0;i<metadata.size();++i){auto v=values[i].load(std::memory_order_relaxed);if(controllerValues[i]!=v){if(controller->setParamNormalized(metadata[i].id,v)!=kResultOk){fail(Failure::ControllerParameter,metadata[i].id);return;}controllerValues[i]=v;}}
+    for(size_t i=0;i<metadata.size();++i){
+      auto v=values[i].load(std::memory_order_relaxed);
+      if(!metadata[i].writable){controllerValues[i]=v;continue;}
+      if(controllerValues[i]!=v){
+        const auto res=controller->setParamNormalized(metadata[i].id,v);
+        if(res!=kResultOk&&res!=kResultFalse){fail(Failure::ControllerParameter,metadata[i].id);return;}
+        controllerValues[i]=v;
+      }
+    }
   }
   void close() {
     if(inputBarrier){inputBarrier.reset();releasedInputBarrier=inputBarrierSerial;}
@@ -630,11 +667,17 @@ struct NativeBackend::Impl {
     if (controller) {
       require(controller->setComponentHandler(callbacks),"VST3 rejected component handler");
       handlerInstalled=true;
-      component->queryInterface(IConnectionPoint::iid, (void **)&componentConnection);
-      controller->queryInterface(IConnectionPoint::iid, (void **)&controllerConnection);
-      if (componentConnection && controllerConnection) {
-        require(componentConnection->connect(controllerConnection),"Cannot connect VST3 component");componentConnected=true;
-        require(controllerConnection->connect(componentConnection),"Cannot connect VST3 controller");controllerConnected=true;
+      if (separateController) {
+        component->queryInterface(IConnectionPoint::iid, (void **)&componentConnection);
+        controller->queryInterface(IConnectionPoint::iid, (void **)&controllerConnection);
+        if (componentConnection && controllerConnection && componentConnection != controllerConnection) {
+          const auto c1=componentConnection->connect(controllerConnection);
+          if(c1!=kNotImplemented)require(c1,"Cannot connect VST3 component");
+          componentConnected=c1==kResultOk;
+          const auto c2=controllerConnection->connect(componentConnection);
+          if(c2!=kNotImplemented)require(c2,"Cannot connect VST3 controller");
+          controllerConnected=c2==kResultOk;
+        }
       }
     }
 
@@ -699,7 +742,11 @@ struct NativeBackend::Impl {
     }
     for (int dir = 0; dir < 2; ++dir){
       const auto count=component->getBusCount(kEvent,dir);if(count<0||count>64)throw std::runtime_error("VST3 event bus count out of bounds");
-      for(int i=0;i<count;++i)require(component->activateBus(kEvent,dir,i,i==0),"Cannot activate VST3 event bus");
+      for(int i=0;i<count;++i){
+        const bool want = (dir == kInput && i == 0);
+        const auto res = component->activateBus(kEvent,dir,i,want);
+        if(res!=kNotImplemented && (want || res!=kResultFalse)) require(res,"Cannot activate VST3 event bus");
+      }
     }
     require(processor->canProcessSampleSize(kSample32), "VST3 requires unsupported sample precision");
     ProcessSetup setup{offline ? kOffline : kRealtime, kSample32, 4096, rate};
@@ -732,10 +779,13 @@ struct NativeBackend::Impl {
     for (auto &channel : midiMap)
       channel.fill(kNoParamId);
     IMidiMapping *mapping = nullptr;
-    if (controller && controller->queryInterface(IMidiMapping::iid, (void **)&mapping) == kResultOk) {
+    if (controller && controller->queryInterface(IMidiMapping::iid, (void **)&mapping) == kResultOk && mapping) {
       for (int ch = 0; ch < 16; ++ch)
-        for (int cc = 0; cc < 130; ++cc)
-          mapping->getMidiControllerAssignment(0, ch, cc, midiMap[ch][cc]);
+        for (int cc = 0; cc < 130; ++cc) {
+          ParamID mapped = kNoParamId;
+          if (mapping->getMidiControllerAssignment(0, ch, cc, mapped) == kResultOk)
+            midiMap[ch][cc] = mapped;
+        }
       mapping->release();
     }
     auto latency = processor->getLatencySamples() / rate;
@@ -878,15 +928,18 @@ bool NativeBackend::midi(uint8_t status, uint8_t a, uint8_t b) noexcept {
     e.polyPressure = {int16(ch), int16(a), float(b) / 127, -1};
   } else {
     if (kind == 0xb0 && (a == 120 || a == 123)) {
-      bool ok = true;
-      for (int pitch = 0; pitch < 128; ++pitch)
-        while (s.notes[ch][pitch]) {
-          if (!midi(0x80 | ch, pitch, 0)) {
-            s.fail(Impl::Failure::InputEventCapacity,pitch);
+      for (int pitch = 0; pitch < 128; ++pitch) {
+        if (s.notes[ch][pitch]) {
+          s.notes[ch][pitch] = 1;
+          if (!midi(uint8_t(0x80 | ch), uint8_t(pitch), 0)) {
+            s.notes[ch][pitch] = 0;
             return false;
           }
         }
-      return ok;
+      }
+      const auto id = s.midiMap[ch][a];
+      if (id != kNoParamId) return s.setParameter(id, double(b) / 127, 0);
+      return true;
     }
     int cc = kind == 0xb0 ? a : kind == 0xe0 ? kPitchBend : kind == 0xd0 ? kAfterTouch : -1;
     if (cc < 0)
@@ -1082,7 +1135,7 @@ void NativeBackend::showEditor(){
    const DWORD style=s.userResizable?WS_OVERLAPPEDWINDOW:(WS_OVERLAPPED|WS_CAPTION|WS_SYSMENU|WS_MINIMIZEBOX);
    s.viewWidth=int(int64(rect.right)-rect.left);s.viewHeight=int(int64(rect.bottom)-rect.top);
    WNDCLASSW cls{};cls.lpfnWndProc=Impl::windowProc;cls.hInstance=GetModuleHandleW(nullptr);cls.lpszClassName=L"ScreamSeq.VST3.PrivateEditor";cls.hCursor=LoadCursorW(nullptr,IDC_ARROW);RegisterClassW(&cls);
-   RECT r{0,0,s.viewWidth,s.viewHeight};if(!AdjustWindowRectEx(&r,style,FALSE,0))throw std::runtime_error("Cannot calculate VST3 editor frame");
+   RECT r{0,0,s.viewWidth,s.viewHeight};if(!AdjustWindowRectExForDpi(&r,style,FALSE,0,GetDpiForSystem()))throw std::runtime_error("Cannot calculate VST3 editor frame");
    s.window=CreateWindowExW(0,cls.lpszClassName,wide(s.descriptor.name).c_str(),style,CW_USEDEFAULT,CW_USEDEFAULT,r.right-r.left,r.bottom-r.top,nullptr,nullptr,cls.hInstance,&s);
    if(!s.window)throw std::runtime_error("Cannot create VST3 HWND");
    require(s.view->setFrame(s.callbacks),"Cannot set VST3 editor frame");require(s.view->attached(s.window,kPlatformTypeHWND),"Cannot attach VST3 HWND editor");s.attached=true;

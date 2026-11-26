@@ -28,6 +28,7 @@
     static bool inspectorFocusAlias(const std::string &id){return id=="notes"||id=="samples";}
     void setWorkspaceCanvasFocus(const std::string &id,bool inspector=false){
         workspaceState.focus=id;inspectorCanvasFocus=inspector&&inspectorFocusAlias(id);
+        usageAnalytics.recordPanelFocus(id);
     }
     bool workspaceInspectorCanvasIntent()const{return inspectorCanvasFocus&&inspectorFocusAlias(workspaceState.focus);}
     bool workspaceMainCanvasFocused(const std::string &id)const{

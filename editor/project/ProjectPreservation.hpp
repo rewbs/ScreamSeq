@@ -101,6 +101,14 @@ inline Json canonicalizePreservedMetadata(const Json &original,const Json &known
 	}
 	return known;
 }
+inline std::string preservedPathIdentity(const Json &entry,const std::string &path) {
+	if(entry.is_object()) {
+		if((path=="/performance/bindings"||path=="/scratchGestures") && entry.contains("id") && entry.at("id").is_number_integer()) return std::to_string(entry.at("id").get<uint64_t>());
+		const char *key=path=="/signalGraph/lanes" ? "target" : path=="/signalGraph/layout" ? "node" : nullptr;
+		if(key && entry.contains(key) && entry.at(key).is_string()) return entry.at(key).get<std::string>();
+	}
+	return std::string{};
+}
 // Three-way merge: original opaque tree, canonical pre-edit model, current model.
 // No project tree is sent through a textual JSON conversion.
 inline Json mergePreserved(const Json &original,const Json &before,const Json &after,const std::string &path="") {
@@ -115,10 +123,14 @@ inline Json mergePreserved(const Json &original,const Json &before,const Json &a
 		return result;
 	}
 	if(original.is_array() && before.is_array() && after.is_array()) {
-		auto identity=[&](const Json &entry){if(path=="/scratchGestures"&&entry.is_object()&&entry.contains("id")&&entry.at("id").is_number_integer())return std::to_string(entry.at("id").get<uint64_t>());return preservedIdentity(entry);};
+		auto identity=[&](const Json &entry){auto pathID=preservedPathIdentity(entry,path);return pathID.empty()?preservedIdentity(entry):pathID;};
 		auto indexed=[&](const Json &array,bool preserved=false) {
 			std::map<std::string,const Json *> result;
-			for(const auto &entry:array) {auto id=preserved && !before.empty()&&path!="/scratchGestures" ? preservedIdentityLike(entry,before.front()) : identity(entry);if(id.empty() || !result.emplace(id,&entry).second) return std::map<std::string,const Json *>{};}
+			for(const auto &entry:array) {
+				auto id=preservedPathIdentity(entry,path);
+				if(id.empty()) id=preserved && !before.empty() ? preservedIdentityLike(entry,before.front()) : preservedIdentity(entry);
+				if(id.empty() || !result.emplace(id,&entry).second) return std::map<std::string,const Json *>{};
+			}
 			return result;
 		};
 		auto oldMap=indexed(before),originalMap=indexed(original,true),newMap=indexed(after);

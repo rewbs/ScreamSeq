@@ -154,15 +154,45 @@ struct MidiInput::Impl {
 };
 MidiInput::MidiInput():impl_(std::make_unique<Impl>()){}
 MidiInput::~MidiInput()=default;
-std::vector<MidiInput::Source> MidiInput::sources(){
-  const auto count=midiInGetNumDevs();if(count>1024)throw std::runtime_error("Too many MIDI input devices");
-  std::vector<Source> result;
-  for(UINT i=0;i<count;++i){MIDIINCAPSW caps{};if(midiInGetDevCapsW(i,&caps,sizeof(caps))!=MMSYSERR_NOERROR)continue;
-    auto id=interfaceName(i);if(id.empty())continue;
-    // An ambiguous interface can never identify which port will be opened.
-    if(std::any_of(result.begin(),result.end(),[&](const auto &source){return source.id==id;}))throw std::runtime_error("MIDI interface identity is ambiguous");
-    result.push_back({std::move(id),caps.szPname});
+namespace {
+std::vector<std::pair<UINT, MidiInput::Source>> enumerateMidiSources() {
+  const auto count = midiInGetNumDevs();
+  if (count > 1024) throw std::runtime_error("Too many MIDI input devices");
+  struct Raw { UINT ordinal; std::wstring base; std::wstring name; };
+  std::vector<Raw> raw;
+  raw.reserve(count);
+  std::vector<std::wstring> bases;
+  for (UINT i = 0; i < count; ++i) {
+    MIDIINCAPSW caps{};
+    if (midiInGetDevCapsW(i, &caps, sizeof(caps)) != MMSYSERR_NOERROR) continue;
+    auto base = interfaceName(i);
+    if (base.empty()) {
+      base = L"winmm:" + std::to_wstring(caps.wMid) + L":" + std::to_wstring(caps.wPid) + L":" + caps.szPname;
+    }
+    raw.push_back({i, base, caps.szPname});
+    bases.push_back(std::move(base));
   }
+  std::vector<std::pair<UINT, MidiInput::Source>> result;
+  result.reserve(raw.size());
+  for (size_t idx = 0; idx < raw.size(); ++idx) {
+    const auto &item = raw[idx];
+    const auto total = std::count(bases.begin(), bases.end(), item.base);
+    std::wstring id = item.base;
+    if (total > 1) {
+      size_t portIndex = 0;
+      for (size_t j = 0; j < idx; ++j) if (raw[j].base == item.base) ++portIndex;
+      id += L"#" + std::to_wstring(portIndex) + L":" + item.name;
+    }
+    result.push_back({item.ordinal, MidiInput::Source{std::move(id), item.name}});
+  }
+  return result;
+}
+}
+std::vector<MidiInput::Source> MidiInput::sources(){
+  auto enumerated = enumerateMidiSources();
+  std::vector<Source> result;
+  result.reserve(enumerated.size());
+  for (auto &[ordinal, source] : enumerated) result.push_back(std::move(source));
   return result;
 }
 void MidiInput::connect(const std::wstring &id){
@@ -171,17 +201,18 @@ void MidiInput::connect(const std::wstring &id){
   if(impl_->retired.size()>=8)throw std::runtime_error("MIDI driver could not close retired inputs; restart before reconnecting");
   auto next=std::make_unique<Connection>();next->generation=++impl_->generation;
   try{
-    const auto inventory=sources();const auto found=std::find_if(inventory.begin(),inventory.end(),[&](const auto &value){return value.id==id;});
+    const auto inventory=enumerateMidiSources();
+    const auto found=std::find_if(inventory.begin(),inventory.end(),[&](const auto &value){return value.second.id==id;});
     if(found==inventory.end())throw std::runtime_error("MIDI input disconnected; rescan and select its interface");
-    next->source=*found;
-    const auto count=midiInGetNumDevs();UINT ordinal=count;
-    for(UINT i=0;i<count;++i)if(interfaceName(i)==id){if(ordinal!=count)throw std::runtime_error("MIDI interface identity is ambiguous");ordinal=i;}
-    if(ordinal==count)throw std::runtime_error("MIDI input changed during connection");
+    next->source=found->second;
+    const UINT ordinal=found->first;
     require(midiInOpen(&next->handle,ordinal,reinterpret_cast<DWORD_PTR>(&Connection::callback),reinterpret_cast<DWORD_PTR>(next.get()),CALLBACK_FUNCTION|MIDI_IO_STATUS));
     // WinMM interface queries require a device ID, not an open handle. Obtain
     // that ID from the actual opened handle and revalidate before starting it.
     UINT openedID=0;require(midiInGetID(next->handle,&openedID));
-    if(interfaceName(openedID)!=id)throw std::runtime_error("MIDI input changed while opening; retry the selected interface");
+    const auto verify=enumerateMidiSources();
+    const auto matched=std::find_if(verify.begin(),verify.end(),[&](const auto &value){return value.first==openedID && value.second.id==id;});
+    if(matched==verify.end())throw std::runtime_error("MIDI input changed while opening; retry the selected interface");
     const auto before=hostTime100ns();if(!next->buffer.begin(next->generation,before,100000))throw std::runtime_error("MIDI host clock unavailable");
     next->started.store(true);require(midiInStart(next->handle));const auto after=hostTime100ns();
     if(!next->started.load())throw std::runtime_error("MIDI input closed while starting");

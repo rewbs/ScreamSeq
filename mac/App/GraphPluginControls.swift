@@ -16,7 +16,7 @@ final class GraphPluginControls: NSView, NSTextFieldDelegate {
   var onLocation:((String,String)->Void)?
   var onCatalog:((String,String,[String:Any])->Void)?
   var currentRevision:(()->String)?
-  private var graph="",node="",revision="",pending=false,gesture:String?
+  private var graph="",node="",revision="",pending=false,gesture:String?,pendingChangeNotify=false
   private var controlsGeneration=0
   private var savedInputs=[Int](),savedOutputs=[Int]()
   private var editor:String?,editorGraph="",editorNode=""
@@ -29,7 +29,11 @@ final class GraphPluginControls: NSView, NSTextFieldDelegate {
     parametersView.onAutomate={[weak self] _,parameter in self?.onParameter?(parameter)}
     parametersView.onExpose=parametersView.onAutomate
     parametersView.onActivity={[weak self] _,parameter in guard let self else{return};self.onActivity?(self.graph,self.node,parameter)}
-    parametersView.onGesture={[weak self] active in self?.gesture=active ? UUID().uuidString:nil}
+    parametersView.onGesture={[weak self] active in
+      guard let self else{return}
+      self.gesture=active ? UUID().uuidString:nil
+      if !active && self.pendingChangeNotify {self.pendingChangeNotify=false;self.onChanged?()}
+    }
     parametersView.onRequest={[weak self] method,params,reply in
       guard let self,let request=self.onRequest,!self.graph.isEmpty,!self.node.isEmpty else{reply(["error":["message":"No graph effect selected"]]);return}
       let g=self.graph,n=self.node
@@ -52,7 +56,10 @@ final class GraphPluginControls: NSView, NSTextFieldDelegate {
         }
         reply(forwarded)
         if !write,self.graph==g,self.node==n,self.controlsGeneration==generation,let result=response["result"] as? [String:Any],let data=result["data"] as? [String:Any],self.currentRevision == nil || self.currentRevision?()==self.revision {self.onCatalog?(g,n,data)}
-        if write,response["result"] != nil,self.graph==g,self.node==n{self.onChanged?()}
+        if write,response["result"] != nil,self.graph==g,self.node==n{
+          if self.gesture != nil && parameterWrite {self.pendingChangeNotify=true}
+          else {self.pendingChangeNotify=false;self.onChanged?()}
+        }
       }
     }
     inputs.placeholderString="e.g. 1, 2";outputs.placeholderString="e.g. 1, 2"
@@ -76,7 +83,7 @@ final class GraphPluginControls: NSView, NSTextFieldDelegate {
   required init?(coder:NSCoder){fatalError()}
   func context(graph:String?,node:String?,revision displayedRevision:String=""){
     let g=graph ?? "",n=node ?? ""
-    if g != self.graph || n != self.node {controlsGeneration+=1;self.graph=g;self.node=n;revision="";inputs.stringValue="";outputs.stringValue="";gesture=nil;message.stringValue="Parameter edits and bypass update all uses of this shared definition."}
+    if g != self.graph || n != self.node {controlsGeneration+=1;self.graph=g;self.node=n;revision="";inputs.stringValue="";outputs.stringValue="";savedInputs=[];savedOutputs=[];gesture=nil;pendingChangeNotify=false;message.stringValue="Parameter edits and bypass update all uses of this shared definition."}
     parametersView.context(g.isEmpty || n.isEmpty ? nil:["id":g+"/"+n],revision:displayedRevision)
   }
   private func request(_ method:String,_ extra:[String:Any]=[:],write:Bool=false,done:@escaping([String:Any])->Void){
@@ -102,7 +109,7 @@ final class GraphPluginControls: NSView, NSTextFieldDelegate {
   private func setPorts(){guard let i=ports(inputs),let o=ports(outputs)else{message.stringValue="Use comma-separated auxiliary bus numbers";return};guard i != savedInputs || o != savedOutputs else{return};request("graph.plugin.set",["inputs":i,"outputs":o],write:true){[weak self] data in self?.populateBuses(data);self?.load();self?.onChanged?()}}
   func openEditor(){request("graph.plugin.editor.open",write:true){[weak self] data in guard let self else{return};self.editor=data["editor"] as? String;self.editorGraph=self.graph;self.editorNode=self.node;self.message.stringValue=data["message"] as? String ?? "Apply plugin settings when finished"}}
   private func commitEditor(){guard let editor,graph==editorGraph,node==editorNode else{message.stringValue="Open this effect's custom interface first";return};request("graph.plugin.editor.commit",["editor":editor],write:true){[weak self] data in self?.populateBuses(data);self?.load();self?.onChanged?()}}
-  private func closeEditor(){guard !pending,let editor,let onRequest else{return};pending=true;onRequest("graph.plugin.editor.close",["editor":editor,"expectedRevision":currentRevision?() ?? revision]){[weak self] response in guard let self else{return};self.pending=false;if response["result"] != nil{self.editor=nil;self.message.stringValue="Interface closed"}else{self.message.stringValue=(response["error"] as? [String:Any])?["message"] as? String ?? "Could not close interface"}}}
+  private func closeEditor(){guard !pending,let editor,let onRequest else{return};pending=true;onRequest("graph.plugin.editor.close",["editor":editor,"expectedRevision":currentRevision?() ?? revision]){[weak self] response in guard let self else{return};self.pending=false;if response["result"] != nil{self.editor=nil;self.editorGraph="";self.editorNode="";self.message.stringValue="Interface closed"}else{self.message.stringValue=(response["error"] as? [String:Any])?["message"] as? String ?? "Could not close interface"}}}
 }
 
 // A rack instance keeps its stable identity while slots move. This compact
@@ -348,9 +355,10 @@ final class GraphRackControls: NSView, NSTableViewDataSource, NSTableViewDelegat
       return
     }
     pending=true;readGeneration+=1;let version=generation
-    onRequest("plugin.parameters.set",["plugin":id,"values":[["id":parameter,"value":value]],"expectedRevision":revision.isEmpty ? currentRevision?() ?? "":revision]){[weak self] response in
+    let liveRevision=currentRevision?() ?? ""
+    onRequest("plugin.parameters.set",["plugin":id,"values":[["id":parameter,"value":value]],"expectedRevision":liveRevision.isEmpty ? revision:liveRevision]){[weak self] response in
       guard let self,self.identity==id,self.generation==version else{return};self.pending=false
-      guard let result=response["result"] as? [String:Any] else{self.queued=[:];self.onGesture?(false);self.gestureActive=false;self.message.stringValue=(response["error"] as? [String:Any])?["message"] as? String ?? "Parameter edit failed";self.load(id:id,generation:version,preserveMessage:true);return}
+      guard let result=response["result"] as? [String:Any] else{self.queued=[:];self.filtered=[];self.onGesture?(false);self.gestureActive=false;self.message.stringValue=(response["error"] as? [String:Any])?["message"] as? String ?? "Parameter edit failed";self.load(id:id,generation:version,preserveMessage:true);return}
       self.revision=result["revision"] as? String ?? self.revision
       self.refreshAfterEdit=true
       self.message.stringValue="Parameter updated · menus offer automation and effective values."

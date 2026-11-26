@@ -38,6 +38,7 @@ double ScratchRuntime::position(const Voice &voice,const ScratchGesture &gesture
   return voice.cue+voice.travel*(motion-voice.motionStart+completed*voice.motionDelta);
 }
 uint32_t ScratchRuntime::limit(const OpenMPT::CSoundFile &song,uint32_t count) const noexcept {
+  count=std::min<uint32_t>(count,4096);
   const auto &state=song.m_PlayState;
   const double begin=state.NativeRowPosition(performanceUnitsPerRow),step=state.NativeRowStep(performanceUnitsPerRow),beatStep=state.NativeBeatStep();
   if(step<=0 || beatStep<=0)return count;

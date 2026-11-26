@@ -40,6 +40,7 @@ void PatternGateRuntime::chase(const NativeSong &native,CSoundFile &song){
   std::map<std::pair<uint64_t,uint32_t>,std::tuple<uint16_t,uint8_t,double>> lengths;
   for(const auto &c:native.performance.commands)if(c.kind==PatternCommandKind::Native&&c.native==NativePatternOp::RowLength){
     const auto track=std::find_if(native.tracks.begin(),native.tracks.end(),[&](const auto &t){return t.second.id==c.track;});
+    if(track==native.tracks.end())continue;
     const auto key=std::pair(c.pattern,c.position/performanceUnitsPerRow);
     const auto found=lengths.find(key);
     if(found==lengths.end()||std::tie(track->first,c.column)>std::tie(std::get<0>(found->second),std::get<1>(found->second)))lengths[key]={track->first,c.column,c.arguments[0]};
@@ -110,7 +111,7 @@ void PatternGateRuntime::prepare(CSoundFile &song,uint32_t count)noexcept {
     if(entering){const auto found=events().find(s.m_nPattern);current_=found==events().end()?nullptr:&found->second;
       next_=current_?size_t(std::lower_bound(current_->begin(),current_->end(),position-1e-7,[](const Event &e,double at){return e.command.position<at;})-current_->begin()):0;}
     pattern_=s.m_nPattern;order_=s.m_nCurrentOrder;row_=s.m_nRow;previous_=position;
-    while(current_&&next_<current_->size()&&(*current_)[next_].command.position<=position+1e-7){const auto &e=(*current_)[next_++];apply(e,std::max(0.,(position-e.command.position)/step*s.NativeBeatStep()));}
+    while(current_&&next_<current_->size()&&(*current_)[next_].command.position<=position+1e-7){const auto &e=(*current_)[next_++];apply(e,step>0?std::max(0.,(position-e.command.position)/step*s.NativeBeatStep()):0.);}
   }
   for(auto &slot:slots_){auto &v=slot.snapshot;v=slot.state;v.beatsPerFrame=advancing?s.NativeBeatStep():0;
     // Clock continues through muted channels; their output remains muted by the mixer.

@@ -22,7 +22,7 @@ class RecordNudgeRuntime {
     std::array<double,4096> forces{};
   };
   std::vector<Target> targets_;
-  uint32_t pattern_=UINT32_MAX,order_=UINT32_MAX;
+  uint32_t pattern_=UINT32_MAX,order_=UINT32_MAX,row_=UINT32_MAX;
   double previous_=-1,beatPosition_=0;
 public:
   explicit RecordNudgeRuntime(const NativeSong &);

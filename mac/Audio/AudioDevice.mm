@@ -167,13 +167,16 @@ void AudioDevice::removeListeners() {
 void AudioDevice::play(const std::vector<std::byte> &bytes, uint32_t order, bool preview, const std::string &sourcePath,
                        uint32_t sequence, const NativeSong *native, PlaybackRegion region, bool isolatedSample) {
   stop();
-  auto editors = plugins_ ? plugins_->openEditors() : std::vector<size_t>{};
-  if (!pendingEditors_.empty()) {
-    editors = pendingEditors_;
-    pendingEditors_.clear();
+  std::vector<size_t> editors;
+  if (!isolatedSample) {
+    editors = plugins_ ? plugins_->openEditors() : std::vector<size_t>{};
+    if (!pendingEditors_.empty()) {
+      editors = pendingEditors_;
+      pendingEditors_.clear();
+    }
+    if (plugins_)
+      pluginStates_ = plugins_->states();
   }
-  if (plugins_)
-    pluginStates_ = plugins_->states();
   if (!unit_)
     configure();
   // Prepare the implicit mixer too, so the first live insert has existing
@@ -185,20 +188,23 @@ void AudioDevice::play(const std::vector<std::byte> &bytes, uint32_t order, bool
   ++captureGeneration_;if(!captureGeneration_)++captureGeneration_;
   captureFrames_=!preview&&!isolatedSample;
   if (native && !preview) {renderer_->applyColumnMutes(*native, renderer_->song());renderer_->preparePreciseNotes(*native);}
-  previewing_ = preview;
+  previewing_ = preview || isolatedSample;
+  isolatedSample_ = isolatedSample;
   // The sample inspector's finite Audition button uses a standalone sample
-  // document. Keep the saved rack for the next song preparation, without
-  // flattening its channel inserts onto this raw preview.
-  plugins_ = isolatedSample || (pluginStates_.empty() && !(native && (native->mixer.active() || !native->performance.commands.empty())))
-                 ? nullptr
-                 : std::make_shared<PluginChain>(pluginStates_, sampleRate_, false, automation_,
-                                                 uint64_t(double(renderer_->telemetry().frames) * 48000 / sampleRate_));
-  ++pluginEpoch_;
-  if (plugins_)
-    plugins_->attachInstruments(*renderer_, native);
-  if (plugins_ && native)
-    plugins_->attachMusicalAutomation(*renderer_, *native);
-  restoreParameterActivity();
+  // document. Keep the existing plugin chain & editors intact while bypassing
+  // it during the isolated preview.
+  if (!isolatedSample) {
+    plugins_ = (pluginStates_.empty() && !(native && (native->mixer.active() || !native->performance.commands.empty())))
+                   ? nullptr
+                   : std::make_shared<PluginChain>(pluginStates_, sampleRate_, false, automation_,
+                                                   uint64_t(double(renderer_->telemetry().frames) * 48000 / sampleRate_));
+    ++pluginEpoch_;
+    if (plugins_)
+      plugins_->attachInstruments(*renderer_, native);
+    if (plugins_ && native)
+      plugins_->attachMusicalAutomation(*renderer_, *native);
+    restoreParameterActivity();
+  }
   callbacks_ = 0;
   overruns_ = 0;
   maxNanos_ = 0;
@@ -209,7 +215,7 @@ void AudioDevice::play(const std::vector<std::byte> &bytes, uint32_t order, bool
   playing_ = true;
   try {
     check(AudioOutputUnitStart(unit_), "Cannot start playback");
-    if (plugins_)
+    if (!isolatedSample && plugins_)
       for (auto slot : editors) {
         try {
           plugins_->showEditor(slot);
@@ -514,7 +520,8 @@ OSStatus AudioDevice::callback(void *ref, AudioUnitRenderActionFlags *, const Au
       const auto capturedFrame=self.renderer_->telemetry().frames;
       UInt32 capturedFrames=0;
       done += frames;
-      if (self.plugins_) {
+      const bool usePlugins = self.plugins_ && !self.isolatedSample_;
+      if (usePlugins) {
         self.plugins_->beginRenderBlock();
         self.plugins_->syncTransport(*self.renderer_);
       }
@@ -525,18 +532,18 @@ OSStatus AudioDevice::callback(void *ref, AudioUnitRenderActionFlags *, const Au
         auto received = self.renderer_->render(output, frames);
         capturedFrames=received;
         if (received < frames) {
-          if (self.plugins_)
+          if (usePlugins)
             self.plugins_->endNotes();
           self.renderEnded_ = true;
           self.tailFrames_ = self.tailBudgetFrames_ =
-              self.plugins_ ? uint64_t(std::ceil((self.plugins_->tail() + self.plugins_->latency()) * self.sampleRate_))
-                            : 0;
+              usePlugins ? uint64_t(std::ceil((self.plugins_->tail() + self.plugins_->latency()) * self.sampleRate_))
+                         : 0;
           auto silence = frames - received;
           self.tailFrames_ = self.tailFrames_ > silence ? self.tailFrames_ - silence : 0;
         }
       } else
         self.tailFrames_ = self.tailFrames_ > frames ? self.tailFrames_ - frames : 0;
-      if (self.plugins_ && !self.plugins_->process(output, frames)) {
+      if (usePlugins && !self.plugins_->process(output, frames)) {
         self.playing_ = false;
         if(self.frameTimeline_)self.frameTimeline_->invalidate();
       } else if(self.renderer_->faulted()) {
@@ -548,7 +555,7 @@ OSStatus AudioDevice::callback(void *ref, AudioUnitRenderActionFlags *, const Au
         if(std::isfinite(first)&&std::isfinite(last)&&first>=1&&last<static_cast<long double>(UINT64_MAX))
           self.frameTimeline_->publish(uint64_t(first),uint64_t(last),capturedFrame,capturedFrames,self.sampleRate_,self.captureGeneration_);
       }
-      if (self.renderEnded_ && self.plugins_) {
+      if (self.renderEnded_ && usePlugins) {
         const auto budget = uint64_t(std::ceil((self.plugins_->tail() + self.plugins_->latency()) * self.sampleRate_));
         if (budget > self.tailBudgetFrames_) self.tailFrames_ += budget - self.tailBudgetFrames_;
         self.tailBudgetFrames_ = std::max(self.tailBudgetFrames_, budget);
@@ -556,7 +563,7 @@ OSStatus AudioDevice::callback(void *ref, AudioUnitRenderActionFlags *, const Au
         // remains inside a precomputed range. Allow decay from that edit too.
         if (self.plugins_->tailRevision() != self.tailRevision_) self.tailFrames_ = std::max(self.tailFrames_, budget);
       }
-      if (self.plugins_) self.tailRevision_ = self.plugins_->tailRevision();
+      if (usePlugins) self.tailRevision_ = self.plugins_->tailRevision();
       if (self.renderEnded_ && !self.tailFrames_) {
         self.playing_ = false;
         // Keep the last musical presentation bound; callback execution can

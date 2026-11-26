@@ -24,7 +24,7 @@
     void servicePatternActivity() {
         if(!view||!controller||!controls.contains(activityListCommand))return;
         layoutChannelButtons();const auto key=activityKey();
-        if(activityObserved!=key){activityObserved=key;activityChangedAt=GetTickCount64();activityReady.clear();activityData=Json::object();fillActivityList({{"pending",true}});}
+        if(activityObserved!=key){activityObserved=key;activityChangedAt=GetTickCount64();activityReady.clear();activityAttempted.clear();activityData=Json::object();fillActivityList({{"pending",true}});}
         if(activityFuture.valid()&&activityFuture.wait_for(std::chrono::milliseconds(0))==std::future_status::ready){
             try{auto result=activityFuture.get();if(activityRequested==key&&result.document==activityDocument&&result.revision==activityRevision){activityData=std::move(result.result);activityReady=key;fillActivityList(activityData);frameRequested=true;}}
             catch(const std::exception &e){if(activityRequested==key){activityData={{"limitation",e.what()}};fillActivityList(activityData);}}
@@ -44,7 +44,18 @@
             const auto found=std::find_if(rack.begin(),rack.end(),[&](const auto &p){return p.at("instanceID")==plugin;});if(found==rack.end())throw std::runtime_error("Plugin is no longer available");
             if(found->at("format")=="VST3")edit("plugin.editor.open",{{"slot",found->at("slot")}});else openGraphPluginParameters(plugin);return;
         }
-        if(kind=="graphPlugin"){edit("graph.plugin.editor.open",{{"graph",link.at("graph")},{"node",link.at("node")}});return;}
+        if(kind=="graphPlugin"){
+            const auto graph=link.at("graph").get<std::string>(),nodeId=link.at("node").get<std::string>();
+            const auto graphInfo=documentOperation("graph.get",{{"graph",graph}});
+            const auto &nodes=graphInfo.at("nodes");
+            const auto found=std::find_if(nodes.begin(),nodes.end(),[&](const auto &n){return n.at("id")==nodeId;});
+            if(found==nodes.end()||!found->contains("plugin"))throw std::runtime_error("Graph plugin is no longer available");
+            if(found->at("plugin").value("format",std::string())=="VST3"){
+                auto result=edit("graph.plugin.editor.open",{{"graph",graph},{"node",nodeId}});
+                graphEditorToken=result.at("editor").get<std::string>();graphEditorTokenGraph=graph;graphEditorTokenNode=nodeId;
+            }else openGraphRecipeParameters(graph,nodeId,found->value("name",std::string("Plugin")));
+            return;
+        }
         if(kind=="sample"){openSampleDetail();sampleDetailWindow->openSourceAt(link.at("slot").get<unsigned>());return;}
         if(kind=="instrument"){
             if(instrumentEnvelopeWindow&&instrumentEnvelopeWindow->retainedDraft())throw std::runtime_error("Finish the instrument draft before opening another source");

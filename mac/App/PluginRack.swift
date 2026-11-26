@@ -39,8 +39,15 @@ final class PluginRack: NSView, NSTableViewDataSource, NSTableViewDelegate {
     guard items.indices.contains(row), let id = items[row]["instanceID"] as? String else { return nil }
     let entry = items[row], name = entry["name"] as? String ?? "Plugin", bypass = entry["bypass"] as? Bool == true
     if column?.identifier.rawValue == "enabled" {
-      let button = ActionButton("") { [weak self] in self?.onBypass?(id, !bypass) }
+      let button = ActionButton("") {}
       button.setButtonType(.switch); button.state = bypass ? .off : .on
+      button.handler = { [weak self, weak button] in
+        guard let self else { return }
+        let currentBypass = self.items.first(where: { $0["instanceID"] as? String == id })?["bypass"] as? Bool == true
+        // Keep the switch reflecting accepted state until the host confirms the change.
+        button?.state = currentBypass ? .off : .on
+        self.onBypass?(id, !currentBypass)
+      }
       button.setAccessibilityLabel("Enable " + name); button.toolTip = "Bypass / enable " + name
       return button
     }

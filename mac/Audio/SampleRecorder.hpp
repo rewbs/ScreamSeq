@@ -25,6 +25,7 @@ public:
     int32_t systemError = 0;
   };
   void prepare(uint32_t rate, uint32_t inputChannels, uint32_t firstChannel, uint32_t channels, double maxSeconds);
+  void reset() noexcept;
   void ingest(const float *interleaved, uint32_t frames) noexcept;
   void finish(End reason, int32_t systemError = 0) noexcept;
   Reading reading() const noexcept;

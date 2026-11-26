@@ -238,7 +238,15 @@
         SignalNode n;n.id=next.makeEntity().id;nodeID=n.id;n.kind=decodeSignalNodeKind(p[@"kind"]);require(n.kind!=SignalNodeKind::Input&&n.kind!=SignalNodeKind::Output,"Each subgraph already has Input and Output nodes");
         n.name=string(p[@"name"]?:signalNodeKind(n.kind),256).UTF8String;n.x=number(p[@"x"]?:@300,-100000,100000);n.y=number(p[@"y"]?:@100,-100000,100000);
         if(n.kind==SignalNodeKind::Plugin){require(bool(p[@"slot"])!=bool(p[@"plugin"]),"Supply a rack slot or a plugin recipe");
-          if(p[@"slot"]){const auto slot=pluginSlot();auto source=_plugins[slot];if(!_audio->active()&&_pluginError.empty()&&!_audio->hasAutomatedState())source=_audio->pluginStates().at(slot);require(!source.descriptor.instrument&&source.descriptor.type!=kAudioUnitType_MusicDevice,"Subgraph inserts require an effect plugin");const auto &s=source.descriptor;
+          if(p[@"slot"]){const auto slot=pluginSlot();auto source=_plugins[slot];
+            if(!_manualParameters.empty()){
+              std::vector<PluginState> single{source};auto manualCopy=_manualParameters;
+              commitManualParameterState(single,manualCopy,[&](const PluginState &candidate){return std::make_unique<NativePlugin>(candidate,_audio->sampleRate());});
+              source=std::move(single[0]);
+            } else if(!_audio->active()&&_pluginError.empty()&&!_audio->hasAutomatedState()&&_automation.empty()){
+              source=_audio->pluginStates().at(slot);
+            }
+            require(!source.descriptor.instrument&&source.descriptor.type!=kAudioUnitType_MusicDevice,"Subgraph inserts require an effect plugin");const auto &s=source.descriptor;
             n.plugin={s.format,s.name,s.path,s.classID,s.type,s.subtype,s.manufacturer,source.state,source.auxiliaryInputs,source.auxiliaryOutputs};
             n.plugin.bypass=source.bypass;n.plugin.audioLayout=source.audioLayout;
             n.name=string(p[@"name"]?:@(s.name.c_str()),256).UTF8String;

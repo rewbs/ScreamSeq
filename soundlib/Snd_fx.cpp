@@ -739,12 +739,16 @@ std::vector<GetLengthType> CSoundFile::GetLength(enmGetLengthResetMode adjustMod
 #ifdef OPENMPT_EDITOR_CORE
 			const auto source = chn.rowCommand;
 			const bool extraEffects = std::any_of(chn.nativeExtraEffects.begin(), chn.nativeExtraEffects.end(), [](const auto &e) { return e.command != CMD_NONE; });
+			bool rowAutoVolSlide = false, rowGlobalVolSlide = false, rowVibrato = false, rowTremolo = false, rowRan = false;
 			for(uint8 column = 0; column < (extraEffects ? 8 : 1); ++column) {
 				NativeEffectScope scope(*this, chn, column, column ? chn.nativeExtraEffects[column - 1] : source, column != 0);
 				if(column && chn.rowCommand.command == CMD_NONE) continue;
 #endif
 			if(chn.rowCommand.IsEmpty() && !chn.autoSlide.AnyActive())
 				continue;
+#ifdef OPENMPT_EDITOR_CORE
+			rowRan = true;
+#endif
 			ModCommand::COMMAND command = chn.rowCommand.command;
 			ModCommand::PARAM param = chn.rowCommand.param;
 			ModCommand::NOTE note = chn.rowCommand.note;
@@ -1065,6 +1069,9 @@ std::vector<GetLengthType> CSoundFile::GetLength(enmGetLengthResetMode adjustMod
 				break;
 			}
 
+#ifdef OPENMPT_EDITOR_CORE
+			if(column == 0)
+#endif
 			switch(chn.rowCommand.volcmd)
 			{
 			case VOLCMD_PANNING:
@@ -1086,6 +1093,55 @@ std::vector<GetLengthType> CSoundFile::GetLength(enmGetLengthResetMode adjustMod
 				break;
 			}
 
+#ifdef OPENMPT_EDITOR_CORE
+			rowAutoVolSlide |= (command == CMD_AUTO_VOLUMESLIDE);
+			rowGlobalVolSlide |= (command == CMD_GLOBALVOLSLIDE);
+			rowVibrato |= (command == CMD_VIBRATO || command == CMD_FINEVIBRATO || command == CMD_VIBRATOVOL);
+			rowTremolo |= (command == CMD_TREMOLO);
+			if(m_playBehaviour[kST3EffectMemory] && command != CMD_NONE && param != 0)
+			{
+				UpdateS3MEffectMemory(chn, param);
+			}
+			}
+			if(rowRan) {
+			chn.isFirstTick = true;
+			if(chn.autoSlide.IsActive(AutoSlideCommand::FineVolumeSlideUp) && !rowAutoVolSlide)
+				FineVolumeUp(chn, 0, false);
+			if(chn.autoSlide.IsActive(AutoSlideCommand::FineVolumeSlideDown) && !rowAutoVolSlide)
+				FineVolumeDown(chn, 0, false);
+			if(chn.autoSlide.IsActive(AutoSlideCommand::VolumeSlideSTK))
+			{
+				for(uint32 i = 0; i < numTicks; i++)
+				{
+					chn.isFirstTick = (i == 0);
+					VolumeSlide(chn, 0);
+				}
+			}
+			if(chn.autoSlide.IsActive(AutoSlideCommand::VolumeDownWithDuration))
+			{
+				chn.volSlideDownRemain -= std::min(chn.volSlideDownRemain, mpt::saturate_cast<uint16>(numTicks - 1));
+				ChannelVolumeDownWithDuration(chn);
+			}
+			if(chn.autoSlide.IsActive(AutoSlideCommand::GlobalVolumeSlide) && !rowGlobalVolSlide)
+				memory.GlobalVolSlide(chn, chn.nOldGlobalVolSlide, nonRowTicks);
+			if(rowVibrato || chn.autoSlide.IsActive(AutoSlideCommand::Vibrato))
+			{
+				uint32 vibTicks = ((GetType() & (MOD_TYPE_IT | MOD_TYPE_MPT)) && !m_SongFlags[SONG_ITOLDEFFECTS]) ? numTicks : nonRowTicks;
+				uint32 inc = chn.nVibratoSpeed * vibTicks;
+				if(m_playBehaviour[kITVibratoTremoloPanbrello])
+					inc *= 4;
+				chn.nVibratoPos += static_cast<uint8>(inc);
+			}
+			if(rowTremolo || chn.autoSlide.IsActive(AutoSlideCommand::Tremolo))
+			{
+				uint32 tremTicks = ((GetType() & (MOD_TYPE_IT | MOD_TYPE_MPT)) && !m_SongFlags[SONG_ITOLDEFFECTS]) ? numTicks : nonRowTicks;
+				uint32 inc = chn.nTremoloSpeed * tremTicks;
+				if(m_playBehaviour[kITVibratoTremoloPanbrello])
+					inc *= 4;
+				chn.nTremoloPos += static_cast<uint8>(inc);
+			}
+			}
+#else
 			chn.isFirstTick = true;
 			if(chn.autoSlide.IsActive(AutoSlideCommand::FineVolumeSlideUp) && command != CMD_AUTO_VOLUMESLIDE)
 				FineVolumeUp(chn, 0, false);
@@ -1126,8 +1182,6 @@ std::vector<GetLengthType> CSoundFile::GetLength(enmGetLengthResetMode adjustMod
 			if(m_playBehaviour[kST3EffectMemory] && command != CMD_NONE && param != 0)
 			{
 				UpdateS3MEffectMemory(chn, param);
-			}
-#ifdef OPENMPT_EDITOR_CORE
 			}
 #endif
 		}
@@ -3044,6 +3098,7 @@ bool CSoundFile::ProcessEffects()
 		if(sourceRow.IsPcNote()) effects[0].Clear();
 		const bool multipleEffects = std::any_of(effects.begin() + 1, effects.end(), [](const auto &e) { return e.command != CMD_NONE; });
 		const bool parameterControlRow = multipleEffects && NativeEffectAt(m_PlayState.m_nPattern, m_PlayState.m_nRow, nChn, 0).IsPcNote();
+		const uint8 preNoteOldCmdEx = chn.nOldCmdEx;
 		NativeEffectScope noteScope(*this, chn, noteColumn, effects[noteColumn], multipleEffects && !parameterControlRow);
 #endif
 		const uint32 tickCount = m_PlayState.m_nTickCount % (m_PlayState.m_nMusicSpeed + m_PlayState.m_nFrameDelay);
@@ -3653,15 +3708,31 @@ bool CSoundFile::ProcessEffects()
 
 #ifdef OPENMPT_EDITOR_CORE
 		// Effects run left to right. The row's note and volume column ran exactly once.
+		const auto noteCmd = cmd;
+		const auto noteParam = param;
+		const uint8 postNoteOldCmdEx = chn.nOldCmdEx;
+		const bool noteUpdatedCmdEx = noteColumn > 0 && (effects[noteColumn].command == CMD_S3MCMDEX || effects[noteColumn].command == CMD_MODCMDEX);
+		if(multipleEffects && noteUpdatedCmdEx) chn.nOldCmdEx = preNoteOldCmdEx;
 		for(uint8 effectColumn = 0; effectColumn < (multipleEffects ? effects.size() : 1); ++effectColumn) {
 			if(multipleEffects && effects[effectColumn].command == CMD_NONE) continue;
 			NativeEffectScope effectScope(*this, chn, effectColumn, effects[effectColumn], multipleEffects);
-			if(multipleEffects) { cmd = chn.rowCommand.command; param = chn.rowCommand.param; }
-			if(multipleEffects && effectColumn != noteColumn && (cmd == CMD_S3MCMDEX || cmd == CMD_MODCMDEX)) {
-				if(!param && (GetType() & (MOD_TYPE_S3M | MOD_TYPE_IT | MOD_TYPE_MPT))) param = chn.nOldCmdEx;
-				else chn.nOldCmdEx = static_cast<uint8>(param);
+			if(multipleEffects) {
+				if(effectColumn == noteColumn) {
+					cmd = noteCmd;
+					param = noteParam;
+					if(noteUpdatedCmdEx) {
+						if(!effects[effectColumn].param && (GetType() & (MOD_TYPE_S3M | MOD_TYPE_IT | MOD_TYPE_MPT))) param = chn.nOldCmdEx;
+						else chn.nOldCmdEx = postNoteOldCmdEx;
+					}
+				} else {
+					cmd = chn.rowCommand.command;
+					param = chn.rowCommand.param;
+					if(cmd == CMD_S3MCMDEX || cmd == CMD_MODCMDEX) {
+						if(!param && (GetType() & (MOD_TYPE_S3M | MOD_TYPE_IT | MOD_TYPE_MPT))) param = chn.nOldCmdEx;
+						else chn.nOldCmdEx = static_cast<uint8>(param);
+					}
+				}
 			}
-			if(multipleEffects && m_PlayState.m_nTickCount == 0) ResetAutoSlides(chn);
 #endif
 		// Effects
 		if(cmd != CMD_NONE) switch (cmd)

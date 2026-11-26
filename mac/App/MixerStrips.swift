@@ -192,7 +192,7 @@ final class MixerStrips: NSView {
     let last = viewport.width > 0 ? max(first, min(buses.count, Int(ceil(viewport.maxX / stripWidth)) + 1)) : first
     let wanted = Set(first..<last)
     for index in Array(visible.keys) where !wanted.contains(index) {
-      if visible[index]?.isTracking == true { continue }
+      if visible[index]?.isTracking == true && buses.indices.contains(index) { continue }
       if let strip = visible.removeValue(forKey: index) { strip.removeFromSuperview(); spare.append(strip) }
     }
     for index in first..<last where visible[index] == nil {

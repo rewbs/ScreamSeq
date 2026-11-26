@@ -40,7 +40,7 @@ class AudioDevice {
   // Join the output unit before taking over stopped processor work; do not
   // close/trim the retained recording timeline as an explicit Stop would.
   bool joinStoppedProcessing();
-  bool previewing_ = false, usesDefault_ = true, listening_ = false, renderEnded_ = false;
+  bool previewing_ = false, isolatedSample_ = false, usesDefault_ = true, listening_ = false, renderEnded_ = false;
   uint64_t tailFrames_ = 0, tailBudgetFrames_ = 0, tailRevision_ = 0;
   std::atomic<float> outputLeft_{0}, outputRight_{0};
   std::atomic<bool> deviceChanged_{false};

@@ -18,7 +18,13 @@ static_assert(std::atomic<uint64_t>::is_always_lock_free && std::atomic<uint32_t
 struct Apartment {HRESULT value=CoInitializeEx(nullptr,COINIT_MULTITHREADED);~Apartment(){if(SUCCEEDED(value))CoUninitialize();}};
 struct FormatMemory {WAVEFORMATEX *value=nullptr;~FormatMemory(){CoTaskMemFree(value);}};
 struct TextMemory {LPWSTR value=nullptr;~TextMemory(){CoTaskMemFree(value);}};
-struct Event {HANDLE value=CreateEventW(nullptr,FALSE,FALSE,nullptr);~Event(){if(value)CloseHandle(value);}};
+struct Event {
+  HANDLE value = nullptr;
+  explicit Event(bool manual = false) : value(CreateEventW(nullptr, manual ? TRUE : FALSE, FALSE, nullptr)) {}
+  ~Event() { if (value) CloseHandle(value); }
+  Event(const Event &) = delete;
+  Event &operator=(const Event &) = delete;
+};
 std::string utf8(const wchar_t *value) {if(!value)return {};const int n=WideCharToMultiByte(CP_UTF8,0,value,-1,nullptr,0,nullptr,nullptr);if(n<=1)return {};std::string s(size_t(n),0);WideCharToMultiByte(CP_UTF8,0,value,-1,s.data(),n,nullptr,nullptr);s.pop_back();return s;}
 std::wstring wide(const std::string &s){const int n=MultiByteToWideChar(CP_UTF8,MB_ERR_INVALID_CHARS,s.data(),int(s.size()),nullptr,0);if(!s.empty()&&!n)throw std::invalid_argument("Invalid input device identity");std::wstring value(size_t(n),0);if(n)MultiByteToWideChar(CP_UTF8,MB_ERR_INVALID_CHARS,s.data(),int(s.size()),value.data(),n);return value;}
 std::string explain(HRESULT hr) {
@@ -42,7 +48,7 @@ CaptureBuffer::Format format(const WAVEFORMATEX &w) {
 class WasapiCapture final:public SampleCapture {
   CaptureBuffer buffer_;
   std::thread worker_;
-  Event stop_,ready_;
+  Event stop_{true}, ready_{true};
   CaptureOptions options_;
   CaptureDevice device_; // Fully initialized before the ready event, then immutable.
   std::atomic<bool> capturing_{false};
@@ -64,11 +70,11 @@ class WasapiCapture final:public SampleCapture {
       ComPtr<IPropertyStore> properties;
       if(SUCCEEDED(device->OpenPropertyStore(STGM_READ,&properties))){PROPVARIANT name;PropVariantInit(&name);if(SUCCEEDED(properties->GetValue(PKEY_Device_FriendlyName,&name))&&name.vt==VT_LPWSTR)device_.name=utf8(name.pwszVal);PropVariantClear(&name);}
       if(device_.name.empty())device_.name=device_.id;
+      Event packet; if(!packet.value)throw std::runtime_error("Cannot allocate capture event");
       ComPtr<IAudioClient> client;check(device->Activate(__uuidof(IAudioClient),CLSCTX_ALL,nullptr,reinterpret_cast<void **>(client.GetAddressOf())));
       FormatMemory mix;check(client->GetMixFormat(&mix.value));const auto f=format(*mix.value);
       CaptureBuffer::validate(f,options_.firstChannel,options_.channels);device_.channels=f.channels;
       buffer_.prepare(mix.value->nSamplesPerSec,options_.channels,options_.maxSeconds);
-      Event packet; if(!packet.value)throw std::runtime_error("Cannot allocate capture event");
       check(client->Initialize(AUDCLNT_SHAREMODE_SHARED,AUDCLNT_STREAMFLAGS_EVENTCALLBACK|AUDCLNT_STREAMFLAGS_NOPERSIST,0,0,mix.value,nullptr));
       check(client->SetEventHandle(packet.value));ComPtr<IAudioCaptureClient> capture;check(client->GetService(IID_PPV_ARGS(&capture)));
       DWORD task=0;mmcss=AvSetMmThreadCharacteristicsW(L"Audio",&task);
@@ -99,11 +105,13 @@ public:
   void start(const CaptureOptions &o) override {
     if(worker_.joinable())throw std::logic_error("Capture already started");
     if(!stop_.value||!ready_.value)throw std::runtime_error("Cannot allocate microphone lifecycle events");
+    ResetEvent(stop_.value);ResetEvent(ready_.value);
+    initializationInvalid_=false;initializationError_.clear();error_.store(0);discontinuities_.store(0);
     options_=o;worker_=std::thread([this]{run();});
     if(WaitForSingleObject(ready_.value,INFINITE)!=WAIT_OBJECT_0){stop();throw std::runtime_error("Cannot wait for microphone initialization");}
     if(!initializationError_.empty()){stop();if(initializationInvalid_)throw std::invalid_argument(initializationError_);throw std::runtime_error(initializationError_);}
   }
-  void stop() noexcept override {SetEvent(stop_.value);if(worker_.joinable())worker_.join();capturing_=false;}
+  void stop() noexcept override {if(stop_.value)SetEvent(stop_.value);if(worker_.joinable())worker_.join();capturing_=false;}
   CaptureDevice device() const override {return device_;}
   CaptureStatus status() const override {auto s=buffer_.status();s.capturing=capturing_.load();s.discontinuities=discontinuities_.load();if(buffer_.invalid())s.error="The input device supplied invalid audio. Valid earlier frames were retained; record a new take after checking the device.";else if(auto hr=error_.load())s.error=explain(HRESULT(hr));return s;}
   std::span<const float> pcm() const override {if(capturing_.load())throw std::logic_error("Stop recording before reading PCM");return buffer_.pcm();}
@@ -114,7 +122,7 @@ std::vector<CaptureDevice> captureDevices() {
   ComPtr<IMMDeviceEnumerator> enumerator;check(CoCreateInstance(__uuidof(MMDeviceEnumerator),nullptr,CLSCTX_ALL,IID_PPV_ARGS(&enumerator)));
   std::string defaultID;ComPtr<IMMDevice> defaultDevice;if(SUCCEEDED(enumerator->GetDefaultAudioEndpoint(eCapture,eMultimedia,&defaultDevice))){TextMemory id;if(SUCCEEDED(defaultDevice->GetId(&id.value)))defaultID=utf8(id.value);}
   ComPtr<IMMDeviceCollection> devices;check(enumerator->EnumAudioEndpoints(eCapture,DEVICE_STATE_ACTIVE,&devices));UINT count=0;check(devices->GetCount(&count));std::vector<CaptureDevice> result;
-  for(UINT i=0;i<count;++i){ComPtr<IMMDevice> device;check(devices->Item(i,&device));TextMemory id;check(device->GetId(&id.value));CaptureDevice info;info.id=utf8(id.value);info.isDefault=info.id==defaultID;
+  for(UINT i=0;i<count;++i){ComPtr<IMMDevice> device;if(FAILED(devices->Item(i,&device)))continue;TextMemory id;if(FAILED(device->GetId(&id.value)))continue;CaptureDevice info;info.id=utf8(id.value);info.isDefault=info.id==defaultID;
     ComPtr<IPropertyStore> properties;if(SUCCEEDED(device->OpenPropertyStore(STGM_READ,&properties))){PROPVARIANT v;PropVariantInit(&v);if(SUCCEEDED(properties->GetValue(PKEY_Device_FriendlyName,&v))&&v.vt==VT_LPWSTR)info.name=utf8(v.pwszVal);PropVariantClear(&v);}
     ComPtr<IAudioClient> client;if(SUCCEEDED(device->Activate(__uuidof(IAudioClient),CLSCTX_ALL,nullptr,reinterpret_cast<void **>(client.GetAddressOf())))){FormatMemory mix;if(SUCCEEDED(client->GetMixFormat(&mix.value)))info.channels=mix.value->nChannels;}
     if(info.name.empty())info.name=info.id;result.push_back(std::move(info));

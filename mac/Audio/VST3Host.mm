@@ -430,6 +430,8 @@ struct VST3Plugin::Impl : IComponentHandler, IPlugFrame {
   // Invalid or unknown editor values and UI-queue overflow; never a failure.
   std::atomic<uint64_t> droppedEdits{0};
   std::atomic<bool> failed{false};
+  std::atomic<bool> hasView{false}, controllerSyncScheduled{false};
+  std::shared_ptr<std::atomic<bool>> alive = std::make_shared<std::atomic<bool>>(true);
   std::atomic<uint64_t> latencySerial{0},acknowledgedLatency{0};
   BORROWED_REF
   tresult PLUGIN_API queryInterface(const TUID id, void **out) override {
@@ -475,9 +477,12 @@ struct VST3Plugin::Impl : IComponentHandler, IPlugFrame {
     if (flags & kLatencyChanged) latencySerial.fetch_add(1,std::memory_order_release);
     if (controller && values && (flags & kParamValuesChanged))
       for (size_t i = 0; i < metadata.size(); ++i) {
+        if (!metadata[i].writable) continue;
         auto value = controller->getParamNormalized(metadata[i].id);
-        if (value != values[i].load())
-          performEdit(metadata[i].id, value);
+        if (!std::isfinite(value)) continue;
+        const float normalized = float(std::clamp(value, 0., 1.));
+        if (normalized != values[i].load(std::memory_order_relaxed))
+          performEdit(metadata[i].id, normalized);
       }
     return kResultOk;
   }
@@ -511,6 +516,7 @@ struct VST3Plugin::Impl : IComponentHandler, IPlugFrame {
     return result;
   }
   ~Impl() {
+    alive->store(false, std::memory_order_release);
     close();
     if (processing)
       processor->setProcessing(false);
@@ -545,6 +551,7 @@ struct VST3Plugin::Impl : IComponentHandler, IPlugFrame {
     window.delegate = nil;
     windowDelegate.onClose = nil;
     windowDelegate = nil;
+    hasView.store(false, std::memory_order_release);
     if (view) {
       view->removed();
       view->setFrame(nullptr);
@@ -755,14 +762,33 @@ bool VST3Plugin::popEdit(uint32_t &id, float &value) noexcept {
 bool VST3Plugin::popEdit(PluginEdit &event) noexcept {
   auto &s = *impl_;
   if (!s.edits.pop(event)) {
-    if (s.view && s.controller)
-      for (size_t i = 0; i < s.metadata.size(); ++i) {
-        auto value = s.values[i].load(std::memory_order_relaxed);
-        if (s.controllerValues[i] != value) {
-          s.controller->setParamNormalized(s.metadata[i].id, value);
-          s.controllerValues[i] = value;
-        }
+    if (s.hasView.load(std::memory_order_acquire)) {
+      if ([NSThread isMainThread]) {
+        if (s.view && s.controller)
+          for (size_t i = 0; i < s.metadata.size(); ++i) {
+            auto value = s.values[i].load(std::memory_order_relaxed);
+            if (s.controllerValues[i] != value) {
+              s.controller->setParamNormalized(s.metadata[i].id, value);
+              s.controllerValues[i] = value;
+            }
+          }
+      } else if (!s.controllerSyncScheduled.exchange(true, std::memory_order_acq_rel)) {
+        auto alive = s.alive;
+        auto *implPtr = &s;
+        dispatch_async(dispatch_get_main_queue(), ^{
+          if (!alive->load(std::memory_order_acquire)) return;
+          implPtr->controllerSyncScheduled.store(false, std::memory_order_release);
+          if (implPtr->view && implPtr->controller)
+            for (size_t i = 0; i < implPtr->metadata.size(); ++i) {
+              auto value = implPtr->values[i].load(std::memory_order_relaxed);
+              if (implPtr->controllerValues[i] != value) {
+                implPtr->controller->setParamNormalized(implPtr->metadata[i].id, value);
+                implPtr->controllerValues[i] = value;
+              }
+            }
+        });
       }
+    }
     return false;
   }
   return true;
@@ -796,6 +822,8 @@ void VST3Plugin::transport(const PluginTransport &t) noexcept {
   impl_->transport = t;
 }
 bool VST3Plugin::midi(uint8_t status, uint8_t a, uint8_t b) noexcept {
+  a &= 127;
+  b &= 127;
   auto &s = *impl_;
   int ch = status & 15;
   auto kind = status & 0xf0;
@@ -1052,6 +1080,7 @@ void VST3Plugin::showEditor() {
       s.close();
       throw std::runtime_error("Cannot attach VST3 custom interface");
     }
+    s.hasView.store(true, std::memory_order_release);
     // attached() may call resizeView synchronously. Its accepted size wins;
     // replaying the earlier getSize rectangle clips/offsets the plugin view.
     ViewRect attachedRect{};

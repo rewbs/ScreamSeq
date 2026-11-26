@@ -73,9 +73,10 @@ extension WorkspaceCommandPalette {
     if strokes.count>1{sequences.bindings[id]=strokes}
     sessionBindings[id]=["key":strokes.count==1 ? strokes[0].key:"","modifiers":strokes.count==1 ? strokes[0].modifiers.rawValue:0]
     if persist && persistPreferences {
-      sequences.save();var bindings=UserDefaults.standard.dictionary(forKey:"workspaceShortcuts") as? [String:[String:Any]] ?? [:]
+      sequences.save();var bindings=cachedShortcutBindings()
       bindings[id]=sessionBindings[id]
       UserDefaults.standard.set(bindings,forKey:"workspaceShortcuts")
+      cachedPersistedBindings=bindings
     }
     table.reloadData();onShortcutsChanged?();return nil
   }

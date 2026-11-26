@@ -86,10 +86,20 @@ extension AppController {
     installContextMenus()
     dock.onSelection = {[weak self] id in
       guard let self else{return}
+      self.usageAnalytics.recordPanelFocus(id)
       self.capturePanelReturn(id)
       if id=="samples" {self.editorMode=1} else if id=="instruments" {self.editorMode=2} else if id=="plugins" {self.editorMode=3}
       self.followWorkspacePanel(id,force:false,opening:true)
     }
+    commandPalette.onOpen = { [weak self] in self?.usageAnalytics.recordPaletteOpen() }
+    commandPalette.onQuery = { [weak self] q, count in self?.usageAnalytics.recordPaletteQuery(q, matchCount: count) }
+    commandPalette.onExecute = { [weak self] q, path, count in
+      guard let self else { return }
+      self.usageAnalytics.recordPaletteExecute(query: q, command: path, matchCount: count)
+      let depth = path.components(separatedBy: " / ").count
+      if depth >= 3 { self.usageAnalytics.recordDeepMenu(menuPath: path, command: path) }
+    }
+    commandPalette.onClose = { [weak self] q, count, ran in self?.usageAnalytics.recordPaletteClose(finalQuery: q, finalMatchCount: count, executed: ran) }
     // Observe menus before the first user event, including the interval between
     // choosing an item and AppKit dispatching its action after menu dismissal.
     KeyboardSettings.installInputContext()
@@ -110,12 +120,13 @@ extension AppController {
       if !modalInput, NSApp.isActive, self.commandPalette.window?.isKeyWindow != true,
         target === self.sampleEditor.window, self.sampleEditor.handleLoopKey(event) { return nil }
       if self.handlePlaybackKey(event) || self.handleInspectorNote(event) { return nil }
+      if event.type == .keyUp,let note=self.workspaceHeldKeys.removeValue(forKey:event.keyCode){self.audition(note:note,on:false);return nil}
       guard self.liveKeyboard,NSApp.isActive,self.commandPalette.window?.isVisible != true,
-        NSApp.modalWindow == nil,self.window.attachedSheet == nil else{return event}
+        !modalInput else{return event}
       if let text=self.focusedView(event) as? NSTextView,text.isEditable,event.type == .keyDown{return event}
       if self.focusedView(event) is NSTextField,event.type == .keyDown{return event}
       if self.focusedView(event) is PreciseNoteTable,event.type == .keyDown{return event}
-      if event.type == .keyUp,let note=self.workspaceHeldKeys.removeValue(forKey:event.keyCode){self.audition(note:note,on:false);return nil}
+      if self.focusedView(event) is PatternView,event.type == .keyDown{return event}
       guard event.modifierFlags.intersection([.command,.control,.option]).isEmpty,
         let key=event.charactersIgnoringModifiers?.lowercased(),let offset=KeyboardSettings.note(for:key) else{return event}
       if event.type == .keyDown,!event.isARepeat,self.workspaceHeldKeys[event.keyCode]==nil {let note=min(120,self.patternView.octave*12+offset+1);self.workspaceHeldKeys[event.keyCode]=note;self.audition(note:note,on:true)}
@@ -295,7 +306,7 @@ extension AppController {
   @objc func showSignalGraph(){workspace?.show("graph");followWorkspacePanel("graph",force:true)}
   @objc func showCommandPalette(){commandPalette.show()}
   @objc func focusInspector(_ sender:NSMenuItem) { if let id=sender.representedObject as? String { workspace?.show(id,focus:true) } }
-  @objc func focusPattern(){window.makeKeyAndOrderFront(nil);window.makeFirstResponder(patternView);editorMode=0}
+  @objc func focusPattern(){usageAnalytics.recordPanelFocus("pattern");window.makeKeyAndOrderFront(nil);window.makeFirstResponder(patternView);editorMode=0}
   @objc func focusNextPanel(){
     guard let workspace else{return};let ids=workspace.visibleIDs
     let index=workspace.focusedPanel().flatMap{ids.firstIndex(of:$0.id)} ?? -1
@@ -307,10 +318,10 @@ extension AppController {
   @objc func floatFocusedPanel(){if let panel=workspace?.focusedPanel(){workspace?.place(panel.id,at:"float")}}
   @objc func dockFocusedPanel(){if let panel=workspace?.focusedPanel(){workspace?.place(panel.id,at:"right")}}
   @objc func toggleFollow(){patternView.isFollowing.toggle()}
-  @objc func composeLayout(){workspace?.preset("Compose")}
-  @objc func graphLayout(){workspace?.preset("Graph editing")}
-  @objc func soundLayout(){workspace?.preset("Sound design")}
-  @objc func patternLayout(){workspace?.preset("Pattern focus");focusPattern()}
+  @objc func composeLayout(){workspace?.preset("Compose");usageAnalytics.recordLayoutChange("Compose")}
+  @objc func graphLayout(){workspace?.preset("Graph editing");usageAnalytics.recordLayoutChange("Graph editing")}
+  @objc func soundLayout(){workspace?.preset("Sound design");usageAnalytics.recordLayoutChange("Sound design")}
+  @objc func patternLayout(){workspace?.preset("Pattern focus");usageAnalytics.recordLayoutChange("Pattern focus");focusPattern()}
   @objc func saveWorkspaceLayout(){statusLabel.stringValue=applyWorkspaceLayout("Save custom",savedName:"Custom") ?? "Custom workspace layout saved"}
   @objc func restoreWorkspaceLayout(){statusLabel.stringValue=applyWorkspaceLayout("Restore custom",savedName:"Custom") ?? "Custom workspace layout restored"}
   @objc func showWorkspaceLayouts(){

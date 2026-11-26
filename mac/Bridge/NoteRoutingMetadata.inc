@@ -7,12 +7,12 @@ NSDictionary *encodeNoteRouting(const NoteRouting &routing) {
   return @{@"routes":routes,@"suppressedAssignments":suppressed,@"triggerSources":sources};
 }
 NoteRouting decodeNoteRouting(id raw) {
-  using namespace Automation;const auto value=object(raw);NoteRouting routing;
-  for(id item:array(value[@"routes"]?:@[],512)) {const auto r=object(item);
+  using namespace Automation;const auto value=object(raw);keys(value,@[@"routes",@"suppressedAssignments",@"triggerSources"]);NoteRouting routing;
+  for(id item:array(value[@"routes"]?:@[],512)) {const auto r=object(item);keys(r,@[@"id",@"sourceKind",@"source",@"plugin",@"midiChannel",@"enabled"]);
     NSString *kind=string(r[@"sourceKind"],16);require([kind isEqual:@"channel"]||[kind isEqual:@"instrument"],"Note sourceKind must be channel or instrument");
     routing.routes.push_back({decodeNativeID(r[@"id"]),[kind isEqual:@"channel"]?NoteSourceKind::Channel:NoteSourceKind::Instrument,decodeNativeID(r[@"source"]),string(r[@"plugin"],256).UTF8String,uint8_t(integer(r[@"midiChannel"]?:@0,0,16)),r[@"enabled"]?boolean(r[@"enabled"]):true});
   }
   for(id value:array(value[@"suppressedAssignments"]?:@[],255))routing.suppressedAssignments.push_back(decodeNativeID(value));
-  for(id item:array(value[@"triggerSources"]?:@[],255)){const auto source=object(item);routing.triggerSources.push_back({decodeNativeID(source[@"instrument"]),uint8_t(integer(source[@"midiChannel"],1,16))});}
+  for(id item:array(value[@"triggerSources"]?:@[],255)){const auto source=object(item);keys(source,@[@"instrument",@"midiChannel"]);routing.triggerSources.push_back({decodeNativeID(source[@"instrument"]),uint8_t(integer(source[@"midiChannel"],1,16))});}
   return routing;
 }

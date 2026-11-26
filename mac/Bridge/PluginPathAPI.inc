@@ -45,7 +45,13 @@
           if(changed&&!dry) {
             // The chosen, hash-verified scan permits this process to probe the
             // module. Project hints never grant this permission by themselves.
+            const bool alreadyTrusted=PluginTrust::trusted(resolved,_pluginInventory->cached());
             require(PluginTrust::trust(resolved),"Chosen VST3 bundle is no longer available");
+            bool trustCommitted=false;
+            struct TrustRollback {
+              NSString *path; bool revoke; bool &committed;
+              ~TrustRollback(){if(revoke&&!committed)PluginTrust::revoke(path);}
+            } trustRollback{resolved,!alreadyTrusted,trustCommitted};
             auto states=_plugins;auto manual=_manualParameters;auto hints=_pluginPathHints;
             if(graph){locationRecipe(next,location.graph,location.node).path=path;hints.graph.erase({location.graph,location.node});}
             else {states[slot].descriptor.path=path;hints.rack.erase(location.plugin);}
@@ -72,7 +78,7 @@
               [self applyPluginGraph:states automation:_automation];
               _effectUndo.back().location=std::move(beforeLocation.location);_manualParameters.clear();
             }
-            std::swap(_pluginPathHints,hints);PluginTrust::persist(resolved);
+            std::swap(_pluginPathHints,hints);trustCommitted=true;PluginTrust::persist(resolved);
           }
         }
       } catch(const std::invalid_argument &e) {throw Error(-32602,e.what());}

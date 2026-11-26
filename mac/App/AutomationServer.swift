@@ -119,7 +119,8 @@ final class AutomationServer {
   private func acceptClients(_ fd: Int32) {
     // Bound work per UI-queue turn even if clients continuously connect.
     for _ in 0..<16 where active {
-      let client = accept(fd, nil, nil)
+      var client: Int32 = -1
+      repeat { client = accept(fd, nil, nil) } while client < 0 && errno == EINTR
       if client < 0 { return }
       var uid: uid_t = 0
       var gid: gid_t = 0
@@ -145,10 +146,14 @@ final class AutomationServer {
         var buffer = [UInt8](repeating: 0, count: 16384)
         let deadline = Date().addingTimeInterval(10)
         while input.count <= Self.maxBytes && Date() < deadline {
-          let count = read(client, &buffer, buffer.count)
+          var count: Int = 0
+          repeat { count = read(client, &buffer, buffer.count) } while count < 0 && errno == EINTR
           if count <= 0 { return }
           input.append(contentsOf: buffer.prefix(count))
-          if buffer.prefix(count).contains(10) { break }
+          if let newline = input.firstIndex(of: 10) {
+            input = input.prefix(upTo: newline + 1)
+            break
+          }
         }
         var response = Self.error(-32600, "Expected one bounded JSON request followed by a newline")
         response["jsonrpc"] = "2.0"
@@ -185,6 +190,7 @@ final class AutomationServer {
           var offset = 0
           while offset < raw.count {
             let count = write(client, raw.baseAddress!.advanced(by: offset), raw.count - offset)
+            if count < 0 && errno == EINTR { continue }
             if count <= 0 { break }
             offset += count
           }

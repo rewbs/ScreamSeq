@@ -24,11 +24,17 @@ uint64_t writeProjectAudio(const std::vector<std::byte> &module,const std::vecto
   if (native) renderer.applyColumnMutes(*native, renderer.song());
   effects.attachInstruments(renderer, native);
   if (native) effects.attachMusicalAutomation(renderer, *native);
-  const auto latencySeconds=effects.latency(),tailSeconds=effects.tail();
-  if(!std::isfinite(latencySeconds)||latencySeconds<0||latencySeconds>60||!std::isfinite(tailSeconds)||tailSeconds<0)
+  const auto latencySeconds=effects.latency();
+  if(!std::isfinite(latencySeconds)||latencySeconds<0||latencySeconds>60)
     throw std::runtime_error("Plugin latency or tail is outside the audio export limit");
-  const uint64_t latency = uint64_t(std::ceil(latencySeconds * rate)),
-                 tail = uint64_t(std::ceil(std::min(tailSeconds, 60.0) * rate));
+  auto currentTail=[&]() -> uint64_t {
+    const auto tailSeconds=effects.tail();
+    if(!std::isfinite(tailSeconds)||tailSeconds<0)
+      throw std::runtime_error("Plugin latency or tail is outside the audio export limit");
+    return uint64_t(std::ceil(std::min(tailSeconds, 60.0) * rate));
+  };
+  (void)currentTail();
+  const uint64_t latency = uint64_t(std::ceil(latencySeconds * rate));
   auto u16 = [&](uint16_t value) {
     char bytes[2] = {char(value), char(value >> 8)};
     output.write(bytes, 2);
@@ -67,7 +73,7 @@ uint64_t writeProjectAudio(const std::vector<std::byte> &module,const std::vecto
       if (received < frames) {
         ended = true;
         effects.endNotes();
-        end = position + received + latency + tail;
+        end = position + received + latency + currentTail();
         tailLimit = position + received + latency + uint64_t(60) * rate;
         frames = uint32_t(std::min<uint64_t>(frames, end - position));
       }
@@ -83,7 +89,7 @@ uint64_t writeProjectAudio(const std::vector<std::byte> &module,const std::vecto
       throw std::runtime_error("A plugin changed latency during export; the incomplete export was not saved.");
     const auto revision = effects.tailRevision();
     if (ended && revision != tailRevision)
-      end = std::max(end, std::min(tailLimit, position + frames + latency + tail));
+      end = std::max(end, std::min(tailLimit, position + frames + latency + currentTail()));
     tailRevision = revision;
     auto skip = uint32_t(std::min<uint64_t>(frames, position < latency ? latency - position : 0));
     output.write(reinterpret_cast<const char *>(buffer.data() + skip * 2), (frames - skip) * 8);

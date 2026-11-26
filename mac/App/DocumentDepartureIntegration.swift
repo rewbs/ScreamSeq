@@ -8,10 +8,14 @@ extension AppController: TrackerDocumentDepartureDelegate {
     var work = [String]()
     func retain(_ name: String, _ retained: Bool) { if retained { work.append(name) } }
     retain("Song settings", songSettingsWindow?.editor.needsCompletion == true)
+    retain("Order details", orderEditor.hasUncommittedDetails)
     retain("Mixer", mixerEditor.needsCompletion)
     retain("Samples", sampleEditor.hasDraft)
     retain("Instruments", instrumentEditor.hasDraft)
     retain("Plugin instrument", instrumentPluginEditor?.needsCompletion == true)
+    if let pluginInst = pluginInstrumentsWindow?.contentView as? PluginInstrumentsEditor {
+      retain("Plugin instruments", pluginInst.hasDraft || pluginInst.pending)
+    }
     retain("Sample library import", sampleBrowser?.needsDocumentCompletion == true)
     retain("Precise notes", workspaceNotes.hasDraft || workspaceNotes.pending)
     retain("Pattern automation", workspaceAutomation.hasDraft || workspaceAutomation.loading)

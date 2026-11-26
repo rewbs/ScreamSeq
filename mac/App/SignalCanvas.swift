@@ -156,7 +156,7 @@ final class SignalCanvas: NSView {
   private var cutStroke=[NSPoint](),cutEdges=Set<Int>(),detachDragging=false
   var insertionHint: (([String],Int)->String?)?
   var selectedEdge: Int? {didSet{if selectedEdge != oldValue{selectedReroute=nil};if selectedEdge != nil{selectedBoundary=nil};needsDisplay=true}}
-  var onSelect: ((String)->Void)?, onMove: ((String,Double,Double)->Void)?, onConnect: ((String,String)->Void)?
+  var onSelect: ((String?)->Void)?, onMove: ((String,Double,Double)->Void)?, onConnect: ((String,String)->Void)?
   var onConnectPorts: ((String,String,UInt32,UInt32,Bool)->Void)?
   var onAudioParameterDrop: ((String,String,UInt32,UInt32,NSPoint)->Void)?
   var onSelectEdge: ((Int)->Void)?, onDelete: (()->Void)?, onZoom: ((Double)->Void)?
@@ -264,7 +264,10 @@ final class SignalCanvas: NSView {
   required init?(coder:NSCoder){fatalError()}
   override func updateTrackingAreas() {
     super.updateTrackingAreas();if let signalTracking{removeTrackingArea(signalTracking)}
-    let area=NSTrackingArea(rect:.zero,options:[.mouseMoved,.activeInKeyWindow,.inVisibleRect],owner:self,userInfo:nil);addTrackingArea(area);signalTracking=area
+    let area=NSTrackingArea(rect:.zero,options:[.mouseMoved,.mouseEnteredAndExited,.activeInKeyWindow,.inVisibleRect],owner:self,userInfo:nil);addTrackingArea(area);signalTracking=area
+  }
+  override func mouseExited(with event:NSEvent) {
+    hoverPoint=nil;toolTip=nil
   }
   override func mouseMoved(with event:NSEvent) {
     guard !isEditing else{return};let point=convert(event.locationInWindow,from:nil)
@@ -308,7 +311,7 @@ final class SignalCanvas: NSView {
     // mouse-down can replace/reorder them even while new reads are deferred.
     // Live values, badges and labels do not change connection identity.
     if isEditing && (self.edges.count != edges.count || !zip(self.edges,edges).allSatisfy({a,b in
-      a.source==b.source && a.target==b.target && a.modulation==b.modulation && a.output==b.output && a.input==b.input && a.connection==b.connection && (a.readOnlyReason==nil)==(b.readOnlyReason==nil)
+      a.source==b.source && a.target==b.target && a.modulation==b.modulation && a.output==b.output && a.input==b.input && a.connection==b.connection && a.waypoints==b.waypoints && (a.readOnlyReason==nil)==(b.readOnlyReason==nil)
     })) {
       cancelGesture()
       onInvalidatedGesture?("Graph connections changed · unfinished gesture cancelled; retry on the current graph")
@@ -537,18 +540,24 @@ final class SignalCanvas: NSView {
   func selectForContext(_ event:NSEvent) {
     let point=convert(event.locationInWindow,from:nil)
     if let node=nodes.reversed().first(where:{$0.hitRect.contains(point)}) {if !selection.contains(node.id){selectNodes([node.id])};selectedEdge=nil;onSelect?(node.id)}
-    else {selected=nil;selectedEdge=edge(at:point);if let selectedEdge{onSelectEdge?(selectedEdge)}}
+    else {selected=nil;selectedEdge=edge(at:point);if let selectedEdge{onSelectEdge?(selectedEdge)}else{onSelect?(nil)}}
   }
   private func listenBadge(_ node:SignalCanvasNode)->NSRect {NSRect(x:node.rect.maxX-24,y:node.y+7,width:18,height:18)}
   override func mouseDown(with event:NSEvent){
     commitNudge()
     window?.makeFirstResponder(self);let point=convert(event.locationInWindow,from:nil);pointer=point
+    if cutTool {cutStroke=[point];cutEdges=[];return}
     if let stub=boundaries.first(where:{boundaryRect($0.id)?.contains(point)==true}) {selectedBoundary=stub.id;onRevealBoundary?(stub.id);return}
     selectedBoundary=nil
-    if !cutTool,let node=nodes.reversed().first(where:{$0.canCollapse && $0.disclosureRect.contains(point)}) {
+    // Selected amount badge is drawn above cards (Z-order top).
+    if let index=selectedEdge,edges.indices.contains(index),edges[index].readOnlyReason==nil,let badge=amountBadge(index),badge.contains(point),let value=edges[index].amount {
+      selectedReroute=nil
+      if event.clickCount>=2{onEditEdge?(index);return}
+      amountDrag=(index,point,value,value);onCableHint?("Drag amount · Shift for precision · double-click for exact entry · Esc cancels");return
+    }
+    if let node=nodes.reversed().first(where:{$0.canCollapse && $0.disclosureRect.contains(point)}) {
       selectNodes([node.id]);selectedEdge=nil;onSelect?(node.id);onCollapse?();return
     }
-    if cutTool {cutStroke=[point];cutEdges=[];return}
     if let node=nodes.reversed().first(where:{$0.hitRect.contains(point)}),!signalReadings.nodePorts(node.id,output:true).filter({$0.kind=="audio"}).isEmpty,
        listenBadge(node).contains(point) || event.modifierFlags.intersection([.control,.shift,.command,.option]) == [.control,.shift] {
       selectNodes([node.id]);selectedEdge=nil;onSelect?(node.id);if let port=signalReadings.primaryPort(node.id,output:true){onListen?(port.key)}else{onChooseListen?()};return
@@ -556,10 +565,6 @@ final class SignalCanvas: NSView {
     if let index=selectedEdge,edges.indices.contains(index),edges[index].readOnlyReason==nil {
       if let i=edges[index].waypoints.firstIndex(where:{hypot($0.x-point.x,$0.y-point.y)<9/max(0.3,enclosingScrollView?.magnification ?? 1)}){selectedReroute=i;rerouteDrag=(index,i,edges[index].waypoints);onCableHint?("Drag reroute point · Delete removes the point and preserves the cable · Esc cancels");return}
       selectedReroute=nil
-      if let badge=amountBadge(index),badge.contains(point),let value=edges[index].amount {
-        if event.clickCount>=2{onEditEdge?(index);return}
-        amountDrag=(index,point,value,value);onCableHint?("Drag amount · Shift for precision · double-click for exact entry · Esc cancels");return
-      }
       for source in [true,false] {if let handle=wireHandle(index,source:source),hypot(handle.x-point.x,handle.y-point.y)<8/max(0.3,enclosingScrollView?.magnification ?? 1) {
         let edge=edges[index];beginCable(node:source ? edge.target:edge.source,port:SignalCanvasPort(number:source ? edge.input:edge.output,modulation:edge.modulation,signal:edgeSignal(edge)),output:!source,edge:index)
         onCableHint?("Reroute only the selected cable · other cables stay · Esc or empty space cancels");return
@@ -588,13 +593,13 @@ final class SignalCanvas: NSView {
     }
     let hit=edge(at:point)
     if let hit {selected=nil;selectedEdge=hit;onSelectEdge?(hit);if event.clickCount>=2{onEditEdge?(hit)}}
-    else {marqueeStart=point;marqueeBase=event.modifierFlags.intersection([.shift,.command]).isEmpty ? []:selection;selectNodes(marqueeBase);selectedEdge=nil}
+    else {marqueeStart=point;marqueeBase=event.modifierFlags.intersection([.shift,.command]).isEmpty ? []:selection;selectNodes(marqueeBase);selectedEdge=nil;if marqueeBase.isEmpty{onSelect?(nil)}}
   }
   private func positions()->[(String,Double,Double)] {nodes.filter{selection.contains($0.id)}.map{($0.id,$0.x,$0.y)}}
   private func notifyMove(){let p=positions();if let onMoveNodes{onMoveNodes(p)}else{for(id,x,y)in p{onMove?(id,x,y)}}}
   override func mouseDragged(with event:NSEvent){
     pointer=convert(event.locationInWindow,from:nil)
-    if let drag=rerouteDrag,edges.indices.contains(drag.edge){edges[drag.edge].waypoints[drag.index]=NSPoint(x:max(8,min(99900,pointer.x)),y:max(8,min(99900,pointer.y)));return}
+    if let drag=rerouteDrag,edges.indices.contains(drag.edge),edges[drag.edge].waypoints.indices.contains(drag.index){edges[drag.edge].waypoints[drag.index]=NSPoint(x:max(8,min(99900,pointer.x)),y:max(8,min(99900,pointer.y)));rebuildGeometry();resizeCanvas();needsDisplay=true;return}
     if let drag=amountDrag,edges.indices.contains(drag.index) {
       let scale=max(0.3,enclosingScrollView?.magnification ?? 1),fine=event.modifierFlags.contains(.shift) ? 0.1:1.0
       let delta=(pointer.x-drag.start.x+drag.start.y-pointer.y)*scale*fine
@@ -665,7 +670,8 @@ final class SignalCanvas: NSView {
     wiring=nil;dropPort=nil;dropReason=nil;dragging=nil;insertionEdge=nil;marquee=nil;marqueeStart=nil;originals=[:]
     detachDragging=false
     if moved {if detach {onDetachNodes?(ids,positions,false)}else if let insertion,let onInsertNodes{onInsertNodes(ids,insertion,positions)}else{notifyMove()}}
-    if let selected{onSelect?(selected)};resizeCanvas();needsDisplay=true
+    if let selected{onSelect?(selected)}else if selectedEdge == nil && selectedBoundary == nil{onSelect?(nil)}
+    resizeCanvas();needsDisplay=true
     if let cable=addCable {onAddConnected?(cable.node,cable.port,cable.output,point)}
   }
   override func keyDown(with event:NSEvent){
@@ -694,6 +700,7 @@ final class SignalCanvas: NSView {
       if flags.isEmpty,event.charactersIgnoringModifiers?.lowercased()=="l",GraphCommand.listen.usesCanvasDefault() {
         if let selected,let port=signalReadings.primaryPort(selected,output:true){onListen?(port.key)}else{onChooseListen?()};return
       }
+      if event.keyCode==53,!isEditing,cutTool {cancelGesture();onCableHint?("Cut tool cancelled");return}
       if event.keyCode==53,!isEditing,listeningPort != nil {onStopListening?();return}
       if flags == .control,event.charactersIgnoringModifiers=="x",GraphCommand.deleteHeal.usesCanvasDefault() {onDetachNodes?(nodes.filter{selection.contains($0.id)}.map(\.id),[],true);return}
     }
@@ -721,8 +728,11 @@ final class SignalCanvas: NSView {
     let step=flags == .shift ? 24.0 : 4.0
     let dx:Double,dy:Double
     switch event.keyCode{case 123:dx = -step;dy=0;case 124:dx=step;dy=0;case 125:dx=0;dy=step;case 126:dx=0;dy = -step;default:super.keyDown(with:event);return}
-    let chosen=nodes.filter{selection.contains($0.id)},x=max(8-(chosen.map(\.x).min() ?? 8),dx),y=max(8-(chosen.map(\.y).min() ?? 8),dy)
-    for i in nodes.indices where selection.contains(nodes[i].id){nodes[i].x+=x;nodes[i].y+=y}
+    let moving=selection.union(nodes.filter{selection.contains($0.id)}.reduce(into:Set<String>()){$0.formUnion($1.visualMembers)})
+    let chosen=nodes.filter{moving.contains($0.id)}
+    let x=max(8-(chosen.map(\.x).min() ?? 8),min(99900-(chosen.map(\.x).max() ?? 0),dx))
+    let y=max(8-(chosen.map(\.y).min() ?? 8),min(99900-(chosen.map(\.y).max() ?? 0),dy))
+    for i in nodes.indices where moving.contains(nodes[i].id){nodes[i].x+=x;nodes[i].y+=y}
     rebuildGeometry();resizeCanvas();nudges=positions();nudgeWork?.cancel()
     let work=DispatchWorkItem{[weak self] in self?.commitNudge()};nudgeWork=work
     DispatchQueue.main.asyncAfter(deadline:.now()+nudgeDelay,execute:work)

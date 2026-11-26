@@ -31,8 +31,11 @@ class ApiDispatch {
 		// Offline rendering is bounded by the same reply budget as the Mac
 		// socket. Admission still has the ordinary five-second deadline: a long
 		// render must not make an unstarted queued write silently execute later.
-		const bool audioRender = request.is_object() && request.contains("method") &&
-			(request["method"] == "document.exportAudio" || request["method"] == "sample.renderSelection");
+		const std::string method = request.is_object() && request.contains("method") && request["method"].is_string()
+			? request["method"].get<std::string>() : std::string{};
+		const bool longOperation = method == "document.exportAudio" || method == "sample.renderSelection" ||
+			method == "plugin.discover" || method == "plugin.path.scan" || method == "graph.plugin.path.scan" ||
+			method == "document.open" || method == "document.save" || method == "sample.library.scan";
 		{
 			std::lock_guard lock(mutex_);
 			if(closed_ || queue_.size() >= 16) return Api::errorResponse(request.value("id", Api::Json()), -32002, "Session busy or closing");
@@ -45,7 +48,7 @@ class ApiDispatch {
 		}
 		job->changed.wait_until(lock, started + std::chrono::seconds(5), [&]{return job->begun || job->done || job->cancelled;});
 		if(job->begun && !job->done && !job->cancelled)
-			job->changed.wait_until(lock, started + std::chrono::seconds(audioRender ? 120 : 5), [&]{return job->done || job->cancelled;});
+			job->changed.wait_until(lock, started + std::chrono::seconds(longOperation ? 120 : 5), [&]{return job->done || job->cancelled;});
 		if(!job->done && !job->cancelled) {
 			job->cancelled = !job->begun;
 			return Api::errorResponse(request.value("id", Api::Json()), job->begun ? -32003 : -32002,

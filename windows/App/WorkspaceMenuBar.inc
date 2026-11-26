@@ -70,6 +70,7 @@
         else if(id==composeCommand)result.checked=workspaceState.layout=="Compose";
         else if(id==patternCommand)result.checked=workspaceState.layout=="Pattern focus";
         else if(id==soundCommand)result.checked=workspaceState.layout=="Sound design";
+        else if(id==usageAnalyticsToggleCommand)result.checked=usageAnalytics.enabled();
         if(id==patternRenderOptionsCommand)result.label=directSampleRenderCompletion.retained()?L"Review selection render result":L"Render selection options…";
         return result;
     }
@@ -87,7 +88,7 @@
                 {0,L"Pattern",true,false,commands({effectPickerCommand,effectsCommand,notesCommand,graphCommandsCommand,scratchGesturesCommand,patternRenderOptionsCommand,0,positionRulerCommand,patternRowsLargerCommand,patternRowsSmallerCommand})},
                 {0,L"Sound",true,false,commands({sampleBrowseCommand,sampleImportCommand,sampleDetailCommand,sampleRecordCommand,instrumentEnvelopeCommand,instrumentImportCommand,pluginsCommand,pluginBrowse,0,mixerCommand,mixerRouting,graphCommand,graphWorkflowCommand})},
                 {0,L"Automation",true,false,commands({parameterAutomationCommand,absoluteAutomationCommand,parameterActivityCommand,0,pluginRecoveryReviewCommand,0,pluginAutomate,pluginActivity,0,curveReference})},
-                {0,L"Preferences",true,false,commands({audioSettingsCommand,keyboardSettingsCommand,reloadShortcutsCommand})},
+                {0,L"Preferences",true,false,commands({audioSettingsCommand,keyboardSettingsCommand,reloadShortcutsCommand,0,usageAnalyticsToggleCommand,usageAnalyticsBookmarkCommand})},
                 {0,L"Help",true,false,commands({keyboardHelpCommand,aboutCommand})}}}};
         menuBar=std::make_unique<ScreamSeq::NativeMenuBar>(window,std::move(menus));refreshMenuBar();
     }
@@ -107,6 +108,7 @@
         // preferences or choosing a view. Selection edits keep the full guard.
         switch(id){
         case contextPanelCommand:case stopCommand:case exitCommand:case paletteCommand:case layoutsCommand:case audioSettingsCommand:case keyboardSettingsCommand:case reloadShortcutsCommand:
+        case usageAnalyticsToggleCommand:case usageAnalyticsBookmarkCommand:
         case composeCommand:case patternCommand:case soundCommand:case connectedWorkspaceCommand:case graphEditingWorkspaceCommand:
         case navigationPatternCommand:case allEditorsCommand:case navigationWindowsCommand:case mixingGraphPanelCommand:case mixingGraphFloatCommand:
         case parameterRecordingCommand:case pluginRecoveryReviewCommand:return true;
@@ -122,11 +124,12 @@
     bool dispatchMenuBar(unsigned wire){
         if(!menuBar)return false;const auto id=menuBar->command(wire);if(!id)return false;
         const bool captured=menuArmed;menuArmed=false;const auto state=menuCommandState(id);endMenuBar();
-        if(!captured||!IsWindow(menuFocus)||GetFocus()!=menuFocus||!menuTargetCurrent(id)){status=L"Menu target changed / reopen the menu before editing";return true;}
-        if(!state.enabled){status=state.reason;return true;}
+        if(!captured||!IsWindow(menuFocus)||GetFocus()!=menuFocus||!menuTargetCurrent(id)){status=L"Menu target changed / reopen the menu before editing";observeAnalyticsStatus();return true;}
+        if(!state.enabled){status=state.reason;observeAnalyticsStatus();return true;}
         rejectDepartureInput();
         if(dispatchTextCommand(id,menuFocus))return true;
-        runWorkspaceShortcut(id);return true;
+        const auto prevSource=activeCommandSource;activeCommandSource="menu";
+        runWorkspaceShortcut(id);activeCommandSource=prevSource;return true;
     }
     bool dispatchTextCommand(int id,HWND focus){
         if(!menuTextControl(focus))return false;
@@ -139,6 +142,9 @@
         // The palette has restored its opening control, never its query edit.
         // Use the same local text/history and command policy as the menu bar.
         const auto focus=GetFocus();const auto state=menuCommandState(id,focus);
-        if(!state.enabled){status=state.reason;return;}
-        rejectDepartureInput();if(!dispatchTextCommand(id,focus))runWorkspaceShortcut(id);
+        if(!state.enabled){status=state.reason;observeAnalyticsStatus();return;}
+        rejectDepartureInput();
+        const auto prevSource=activeCommandSource;activeCommandSource="palette";
+        if(!dispatchTextCommand(id,focus))runWorkspaceShortcut(id);
+        activeCommandSource=prevSource;
     }

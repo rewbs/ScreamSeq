@@ -101,7 +101,8 @@ std::vector<MidiEvent> MidiInput::drainSafe() {
     // A lost release invalidates the whole pending batch. Emitting panic before
     // queued note-ons would immediately restart notes with no matching release.
     result.clear();
-    result.push_back({0, 0xb0, 123, 0});
+    for (uint8_t ch = 0; ch < 16; ++ch)
+      result.push_back({0, uint8_t(0xb0 | ch), 123, 0});
     // A producer may have reserved a slot without publishing it yet. Quarantine
     // those older events too, until every outstanding reservation is drained.
     if (tail_ == head_.load(std::memory_order_acquire))

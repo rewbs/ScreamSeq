@@ -5,7 +5,7 @@ namespace ScreamSeq {
 class AudioSettingsWindow final : public NativeToolWindow {
   using Json=Api::Json;
   enum:int {endpoint=5701,period,refresh,apply,reload,close,heading=5800,deviceLabel,periodLabel,help,statusLabel};
-  static constexpr unsigned periods_[5]={0,64,128,256,512};
+  std::vector<unsigned> periodValues_{0,64,128,256,512};
   std::function<Json(const std::string &,const Json &)> request_;
   Json devices_=Json::array(),settings_;
   std::vector<std::string> ids_;
@@ -21,16 +21,31 @@ class AudioSettingsWindow final : public NativeToolWindow {
     if(!selected_.empty()&&!selection){ids_.push_back(selected_);const auto label=L"Unavailable / "+wide(selected_);ScreamSeq::NativeInputGate::present(controls_.at(endpoint),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(label.c_str()));selection=int(ids_.size()-1);}
     ScreamSeq::NativeInputGate::present(controls_.at(endpoint),CB_SETCURSEL,selection,0);setting_=false;
   }
+  void populatePeriods(){
+    setting_=true;
+    periodValues_={0,64,128,256,512};
+    if(std::find(periodValues_.begin(),periodValues_.end(),frames_)==periodValues_.end())periodValues_.push_back(frames_);
+    ScreamSeq::NativeInputGate::present(controls_.at(period),CB_RESETCONTENT,0,0);
+    int selection=0;
+    for(size_t i=0;i<periodValues_.size();++i){
+      const auto n=periodValues_[i];
+      const auto text=n?std::to_wstring(n)+L" frames":L"Lowest supported";
+      ScreamSeq::NativeInputGate::present(controls_.at(period),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(text.c_str()));
+      if(n==frames_)selection=int(i);
+    }
+    ScreamSeq::NativeInputGate::present(controls_.at(period),CB_SETCURSEL,selection,0);
+    setting_=false;
+  }
   void describe(){
     const auto &checked=settings_.at("checked");
     if(checked.is_object())status(L"Checked output / "+std::to_wstring(checked.at("sampleRate").get<unsigned>())+L" Hz / actual period "+std::to_wstring(checked.at("periodFrames").get<unsigned>())+L" frames / buffer "+std::to_wstring(checked.at("bufferFrames").get<unsigned>())+L" frames");
     else status(L"Choose an output and preferred period / Switch output stops playback");
   }
-  void current(){settings_=call("audio.settings.get");selected_=settings_.at("endpoint").get<std::string>();frames_=settings_.at("periodFrames");outputs();for(unsigned i=0;i<5;++i)if(periods_[i]==frames_)ScreamSeq::NativeInputGate::present(controls_.at(period),CB_SETCURSEL,i,0);describe();}
+  void current(){settings_=call("audio.settings.get");selected_=settings_.at("endpoint").get<std::string>();frames_=settings_.at("periodFrames");outputs();populatePeriods();describe();}
   void action(int id,unsigned notification)override {
     if(setting_||!ready_)return;if(id==close){hide();return;}if(pending_)return;
     if(id==endpoint&&notification==CBN_SELCHANGE){const auto i=SendMessageW(controls_.at(endpoint),CB_GETCURSEL,0,0);if(i>=0&&size_t(i)<ids_.size())selected_=ids_[size_t(i)];return;}
-    if(id==period&&notification==CBN_SELCHANGE){const auto i=SendMessageW(controls_.at(period),CB_GETCURSEL,0,0);if(i>=0&&i<5)frames_=periods_[i];return;}
+    if(id==period&&notification==CBN_SELCHANGE){const auto i=SendMessageW(controls_.at(period),CB_GETCURSEL,0,0);if(i>=0&&size_t(i)<periodValues_.size())frames_=periodValues_[size_t(i)];return;}
     if(notification!=BN_CLICKED)return;
     pending_=true;layout();try {
       if(id==refresh){devices_=call("audio.devices.get").at("devices");outputs();status(L"Outputs refreshed / your selection is retained");}
@@ -42,11 +57,10 @@ class AudioSettingsWindow final : public NativeToolWindow {
     if(value==VK_ESCAPE){hide();return true;}
     if(value==VK_RETURN){wchar_t type[32]{};GetClassNameW(GetFocus(),type,32);if(_wcsicmp(type,L"Button")==0)action(GetDlgCtrlID(GetFocus()),BN_CLICKED);else action(apply,BN_CLICKED);return true;}return false;
   }
-  void layout()override{if(!ready_)return;const auto [w,h]=size();place(heading,18,14,w-36,26);place(deviceLabel,18,52,w-36,20);place(endpoint,18,76,w-146,240);place(refresh,w-116,76,98,27);place(periodLabel,18,116,w-36,20);place(period,18,140,210,190);place(help,18,183,w-36,47);place(statusLabel,18,238,w-36,std::max(42.f,h-300));place(reload,18,h-48,140,28);place(apply,w-204,h-48,86,28);place(close,w-106,h-48,88,28);for(int id:{endpoint,period,refresh,apply,reload})EnableWindow(controls_.at(id),!pending_);}
+  void layout()override{if(!ready_)return;const auto [w,h]=size();place(heading,18,14,w-36,26);place(deviceLabel,18,52,w-36,20);place(endpoint,18,76,w-146,240);place(refresh,w-116,76,98,27);place(periodLabel,18,116,w-36,20);place(period,18,140,210,190);place(help,18,183,w-36,47);place(statusLabel,18,238,w-36,std::max(42.f,h-300));place(reload,18,h-48,140,28);place(apply,w-242,h-48,124,28);place(close,w-106,h-48,88,28);for(int id:{endpoint,period,refresh,apply,reload})EnableWindow(controls_.at(id),!pending_);}
 public:
   AudioSettingsWindow(HWND owner,std::function<Json(const std::string &,const Json &)> request):NativeToolWindow(owner),request_(std::move(request)){
     minimumWidth_=560;minimumHeight_=380;create(L"ScreamSeq.AudioSettings",L"Audio settings",620,400);combo(endpoint);combo(period);
-    for(unsigned n:periods_){const auto text=n?std::to_wstring(n)+L" frames":L"Lowest supported";ScreamSeq::NativeInputGate::present(controls_.at(period),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(text.c_str()));}
     for(auto [id,text]:std::initializer_list<std::pair<int,const wchar_t *>>{{refresh,L"Refresh"},{apply,L"Switch output"},{reload,L"Use current settings"},{close,L"Close"}})button(id,text);
     for(auto [id,text]:std::initializer_list<std::pair<int,const wchar_t *>>{{heading,L"Audio output"},{deviceLabel,L"Output device"},{periodLabel,L"Preferred buffer period"},{help,L"The device chooses its supported period and sample rate.\nSwitch output stops playback. Settings last for this session."},{statusLabel,L""}})label(id,text);
     devices_=call("audio.devices.get").at("devices");current();finish();

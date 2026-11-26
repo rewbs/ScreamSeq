@@ -210,13 +210,14 @@
         if(!mixerDirty&&(mixerRevision!=view->session.revision||mixerDocument!=documentId)){refreshMixer();layoutControls();}
         Tracker::MixerMeterReading reading;
         if(device.running()&&preparedPlayback)reading=preparedPlayback->chain().identifiedMixerMeters();
-        mixerMeters.clear();
+        std::vector<Tracker::MixerMeter> nextMeters;
         if(reading.fresh&&mixerRevision==view->session.revision)for(const auto &bus:mixerData.value("buses",Json::array())) {
             const auto found=std::find_if(reading.buses.begin(),reading.buses.end(),[&](const auto &meter){return bus.at("id")=="n"+std::to_string(meter.id);});
-            if(found==reading.buses.end()){mixerMeters.clear();break;}
-            mixerMeters.push_back(found->level);
+            if(found==reading.buses.end()){nextMeters.clear();break;}
+            nextMeters.push_back(found->level);
         }
-        frameRequested=true;
+        const bool metersChanged=nextMeters.size()!=mixerMeters.size()||!std::equal(nextMeters.begin(),nextMeters.end(),mixerMeters.begin(),[](const auto &a,const auto &b){return a.left==b.left&&a.right==b.right;});
+        if(metersChanged){mixerMeters=std::move(nextMeters);frameRequested=true;}
         if(mixerStrips&&!mixerStrips->retired()) {
             mixerStrips->update();mixerStrips->meters(reading);
         }

@@ -64,7 +64,10 @@ inline Json parsePatternClipboard(std::string_view text) {
     if(text.starts_with(patternClipboardPrefix))prefix=patternClipboardPrefix.size();
     else if(text.starts_with("ScreamSeq Pattern 2\r\n"))prefix=std::string_view("ScreamSeq Pattern 2\r\n").size();
     if(prefix) {
-        auto payload=Json::parse(text.substr(prefix));
+        auto payload=Json::parse(text.substr(prefix),[](int depth,Json::parse_event_t,Json &){
+            if(depth>16)throw std::runtime_error("Pattern clipboard JSON nesting too deep");
+            return true;
+        });
         if(!payload.is_object())throw std::runtime_error("Invalid pattern clipboard object");
         const std::set<std::string> keys={"rows","channels","cells","effects","bindings","notes","scratchGestures"};
         for(auto i=payload.begin();i!=payload.end();++i)if(!keys.contains(i.key()))throw std::runtime_error("Invalid pattern clipboard field");

@@ -18,7 +18,7 @@ class PreciseNoteRuntime {
   uint32_t pattern_=UINT32_MAX,order_=UINT32_MAX;
   double previous_=-1;
   uint32_t row_=UINT32_MAX;
-  std::array<bool,127> effectOverrides_{};
+  std::array<bool,OpenMPT::MAX_BASECHANNELS> effectOverrides_{};
 public:
   explicit PreciseNoteRuntime(const NativeSong &);
   PreciseNoteRuntime(const PreciseNoteRuntime &)=delete;
