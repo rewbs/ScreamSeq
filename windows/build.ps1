@@ -10,6 +10,8 @@ param(
     [ValidateSet('Debug', 'Release', 'RelWithDebInfo')][string]$Configuration = 'Release',
     [string]$BuildDirectory = '',
     [ValidateRange(1, 128)][int]$Jobs = 4,
+    [ValidateSet('Visual Studio 17 2022', 'Ninja Multi-Config')][string]$Generator = 'Visual Studio 17 2022',
+    [string]$CompilerLauncher = '',
     [string[]]$Target = @(),
     [switch]$Test,
     [switch]$ConfigureOnly,
@@ -76,9 +78,46 @@ if (-not (Test-Path $cmake)) {
 }
 $ctest = Join-Path (Split-Path -Parent $cmake) 'ctest.exe'
 if ($Test -and -not (Test-Path $ctest)) { throw "CTest not found next to $cmake" }
-Write-Host "ScreamSeq: $Architecture / $Configuration -> $BuildDirectory"
-$configureArguments = @('-S', $PSScriptRoot, '-B', $BuildDirectory, '-G', 'Visual Studio 17 2022',
-    '-A', $Architecture, "-DCMAKE_GENERATOR_INSTANCE=$vsPath", '-DBUILD_TESTING=ON')
+Write-Host "ScreamSeq: $Architecture / $Configuration ($Generator) -> $BuildDirectory"
+if ($Generator -eq 'Ninja Multi-Config') {
+    if ($Architecture -eq 'ARM64EC') {
+        throw 'Ninja Multi-Config does not configure ARM64EC; use Visual Studio 17 2022 for ARM64EC.'
+    }
+    $ninja = Join-Path $vsPath 'Common7/IDE/CommonExtensions/Microsoft/CMake/Ninja/ninja.exe'
+    if (-not (Test-Path $ninja)) {
+        $ninjaCmd = Get-Command ninja.exe -ErrorAction SilentlyContinue
+        if (-not $ninjaCmd) { throw 'Ninja not found; install the Visual Studio C++ CMake tools or ninja.exe.' }
+        $ninja = $ninjaCmd.Source
+    }
+    $vcvars = Join-Path $vsPath 'VC/Auxiliary/Build/vcvarsall.bat'
+    if (-not (Test-Path $vcvars)) { throw "vcvarsall.bat not found under $vsPath" }
+    $vcvarsArch = if ($Architecture -eq 'ARM64') {
+        if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64') { 'arm64' } else { 'amd64_arm64' }
+    } else { 'x64' }
+    $envScript = Join-Path ([IO.Path]::GetTempPath()) ("screamseq-vcvars-" + [Guid]::NewGuid().ToString('N') + '.cmd')
+    try {
+        "@echo off`r`ncall `"$vcvars`" $vcvarsArch >nul 2>&1 || exit /b 1`r`nset" | Set-Content -LiteralPath $envScript -Encoding ASCII
+        $envLines = & cmd.exe /c $envScript
+        if ($LASTEXITCODE -ne 0) { throw "Failed to initialize Visual Studio environment ($vcvarsArch)." }
+        foreach ($line in $envLines) {
+            $eq = $line.IndexOf('=')
+            if ($eq -gt 0) {
+                [Environment]::SetEnvironmentVariable($line.Substring(0, $eq), $line.Substring($eq + 1), 'Process')
+            }
+        }
+    } finally {
+        Remove-Item -LiteralPath $envScript -Force -ErrorAction SilentlyContinue
+    }
+    $configureArguments = @('-S', $PSScriptRoot, '-B', $BuildDirectory, '-G', 'Ninja Multi-Config',
+        "-DCMAKE_MAKE_PROGRAM=$ninja", "-DCMAKE_DEFAULT_BUILD_TYPE=$Configuration", '-DBUILD_TESTING=ON')
+} else {
+    $configureArguments = @('-S', $PSScriptRoot, '-B', $BuildDirectory, '-G', 'Visual Studio 17 2022',
+        '-A', $Architecture, "-DCMAKE_GENERATOR_INSTANCE=$vsPath", '-DBUILD_TESTING=ON')
+}
+if ($CompilerLauncher) {
+    $configureArguments += "-DCMAKE_C_COMPILER_LAUNCHER=$CompilerLauncher"
+    $configureArguments += "-DCMAKE_CXX_COMPILER_LAUNCHER=$CompilerLauncher"
+}
 $configureArguments += if ($NoApp) { '-DSCREAMSEQ_BUILD_APP=OFF' } else { '-DSCREAMSEQ_BUILD_APP=ON' }
 if ($Fresh) { $configureArguments += '--fresh' }
 & $cmake @configureArguments

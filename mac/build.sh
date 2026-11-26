@@ -10,7 +10,19 @@ fi
 mkdir -p "$tracker_build"
 tracker_build="$(cd "$tracker_build" && pwd)"
 tracker_app="$tracker_build/ScreamSeq.app"
-cmake -S mac -B "$tracker_build" -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_DEPLOYMENT_TARGET=14.0
+cmake_args=(
+  -S mac -B "$tracker_build"
+  -DCMAKE_BUILD_TYPE=Release
+  -DCMAKE_OSX_DEPLOYMENT_TARGET=14.0
+)
+if [[ -n "${SCREAMSEQ_COMPILER_LAUNCHER:-}" ]]; then
+  cmake_args+=(
+    "-DCMAKE_C_COMPILER_LAUNCHER=${SCREAMSEQ_COMPILER_LAUNCHER}"
+    "-DCMAKE_CXX_COMPILER_LAUNCHER=${SCREAMSEQ_COMPILER_LAUNCHER}"
+    "-DCMAKE_OBJCXX_COMPILER_LAUNCHER=${SCREAMSEQ_COMPILER_LAUNCHER}"
+  )
+fi
+cmake "${cmake_args[@]}"
 cmake --build "$tracker_build" -j "$tracker_jobs"
 mkdir -p "$tracker_app/Contents/MacOS" "$tracker_app/Contents/Resources"
 xcrun swiftc -O -whole-module-optimization -num-threads "$tracker_jobs" -g -swift-version 5 -target "${tracker_arch}-apple-macosx14.0" \

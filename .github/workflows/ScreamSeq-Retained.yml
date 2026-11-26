@@ -106,4 +106,4 @@ jobs:
             bin/retained-result/**
             !bin/retained-result/app/**
           if-no-files-found: warn
-          retention-days: 14
+          retention-days: 7

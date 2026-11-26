@@ -18,8 +18,14 @@ target_compile_definitions(ScreamSeqBuildOptions INTERFACE
   NOMINMAX UNICODE _UNICODE _WIN32_WINNT=0x0A00
   _CRT_SECURE_NO_WARNINGS _CRT_NONSTDC_NO_WARNINGS)
 if(MSVC)
+  set(SCREAMSEQ_MSVC_COMMON_FLAGS /utf-8 /bigobj)
+  # Ninja parallelizes translation units across targets and supports compiler
+  # launchers like ccache; /MP only applies to MSBuild and blocks caching.
+  if(NOT CMAKE_GENERATOR MATCHES "Ninja")
+    list(APPEND SCREAMSEQ_MSVC_COMMON_FLAGS /MP4)
+  endif()
   target_compile_options(ScreamSeqBuildOptions INTERFACE
-    "$<$<COMPILE_LANGUAGE:C,CXX>:/utf-8;/bigobj;/MP4>"
+    "$<$<COMPILE_LANGUAGE:C,CXX>:${SCREAMSEQ_MSVC_COMMON_FLAGS}>"
     "$<$<COMPILE_LANGUAGE:CXX>:/permissive-;/Zc:__cplusplus;/Zc:preprocessor>")
 endif()
 
