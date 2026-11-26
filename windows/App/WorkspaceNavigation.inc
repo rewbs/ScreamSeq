@@ -96,7 +96,8 @@
         return false;
     }
     template<class Place>void layoutNavigation(Place place){
-        place(navigationWindowsCommand,564,12,108,26);place(navigationLayoutsCommand,680,12,80,26);place(liveKeysCommand,768,12,108,26);
+        const auto toolbarEnd=workspaceClientWidth()-250;
+        place(navigationWindowsCommand,564,12,108,26,toolbarEnd>=672);place(navigationLayoutsCommand,680,12,80,26,toolbarEnd>=760);place(liveKeysCommand,768,12,108,26,toolbarEnd>=876);
         const auto available=workspaceClientWidth();float x=174;
         for(const auto [id,width]:std::initializer_list<std::pair<int,float>>{
             {navigationPatternCommand,72.f},{navigationSamplesCommand,72.f},{navigationInstrumentsCommand,90.f},

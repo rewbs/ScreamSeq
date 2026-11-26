@@ -12,6 +12,7 @@ namespace ScreamSeq::NativeControls {
 // Presentation belongs to the UI thread. Keep requested geometry: a combo's
 // actual window height is its closed height, not the requested dropdown height.
 struct State {
+  std::wstring compactCaption; // Visible glyph can differ from the accessible window name.
   std::array<int,4> bounds{};
   bool placed=false,active=false,combo=false,edit=false,button=false,hot=false,inspect=false,contrast=false;
 };
@@ -142,6 +143,7 @@ inline void buttonItem(const DRAWITEMSTRUCT &item,Surface surface,bool active=fa
   const int inset=std::max(1,MulDiv(6,GetDpiForWindow(d.hwndItem),96));InflateRect(&rect,-inset,-1);
   if(pressed)OffsetRect(&rect,1,1);
   std::wstring text(size_t(GetWindowTextLengthW(d.hwndItem))+1,0);GetWindowTextW(d.hwndItem,text.data(),int(text.size()));text.resize(wcslen(text.c_str()));
+  if(const auto *s=state(d.hwndItem);s&&!s->compactCaption.empty())text=s->compactCaption;
   DrawTextW(d.hDC,text.data(),int(text.size()),&rect,DT_CENTER|DT_VCENTER|DT_SINGLELINE|DT_END_ELLIPSIS|DT_NOPREFIX);
   if((d.itemState&ODS_FOCUS)&&!(d.itemState&ODS_NOFOCUSRECT)) {
     rect=d.rcItem;const int focusInset=std::max(2,MulDiv(3,GetDpiForWindow(d.hwndItem),96));InflateRect(&rect,-focusInset,-focusInset);DrawFocusRect(d.hDC,&rect);

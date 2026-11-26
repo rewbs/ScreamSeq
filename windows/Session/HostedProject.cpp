@@ -92,6 +92,14 @@ HostedProjectPlayback::HostedProjectPlayback(Tracker::Document &document,const P
 HostedProjectPlayback::~HostedProjectPlayback(){renderer_.reset();chain_.reset();}
 std::unique_ptr<HostedProjectPlayback::PreparedNativeUpdate> HostedProjectPlayback::prepareNativeUpdate(
     const Tracker::NativeSong &before,const Tracker::NativeSong &next,const std::vector<Tracker::Edit> &cells) {
+  if(before.performance!=next.performance&&cells.empty()){
+    auto a=before,b=next;
+    std::erase_if(a.performance.commands,Tracker::isGate);std::erase_if(b.performance.commands,Tracker::isGate);
+    if(a!=b)return {};
+    if(nativeUpdateGeneration_==UINT64_MAX)throw std::runtime_error("Live update generation exhausted");
+    auto prepared=std::make_unique<PreparedNativeUpdate>();prepared->owner_=this;prepared->generation_=nativeUpdateGeneration_;
+    prepared->gates_=renderer_->gates()->prepareUpdate(next);return prepared;
+  }
   if(before.preciseNotes!=next.preciseNotes||!cells.empty()) {
     auto notesOnly=before;notesOnly.preciseNotes=next.preciseNotes;
     if(notesOnly!=next||cells.size()>512)return {};
@@ -136,7 +144,7 @@ std::unique_ptr<HostedProjectPlayback::PreparedNativeUpdate> HostedProjectPlayba
 }
 bool HostedProjectPlayback::publishNativeUpdate(PreparedNativeUpdate &prepared) {
   if(prepared.owner_!=this || prepared.generation_!=nativeUpdateGeneration_ || prepared.published_)return false;
-  const bool accepted=prepared.preciseNotes_?renderer_->publishPreciseNoteUpdate(prepared.preciseNotes_):prepared.columnMutes_?renderer_->publishColumnMuteUpdate(prepared.columnMutes_):prepared.scratch_?renderer_->publishScratchUpdate(prepared.scratch_):prepared.controls_?chain_->publishGraphControls(std::move(prepared.controls_)):
+  const bool accepted=prepared.gates_?renderer_->gates()->publishUpdate(prepared.gates_):prepared.preciseNotes_?renderer_->publishPreciseNoteUpdate(prepared.preciseNotes_):prepared.columnMutes_?renderer_->publishColumnMuteUpdate(prepared.columnMutes_):prepared.scratch_?renderer_->publishScratchUpdate(prepared.scratch_):prepared.controls_?chain_->publishGraphControls(std::move(prepared.controls_)):
     prepared.routing_&&chain_->publishMixerRouting(prepared.routing_);
   if(accepted){prepared.published_=true;++nativeUpdateGeneration_;}
   return accepted;

@@ -1,4 +1,41 @@
+void instrumentPluginRemovedTarget(){
+  using Json=RestoreJson;RestoreFixture fixture;
+  std::pair<std::string,std::string> context={"removed-target","r1"};
+  Json instruments=Json::array({{{"id","n1"},{"index",1},{"name","Captured instrument"}}});
+  const auto original=instruments;unsigned writes=0;bool failRead=false,changeDuringRead=false;
+  ScreamSeq::InstrumentPluginWindow panel(fixture.root,context.first,"n1",
+    [&](const std::string &method,const Json &)->Json{
+      if(method=="synchronizeView")return Json::object();
+      restoreCheck(method=="document.get","Removed-target review must only read the document");
+      if(failRead)throw std::runtime_error("Controlled catalogue read failure");
+      if(changeDuringRead)context.second+="x";
+      return {{"instruments",instruments},{"nativePlugins",Json::array()}};
+    },[&]{return context;},[&](const std::string &,const Json &)->ScreamSeq::Api::CompletedCall{
+      ++writes;throw std::runtime_error("Removed-target review must never submit an assignment");
+    },[](bool){});
+  ScreamSeq::Tests::ownGuiWindow(panel.window());panel.show();
+  const auto press=[&](int id){SendMessageW(panel.window(),WM_COMMAND,MAKEWPARAM(id,BN_CLICKED),reinterpret_cast<LPARAM>(GetDlgItem(panel.window(),id)));};
+  // An Undo can remove a clean inspected instrument before the next native
+  // selection notification. That stale selection must remain reviewable.
+  context.second="r2";instruments=Json::array();
+  SendMessageW(panel.window(),WM_COMMAND,MAKEWPARAM(4801,CBN_SELCHANGE),reinterpret_cast<LPARAM>(GetDlgItem(panel.window(),4801)));
+  restoreCheck(panel.retainedDraft(),"Stale assignment fixture did not retain its draft");press(4804);
+  restoreCheck(panel.snapshot().at("removed")==true&&panel.retainedDraft(),"Missing instrument review silently discarded the assignment");
+  const auto discard=GetDlgItem(panel.window(),4808);
+  restoreCheck(discard&&IsWindowVisible(discard)&&IsWindowEnabled(discard),"Missing instrument has no explicit discard action");
+  instruments=original;context.second="r3";press(4808);
+  restoreCheck(panel.retainedDraft()&&panel.visible(),"Discard ignored an instrument restored after Review");
+  instruments=Json::array();context.second="r4";press(4804);failRead=true;press(4808);failRead=false;
+  restoreCheck(panel.retainedDraft(),"Failed catalogue read discarded the captured draft");
+  changeDuringRead=true;press(4808);changeDuringRead=false;
+  restoreCheck(panel.retainedDraft(),"Changed catalogue revision discarded the captured draft");
+  press(4804);press(4808);
+  restoreCheck(!panel.retainedDraft()&&!panel.visible()&&writes==0&&panel.snapshot().at("instrument")=="n1", "Explicit removed-target discard wrote, retargeted or retained the draft");
+  std::cout<<"PASS removed instrument assignment: explicit discard, fresh identity check, failed/stale reads and no writes\n";
+}
+
 void applicationInstrumentPluginAssignment(){
+  instrumentPluginRemovedTarget();
   using Json=RestoreJson;RestoreFixture fixture;auto &app=*fixture.app;
   auto env=[](const wchar_t *key){wchar_t value[32768]{};const auto size=GetEnvironmentVariableW(key,value,DWORD(std::size(value)));restoreCheck(size&&size<std::size(value),"Missing fixture environment");return std::filesystem::path(value);};
   Tracker::WindowsVST3::configure(utf8Path(env(L"SCREAMSEQ_WORKSPACE_VST3_SCANNER")),utf8Path(fixture.folder/L"instrument-cache.json"));
@@ -53,5 +90,43 @@ void applicationInstrumentPluginAssignment(){
   write("history.undo",{{"domain","all"}});SendMessageW(window,WM_TIMER,1,0);restoreCheck(snapshot().at("plugin")==plugin,"Unassign recovery added another Undo");
   press(4807);const auto saved=saveDepartureFixture(fixture);app.documentOperation("document.open",departureOpenRequest(app,saved));
   restoreCheck(app.documentOperation("plugin.instruments.get",{{"plugin",plugin}}).at("assignments")==assignment&&app.documentOperation("instrument.get",{{"instrument",1}}).at("mapping")==mapping,"Save/reopen lost layered assignment, MIDI channel or sample map");
-  fixture.close();std::cout<<"PASS instrument-panel plugin assignment, browse/rack, captured drafts, lost receipt, Undo/Redo and save/reopen\n";
+  // Rack creation retains its own receipt before submission. Reviewing a lost
+  // callback must never create a second trigger or repeat the assignment.
+  app.syncPluginRack();app.selectedPlugin=plugin;
+  const auto beforeTriggers=app.view->session.document.at("instruments");
+  app.completionFault=[]{throw std::runtime_error("Lost trigger creation callback");};
+  restoreRejected([&]{app.pluginCommand(pluginNewInstrument);});
+  restoreCheck(app.pluginTriggerCompletion.retained()&&app.view->session.document.at("instruments").size()==beforeTriggers.size()+1,"Lost trigger creation was not retained");
+  const auto creationRevision=app.view->session.revision;
+  app.pluginCommand(pluginNewInstrument);
+  restoreCheck(!app.pluginTriggerCompletion.retained()&&app.pendingPluginTriggers.contains(plugin)&&app.view->session.revision==creationRevision,"Trigger Review repeated creation or assignment");
+  const auto trigger=app.view->session.document.at("instruments").back();
+  const auto triggerSlot=trigger.at("index").get<unsigned>();
+  const auto triggerInfo=app.documentOperation("instrument.get",{{"instrument",triggerSlot}});
+  restoreCheck(triggerInfo.at("name")=="Resonance Test Instrument","Generated trigger name was truncated instead of using the complete plugin name");
+  bool failAssignment=true;
+  app.sampleMutationCompletion=[&](const std::string &method){if(method=="instrument.plugin.set"&&std::exchange(failAssignment,false))throw std::runtime_error("Lost trigger assignment callback");};
+  restoreRejected([&]{app.pluginCommand(pluginNewInstrument);});
+  app.sampleMutationCompletion={};
+  restoreCheck(app.pluginTriggerCompletion.retained(),"Lost assignment discarded the retained trigger receipt");
+  const auto assignmentRevision=app.view->session.revision;app.pluginCommand(pluginNewInstrument);
+  restoreCheck(!app.pluginTriggerCompletion.retained()&&!app.pendingPluginTriggers.contains(plugin)&&app.view->session.revision==assignmentRevision,"Assignment Review replayed the write");
+  write("history.undo",{{"domain","all"}});
+  restoreCheck(app.view->session.document.at("instruments").back()==trigger,"Assignment Undo removed or changed the created trigger");
+  write("history.undo",{{"domain","all"}});
+  restoreCheck(app.view->session.document.at("instruments")==beforeTriggers,"Creation Undo did not restore the original instrument catalogue");
+  write("history.redo",{{"domain","all"}});write("history.redo",{{"domain","all"}});
+  // Unknown completion uses read-only Review and explicit acknowledgement. A
+  // newer revision invalidates acknowledgement rather than replaying input.
+  restoreRejected([&]{app.pluginTriggerCompletion.submit([](const std::string &,const Json &)->ScreamSeq::Api::CompletedCall{throw std::runtime_error("Unknown trigger delivery");},
+    "instrument.plugin.set",Json::object(),app.documentId,++app.pluginTriggerGeneration,app.pluginTriggerTarget);});
+  const auto unknownRevision=app.view->session.revision;app.pluginCommand(pluginNewInstrument);
+  restoreCheck(app.pluginTriggerReviewed&&app.pluginTriggerCompletion.retained()&&app.view->session.revision==unknownRevision,"Unknown trigger Review wrote or lost the outcome");
+  write("document.patch",{{"title","Newer trigger review"}});restoreRejected([&]{app.pluginCommand(pluginNewInstrument);});
+  restoreCheck(app.pluginTriggerCompletion.retained()&&!app.pluginTriggerReviewed,"Stale trigger acknowledgement discarded its outcome");
+  app.pluginCommand(pluginNewInstrument);const auto reviewedRevision=app.view->session.revision;app.pluginCommand(pluginNewInstrument);
+  restoreCheck(!app.pluginTriggerCompletion.retained()&&app.view->session.revision==reviewedRevision,"Acknowledging a trigger outcome repeated a write");
+  const auto triggerSaved=saveDepartureFixture(fixture);app.documentOperation("document.open",departureOpenRequest(app,triggerSaved));
+  restoreCheck(app.documentOperation("instrument.get",{{"instrument",triggerSlot}})==triggerInfo,"Trigger save/reopen lost the complete name or empty keymap");
+  fixture.close();std::cout<<"PASS instrument-panel plugin assignment and retained rack trigger creation, lost callbacks, read-only Review, Undo/Redo and save/reopen\n";
 }

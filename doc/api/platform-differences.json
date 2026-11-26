@@ -3,7 +3,8 @@
   "policy": "Evidence ratchet only. Baseline matches are not parity passes, loss waivers, or permission to skip release gates. Intentional changes require reviewing exact vectors, inventory and native behavior on both platforms.",
   "schema": {
     "path": "mac/Tools/resonance-api.schema.json",
-    "sha256": "b57ac0021a27d16fc9bbf4b081713dded20f324f710c92fe59c343ac5542fc27",
+    "sha256": "73a3a04774413c72dd7efd7ef24c403b4bab43019e3189cc8fbbc9c2c31cfc43",
+    "review20261031": "Empty instrument.create names are limited to 31 UTF-8 bytes before mutation or dry-run on both platforms, matching the native instrument-name storage bound. Method inventory and existing vector outcomes are unchanged. Windows API boundary and exact save/reopen checks pass; the matching Mac API guard and regression require macOS execution.",
     "review20261023": "Source review f4d0fb7a4/a33b7dca9: seven native-take descriptions now describe guarded Mac VST3 processing verification; Commit adds strict optional boolean restoreSavedState with completed/stopped/closed-editor guards. Method inventory and expected vector outcomes are unchanged. New behavior awaits native qualification; see doc/windows-parity-plan-2026-10-09/LIVE-PARAMETER-RELEASE-2026-10-23.md.",
     "methods": [
       "api.describe",
@@ -155,6 +156,7 @@
       "parameter.activity.sources",
       "parameter.activity.targets",
       "parameter.activity.watch",
+      "pattern.activity.get",
       "pattern.apply",
       "pattern.commands",
       "pattern.create",
@@ -254,6 +256,7 @@
       "sequence.select",
       "song.annotate",
       "track.column.set",
+      "track.columns.set",
       "track.create",
       "track.get",
       "track.group",
@@ -285,7 +288,8 @@
         "plugin.editor.open"
       ],
       "note": "Mac rack editor presentation uses the existing native host and guarded session API. Historical runtime receipts do not cover these additions."
-    }
+    },
+    "review20261101": "Adds read-only pattern.activity.get and atomic track.columns.set. Shared replay/catalog and edit candidate are used by both adapters. Windows native/API/audio evidence is recorded in windows/PATTERN_CONTEXT_2026-11-01.md; Mac adapter and portable-test registration are source-only pending native qualification. Existing vector expectations are unchanged."
   },
   "platforms": {
     "windows": {
@@ -338,6 +342,7 @@
         "parameter.activity.parameters",
         "parameter.activity.sources",
         "parameter.activity.targets",
+        "pattern.activity.get",
         "pattern.commands",
         "pattern.effects.get",
         "pattern.get",
@@ -545,6 +550,7 @@
         "sequence.select",
         "song.annotate",
         "track.column.set",
+        "track.columns.set",
         "track.create",
         "track.group",
         "track.ungroup",
@@ -651,6 +657,18 @@
         "removed": [],
         "evidence": "doc/windows-parity-plan-2026-10-09/PLUGIN-API-INVENTORY-2026-10-22.md",
         "note": "Inventory expectations only; no passing full conformance or final parity claim."
+      },
+      "patternContextReview20261101": {
+        "status": "windows-native-api-qualified",
+        "readsAdded": [
+          "pattern.activity.get"
+        ],
+        "writesAdded": [
+          "track.columns.set"
+        ],
+        "evidence": "windows/PATTERN_CONTEXT_2026-11-01.md",
+        "note": "The current Windows binary advertises exactly the reviewed reads/writes inventory. Seven focused activity/mute API tests pass, with separate native control and audio checks. This is not a full cross-platform conformance claim.",
+        "runtimeInventory": "bin/windows-pattern-context/qa/api-inventory.json"
       }
     },
     "macos": {
@@ -705,6 +723,7 @@
         "parameter.activity.parameters",
         "parameter.activity.sources",
         "parameter.activity.targets",
+        "pattern.activity.get",
         "pattern.commands",
         "pattern.effects.get",
         "pattern.get",
@@ -914,6 +933,7 @@
         "sequence.select",
         "song.annotate",
         "track.column.set",
+        "track.columns.set",
         "track.create",
         "track.group",
         "track.ungroup",
@@ -1011,7 +1031,18 @@
         "evidence": "doc/SCREAMSEQ_MAC_PARITY_CURRENT_MAIN_2026-10-28.md",
         "note": "Final rebased Mac app advertised exactly the reviewed read/write inventory. App socket and focused audio/MIDI settings tests passed; see the parity report for source fingerprint and scope. Earlier receipts remain historical; this is not complete cross-platform qualification."
       },
-      "pluginLocationReview20261030": "Six rack/graph plugin.path methods added to Mac source with isolated explicit scans, executable hashes, saved path hints and chronological history. Current native/socket/UI qualification recorded in the parity report; historical binary receipts above are unchanged."
+      "pluginLocationReview20261030": "Six rack/graph plugin.path methods added to Mac source with isolated explicit scans, executable hashes, saved path hints and chronological history. Current native/socket/UI qualification recorded in the parity report; historical binary receipts above are unchanged.",
+      "patternContextReview20261101": {
+        "status": "source-reviewed-runtime-unqualified",
+        "readsAdded": [
+          "pattern.activity.get"
+        ],
+        "writesAdded": [
+          "track.columns.set"
+        ],
+        "evidence": "windows/PATTERN_CONTEXT_2026-11-01.md",
+        "note": "Expected inventory additions. Historical binary receipts above do not qualify this change; see the dated report for current platform-specific evidence."
+      }
     }
   },
   "pairedContractReview20261020": {

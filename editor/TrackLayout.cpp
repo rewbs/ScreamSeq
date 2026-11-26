@@ -118,13 +118,18 @@ PreparedNoteTrackEdit prepareNoteTrackEdit(const NativeSong &native,
     require(found != candidate.noteTracks.end(), "Note track does not exist");
     candidate.noteTracks.erase(found); // Routing survives removal of visual grouping.
   } else {
-    const auto &mute = std::get<SetNoteColumnMute>(edit);
+    const auto batch = std::holds_alternative<SetNoteColumnMutes>(edit) ? std::get<SetNoteColumnMutes>(edit).columns : std::vector{std::get<SetNoteColumnMute>(edit)};
+    require(!batch.empty() && batch.size() <= song.GetNumChannels(), "Choose one or more distinct note columns");
+    std::set<uint64_t> seen;
+    for(const auto &mute : batch) {
+    require(seen.insert(mute.column).second, "Duplicate note column");
     prepared.affected = mute.column;
     const auto found = std::find_if(candidate.tracks.begin(), candidate.tracks.end(),
       [&](const auto &track) { return track.second.id == mute.column; });
     require(found != candidate.tracks.end() && found->first < song.GetNumChannels(), "Note column does not exist");
     if (mute.muted == song.ChnSettings[found->first].dwFlags[OpenMPT::CHN_MUTE]) candidate.columnMutes.erase(mute.column);
     else candidate.columnMutes[mute.column] = mute.muted;
+    }
   }
   if (!prepared.appendedColumns) candidate.validate(song);
   else {

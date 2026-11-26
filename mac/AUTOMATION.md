@@ -1306,6 +1306,11 @@ Undo:
   column's active plugin notes, including sustained background notes, and mutes
   its sample voices. Manual audition remains independent. Unmuting resumes
   surviving samples; released plugin notes resume only on subsequent note events.
+- `track.columns.set {columns:[{column:"n…",mute:true},…]}` changes a nonempty
+  set of distinct columns atomically. It uses the same live mute semantics,
+  revision guard, dry run, native persistence and one Undo step. Duplicate or
+  invalid identities reject the entire batch. Windows header Solo uses this
+  operation and retains the previous mute combination for its toggle-off action.
 
 Replies include `wouldChange`, `affectedID`, `appendedColumns`, and the proposed
 `layout`. IDs returned by a dry run are previews, not reserved identities.
@@ -1902,6 +1907,33 @@ contains `instrument`, `plugin`, `channel`, `wouldChange`, and `dryRun`.
 
 ### Playback displays and disconnected outputs
 
+`pattern.activity.get({pattern,order,row,channel})` analyses the first visit to
+the selected row/order occurrence from the current sequence's start. It runs a
+disposable shared renderer, never seeks live transport, and returns `reachable`,
+`complete`, `limitation`, `items` and `semantics`. Each item has a category,
+label and captured editor-link fields. Sounds include sample voices carried
+from earlier rows; Plugins lists held instrument-note owners and the routed
+effect path, explicitly marking bypass. Pattern FX lists the selected channel's
+cursor-row commands, inherited GT destinations and supported native continuing
+effects still observed by replay, plus active graph recipes. Finished one-shot
+commands and future rows are excluded. Envelopes includes
+enabled instrument envelopes, graph curves and pattern parameter lanes.
+
+Sample voices are observed at intervals of at most 32 frames at 48 kHz; this is
+context analysis, not an audibility meter. Vendor-private tails/modulation are
+not measured. Analysis is bounded to three seconds of worker time and one hour
+of song time; incomplete analysis is reported explicitly. Unarranged patterns
+or unreachable rows must not be shown as a successful empty sound result.
+Windows shows this in its left context pane, with asynchronous revision/cursor
+guards and scrollable editor links. The shared read API is available on both
+platforms; the new pane and channel header buttons are Windows UI additions.
+
+The Windows GT inspector coalesces valid value changes after 300 ms. Existing
+sample gate changes publish to running playback without resetting its clock;
+new onsets behind the playhead wait for the next visit. Undo/Redo uses the same
+prepared publication. New plugin-parameter destinations and combined structural
+edits can require stopped playback; rejection retains the draft and transport.
+
 `pattern.timeline.get({pattern, order?})` reads row positions in one bounded
 engine length walk. `order` selects an occurrence of a repeated pattern; omitted,
 it uses the first occurrence in the current sequence. Each entry in `positions`
@@ -1977,7 +2009,10 @@ accepts beats within the row: multiply beats by the pattern's rows per beat
 and 65,536 to obtain the offset units. Timing follows actual tempo, speed and groove.
 
 `instrument.create {empty:true, name:"Lead trigger", expectedRevision:...}` creates
-an empty instrument with no sample mapping. Assigning an instrument plugin to an existing sample-mapped instrument preserves the keymap and plays both sources. The sample layer follows its sample-instrument graph and tracker channel; the plugin layer follows its plugin audio-output routes. `instrument.plugin.set` with an empty plugin ID removes only the plugin assignment. This layering also applies to ordinary notes, precise notes and instrument audition. Optional `dryRun:true` validates and
+an empty instrument with no sample mapping. Its name accepts at most 31 UTF-8 bytes;
+longer names reject before any mutation, including in dry runs. Native projects
+preserve all accepted bytes through Save/reopen and history.
+Assigning an instrument plugin to an existing sample-mapped instrument preserves the keymap and plays both sources. The sample layer follows its sample-instrument graph and tracker channel; the plugin layer follows its plugin audio-output routes. `instrument.plugin.set` with an empty plugin ID removes only the plugin assignment. This layering also applies to ordinary notes, precise notes and instrument audition. Optional `dryRun:true` validates and
 returns the prospective slot. It preserves a sample-only song's existing playback
 by creating matching sample instruments before appending the empty trigger.
 Use the returned `instrument` and revision with `instrument.plugin.set` to assign

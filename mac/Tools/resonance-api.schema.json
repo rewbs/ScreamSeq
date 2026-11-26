@@ -325,7 +325,7 @@
         "params"
       ],
       "additionalProperties": false,
-      "description": "Atomic typed rack\u2194outer graph-stage auxiliary contribution. A stage is the combined row/persistent/ordinary bus stage, not one selected copy. Its auxiliary inputs feed every prepared copy; outputs sum audible wet/tail contributions. Input/output zero belongs to the main serial path and cannot address a stage. Omitted gain/enabled preserve the replaced connection."
+      "description": "Atomic typed rack↔outer graph-stage auxiliary contribution. A stage is the combined row/persistent/ordinary bus stage, not one selected copy. Its auxiliary inputs feed every prepared copy; outputs sum audible wet/tail contributions. Input/output zero belongs to the main serial path and cannot address a stage. Omitted gain/enabled preserve the replaced connection."
     },
     {
       "type": "object",
@@ -819,7 +819,7 @@
       "description": "Load a validated portable plugin preset into a shared recipe in one Undo. Preserve audio ports, routing, bypass and modulation ranges; update all target manual modulation baselines from the loaded preset. All uses update together through prepared publication."
     },
     {
-      "description": "Add a plugin-instrument note cable. New destinations wait for the next note-on. suppressAssignment atomically replaces an instrument\u2019s implicit cable.",
+      "description": "Add a plugin-instrument note cable. New destinations wait for the next note-on. suppressAssignment atomically replaces an instrument’s implicit cable.",
       "type": "object",
       "properties": {
         "jsonrpc": {
@@ -1031,7 +1031,7 @@
       "additionalProperties": false
     },
     {
-      "description": "Restore an instrument\u2019s implicit assigned-plugin note cable for future notes; existing held notes are not restarted.",
+      "description": "Restore an instrument’s implicit assigned-plugin note cable for future notes; existing held notes are not restarted.",
       "type": "object",
       "properties": {
         "jsonrpc": {
@@ -1477,7 +1477,7 @@
               "type": "integer",
               "minimum": 0,
               "maximum": 65535,
-              "description": "Final order position for move, preserving the entry\u2019s section metadata."
+              "description": "Final order position for move, preserving the entry’s section metadata."
             }
           },
           "allOf": [
@@ -2300,8 +2300,8 @@
             },
             "name": {
               "type": "string",
-              "maxLength": 200,
-              "description": "Name for empty:true only."
+              "maxLength": 31,
+              "description": "Name for empty:true only. At most 31 UTF-8 bytes (the byte limit can be shorter than 31 Unicode characters)."
             },
             "dryRun": {
               "type": "boolean",
@@ -9554,7 +9554,7 @@
       "additionalProperties": false
     },
     {
-      "description": "Replace sources mixed into a plugin input. 0 sums into Main in; 1\u201363 select named auxiliary/sidechain buses. Connected supported auxiliary ports enable automatically on playback; one document Undo.",
+      "description": "Replace sources mixed into a plugin input. 0 sums into Main in; 1–63 select named auxiliary/sidechain buses. Connected supported auxiliary ports enable automatically on playback; one document Undo.",
       "type": "object",
       "properties": {
         "jsonrpc": {
@@ -13696,7 +13696,7 @@
       "x-application-only": true
     },
     {
-      "description": "Atomically append 1\u2013128 sample files, optionally creating instruments; one document Undo. Every file is decoded before commit.",
+      "description": "Atomically append 1–128 sample files, optionally creating instruments; one document Undo. Every file is decoded before commit.",
       "type": "object",
       "properties": {
         "jsonrpc": {
@@ -14798,7 +14798,7 @@
         "params"
       ],
       "additionalProperties": false,
-      "description": "Allocate a node. Effects require exactly one rack slot or independent plugin recipe. Optional insertAfter splices an effect into the node\u2019s single main audio connection atomically."
+      "description": "Allocate a node. Effects require exactly one rack slot or independent plugin recipe. Optional insertAfter splices an effect into the node’s single main audio connection atomically."
     },
     {
       "type": "object",
@@ -21936,7 +21936,7 @@
       "description": "Bypass a real processing boundary while its contents keep running. A unique input/output dry path is inferred; ambiguous boundaries require an explicit dryRoutes map covering each outgoing boundary. graph:null selects a song group. One Undo; no per-member bypass substitution."
     },
     {
-      "description": "Replace sources mixed into a plugin input. 0 sums into Main in; 1\u201363 select named auxiliary/sidechain buses. Connected supported auxiliary ports enable automatically on playback; one document Undo.",
+      "description": "Replace sources mixed into a plugin input. 0 sums into Main in; 1–63 select named auxiliary/sidechain buses. Connected supported auxiliary ports enable automatically on playback; one document Undo.",
       "type": "object",
       "properties": {
         "jsonrpc": {
@@ -24069,6 +24069,126 @@
       ],
       "additionalProperties": false,
       "description": "Reconnect only the selected stable plugin to a matching scanned VST3 module, guarding its executable SHA-256; preserves sound/routes, supports dry run, no-op and chronological Undo."
+    },
+    {
+      "description": "Atomically set a nonempty set of distinct channel mutes, for solo/restore; one Undo, live publication and native persistence.",
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "track.columns.set"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "expectedRevision": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "columns": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 127,
+              "items": {
+                "type": "object",
+                "properties": {
+                  "column": {
+                    "type": "string",
+                    "pattern": "^n[1-9][0-9]*$"
+                  },
+                  "mute": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "column",
+                  "mute"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": [
+            "expectedRevision",
+            "columns"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "description": "Read first-visit row/channel activity by replaying from sequence start, with captured quick-link targets, routed plugin processors and enabled envelopes. Does not seek live transport. Explicit complete/reachable/limitation fields describe bounded analysis; vendor-private tails are not measured.",
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "pattern.activity.get"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "pattern": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 65535
+            },
+            "order": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 4294967295
+            },
+            "row": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 65535
+            },
+            "channel": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 126
+            }
+          },
+          "required": [
+            "pattern",
+            "order",
+            "row",
+            "channel"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
     }
   ],
   "$defs": {

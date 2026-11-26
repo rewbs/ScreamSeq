@@ -74,6 +74,7 @@
             {songPropertiesCommand,L"Song / Title and channel count",L""},
             {keyboardSettingsCommand,L"Preferences / Musical keyboard and Play-Stop key",L""},
             {noteColumnMuteCommand,L"Track / Toggle current note column mute",L""},
+            {noteColumnSoloCommand,L"Track / Solo current channel (toggle restores mutes)",L""},
             {noteTrackCreateCommand,L"Track / New note track…",L""},
             {noteTrackGroupCommand,L"Track / Group selected note columns…",L""},
             {noteTrackUngroupCommand,L"Track / Ungroup current note track (keep routing)",L""},

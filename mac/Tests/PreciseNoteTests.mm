@@ -353,6 +353,11 @@ static void cutAndInstrumentAPITest(const PluginDescriptor &descriptor) {
     auto reply=[session automationMethod:method params:request error:&error];if(!reply)throw std::runtime_error(error.localizedDescription.UTF8String);return reply;};
   auto patternBefore=call(@"pattern.get",@{@"pattern":@0})[@"data"];
   NSString *revision=session.automationRevision;
+  for(NSString *name in @[@"12345678901234567890123456789012",@"éééééééééééééééé"])for(NSNumber *dry in @[@NO,@YES]) {
+    NSError *rejected=nil;
+    auto response=[session automationMethod:@"instrument.create" params:@{@"empty":@YES,@"name":name,@"dryRun":dry,@"expectedRevision":revision} error:&rejected];
+    check(!response&&rejected.code==-32602&&[revision isEqual:session.automationRevision],"Overlong UTF-8 trigger names reject before changing the song, including dry runs");
+  }
   auto creation=@{@"empty":@YES,@"name":@"Lead trigger"};auto preview=[creation mutableCopy];preview[@"dryRun"]=@YES;
   auto index=call(@"instrument.create",preview,true)[@"data"][@"instrument"];
   check([revision isEqual:session.automationRevision],"Empty instrument preview does not create or change history");

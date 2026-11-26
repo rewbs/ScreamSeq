@@ -438,6 +438,7 @@ Json AssetOperations::dispatch(const std::string &method,const Json &p,const Pre
     require(empty||(!p.contains("name")&&!dry),"Name and dryRun require empty:true");
     require(song.GetType()==MOD_TYPE_IT||song.GetType()==MOD_TYPE_XM||song.GetType()==MOD_TYPE_MPT,"This format does not support instruments");
     if(empty){
+      require(name.size()<MAX_INSTRUMENTNAME,"Instrument names can use at most 31 UTF-8 bytes");
       const auto previous=std::max(1,int(song.GetNumSamples()));
       const auto index=(song.GetNumInstruments()?int(song.GetNumInstruments()):previous)+1;
       require(index<MAX_INSTRUMENTS&&index<=song.GetModSpecifications().instrumentsMax&&index<=255,"Instrument slots are full");

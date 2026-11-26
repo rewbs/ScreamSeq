@@ -210,7 +210,7 @@ int main(){try{
   state.preserved["automation"]=Json::array({Json::array({0,1,-12,48000})});
   auto automation=projectAbsoluteAutomation(state);check(automation.size()==1&&automation[0].frame==48000,"canonical 48-kHz automation not rescaled twice");
   state.preserved["automation"]=Json::array();
-  preparedNativeUpdates(state);
+  preparedNativeUpdates(state);preparedGateUpdates(state);
   preparedPreciseNotes(state);
   preparedColumnMutes(state);
   recordingTiming(*doc,state);

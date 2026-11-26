@@ -50,7 +50,7 @@ void applicationContextPanel() {
         IsWindowVisible(app.controls.at(soundChooser))&&!IsWindowVisible(app.controls.at(sampleCommandBase)),
         "Pattern context must expose note entry rather than an unrelated sample list");
     restoreCheck(GetNextDlgTabItem(app.window,app.controls.at(contextPanelCommand),FALSE)==app.controls.at(patternChooser)&&
-        GetNextDlgTabItem(app.window,app.controls.at(soundChooser),FALSE)==app.controls.at(contextActionFirst),
+        GetNextDlgTabItem(app.window,app.controls.at(soundChooser),FALSE)==app.controls.at(activityOpenCommand),
         "Context controls do not follow their visible reading order with Tab");
     const auto step=app.controls.at(stepChooser);RECT stepRect{},octaveRect{};
     GetWindowRect(step,&stepRect);GetWindowRect(app.controls.at(octaveChooser),&octaveRect);
@@ -63,7 +63,7 @@ void applicationContextPanel() {
         app.menuCommandState(openCommand).enabled,"Removed sidebar duplicates must remain available in menus");
     app.runWorkspaceShortcut(contextPanelCommand);
     const auto hidden=app.geometry().pattern;
-    restoreCheck(!app.workspaceState.contextPanelVisible&&hidden.x==6&&shown.x==170&&hidden.w==shown.w+164&&
+    restoreCheck(!app.workspaceState.contextPanelVisible&&hidden.x==6&&shown.x>=170&&hidden.w==shown.w+shown.x-6&&
         !IsWindowVisible(app.controls.at(patternChooser))&&IsWindowVisible(app.controls.at(contextPanelCommand))&&
         !app.menuCommandState(contextPanelCommand).checked,"Hide did not reclaim width or retain an accessible restore command");
     const auto saved=app.layoutConfiguration();
@@ -110,12 +110,12 @@ void applicationContextPanel() {
 
     // A private desktop may cap the fixture's initial physical size. Establish
     // an exact DIP client before asserting independent region geometry.
-    resizeRestoreClient(app,1440,900);
+    resizeRestoreClient(app,1600,900);
     app.command(dockPreciseNotesCommand);
     restoreCheck(app.hasWorkspaceDock(),"Region-layout context test did not create a real native dock");
     const auto notes=notesState(app);
     restoreCheck(app.workspaceRegionGeometry().mode==ScreamSeq::WorkspaceRegions::Mode::regions&&
-        app.workspaceRegionGeometry().pattern.x==170,"Visible context origin differs in region layout");
+        app.workspaceRegionGeometry().pattern.x==286,"Visible context origin differs in region layout");
     app.toggleContextPanel();
     restoreCheck(app.workspaceRegionGeometry().pattern.x==6&&notesState(app)==notes,
         "Hiding context in region layout lost width or retargeted native notes");
@@ -132,7 +132,7 @@ void applicationContextPanel() {
         compactHidden.tabs.w==compact.tabs.w+164&&compactHidden.hosts[2].visible&&
         compactHidden.hosts[2].selected=="preciseNotes"&&notesState(app)==notes,
         "Hidden context did not reclaim compact tab width or preserve native notes");
-    app.toggleContextPanel();resizeRestoreClient(app,1440,900);
+    app.toggleContextPanel();resizeRestoreClient(app,1600,900);
 
     // A hidden or pinned native editor keeps its own fields, target and focus.
     app.command(patternCommand);app.openPatternTools();

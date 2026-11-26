@@ -26,10 +26,39 @@
         for(const auto &track:view->session.document.at("trackLayout").at("noteTracks"))if(track.at("id")==id)return &track;
         return nullptr;
     }
-    void toggleNoteColumnMute() {
+    Json soloRestore=Json::array(),soloApplied=Json::array();std::string soloDocument;unsigned soloChannel=UINT_MAX;
+    Json channelMuteState()const {Json result=Json::array();for(unsigned c=0;c<view->channels;++c)result.push_back({{"column",noteColumn(c).at("id")},{"mute",noteColumn(c).at("mute")}});return result;}
+    bool channelSoloed(unsigned c)const {return soloDocument==documentId&&soloChannel==c&&channelMuteState()==soloApplied;}
+    void toggleNoteColumnSolo(unsigned target=UINT_MAX) {
+        if(target==UINT_MAX)target=channel;
+        if(target>=view->channels||busy||recoveryRestoring)throw std::runtime_error("The channel is unavailable or the song is busy");
+        const auto before=channelMuteState();const bool active=soloDocument==documentId&&before==soloApplied;
+        const bool restore=active&&soloChannel==target;
+        if(!active){soloRestore=before;soloDocument=documentId;}
+        auto next=restore?soloRestore:before;
+        if(!restore)for(unsigned c=0;c<next.size();++c)next[c]["mute"]=c!=target;
+        retainedNativeCommand("track","track.columns.set",{{"expectedRevision",view->session.revision},{"columns",next}},{{"channel",target}});
+        if(channelMuteState()==next){soloApplied=restore?Json::array():next;soloChannel=restore?UINT_MAX:target;}
+        status=restore?L"Solo off / previous channel mutes restored":L"Channel "+std::to_wstring(target+1)+L" solo / toggle Solo to restore previous mutes";
+        layoutControls();frameRequested=true;
+    }
+    void layoutChannelButtons() {
+        const auto grid=patternGridRect();const float scale=GetDpiForWindow(window)/96.f;
+        const bool soloActive=soloDocument==documentId&&soloChannel<view->channels&&channelMuteState()==soloApplied;
+        for(unsigned c=0;c<127;++c)for(unsigned solo=0;solo<2;++solo){
+            const auto id=(solo?channelSoloFirst:channelMuteFirst)+c;auto h=controls.at(id);
+            const float x=grid.x+gutter+(c<view->channels?channelStart(c):0)-horizontalScroll+29+solo*24;
+            const bool shown=trackerWorkspaceVisible()&&c<view->channels&&x>=grid.x+gutter&&x+23<=grid.x+grid.w;
+            ScreamSeq::NativeControls::place(h,int(x*scale),int((grid.y+gridHeader-23)*scale),int(23*scale),int(21*scale),shown);
+            if(shown){ScreamSeq::NativeControls::active(h,solo?(soloActive&&soloChannel==c):noteColumn(c).at("mute").get<bool>());EnableWindow(h,!presentationBusy()&&!nativeCommandCompletion.retained()&&view->session.document.value("editable",false));}
+        }
+    }
+    void toggleNoteColumnMute(unsigned targetChannel=UINT_MAX) {
         if(busy||recoveryRestoring||!view->session.document.value("editable",false))throw std::runtime_error("The song is busy or read-only");
-        const auto target=noteColumn(channel);const bool mute=!target.at("mute").get<bool>();
+        if(targetChannel==UINT_MAX)targetChannel=channel;
+        const auto target=noteColumn(targetChannel);const bool mute=!target.at("mute").get<bool>();
         retainedNativeCommand("track","track.column.set",{{"expectedRevision",view->session.revision},{"column",target.at("id")},{"mute",mute}},target);
+        soloApplied=Json::array();soloChannel=UINT_MAX;
         status=mute?L"Note column muted / other columns and audition remain independent":L"Note column unmuted";
         layoutControls();frameRequested=true;
     }

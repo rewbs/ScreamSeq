@@ -9,17 +9,18 @@
 		s.uiText(L"SCREAMSEQ",12,12,146,accent);
 		// This column begins after the native toolbar. Narrow windows can omit it:
 		// the project title also remains in the sidebar and native window title.
-		if(width>=994) {
+		if(width>=1244) {
 			s.line(886,9,886,35,0x3b4655);
-			s.uiText(wide(view->session.document.at("title").get<std::string>()),894,7,width-906);
+			s.uiText(wide(view->session.document.at("title").get<std::string>()),894,7,width-1150);
 			const auto transport=playing ? L"PLAY  P"+std::to_wstring(playback.pattern)+L"  R"+std::to_wstring(playback.row) : auditionOnly && device.running() ? std::wstring(L"AUDITION") : std::wstring(L"STOPPED");
 			const auto playKeys=workspaceShortcutLabel(togglePlaybackCommand);
-			s.uiText(inspection ? L"Inspection / audio hardware disabled" : silentOutput ? L"Silent hardware qualification / DSP active" : transport+(playKeys.empty()?L"":L"  /  "+playKeys+L": play or stop"),894,25,width-906,playing ? accent : muted);
+			s.uiText(inspection ? L"Inspection / audio hardware disabled" : silentOutput ? L"Silent hardware qualification / DSP active" : transport+(playKeys.empty()?L"":L"  /  "+playKeys+L": play or stop"),894,25,width-1150,playing ? accent : muted);
 		}
         if(workspaceState.contextPanelVisible) {
-            s.fill(0,82,164,height-82,0x1a202a);
-            s.line(163,82,163,height,0x303b49);
-            s.uiText(contextPanelTitle,12,89,142,accent);
+            const auto contextWidth=workspaceState.contextPanelWidth;
+            s.fill(0,82,contextWidth,height-82,0x1a202a);
+            s.line(contextWidth-1,82,contextWidth-1,height,0x303b49);
+            s.uiText(contextPanelTitle,12,89,contextWidth-22,accent);
             const auto &editor=contextPanelEditor;
             const auto node=editor=="graph"?graphSelectedNode():nullptr;
             const auto target=editor=="graph"?wide(node?node->value("name",graphNode):graphDraft.value("name",std::string("Choose a recipe"))):
@@ -28,7 +29,7 @@
                 editor=="mixingGraph"?std::wstring(L"Whole-song audio routing"):
                 editor=="instruments"||editor=="automation"||editor=="graphCurve"?std::wstring(L"Active editor keeps its target"):
                 L"P"+std::to_wstring(patternIndex)+L" / R"+std::to_wstring(row)+L" / CH"+std::to_wstring(channel+1);
-            s.uiText(target,12,109,142,muted);
+            s.uiText(target,12,109,contextWidth-22,muted);
             if(editor=="pattern"||editor=="notes"||editor=="preciseNotes"||editor=="effects")
                 s.uiText(L"NOTE ENTRY",12,195,142,muted);
             s.uiText(L"OpenMPT audio engine",12,height-19,142,muted);
@@ -55,8 +56,7 @@
 			if(c==channel) {s.fill(x-2,r.y+gridHeader-24,channelWidth(c)-1,24,0x2d3446);s.fill(x-2,r.y+gridHeader-2,channelWidth(c)-1,2,0x9f85c8);}
             const auto &header=noteColumn(c);const bool columnMuted=header.at("mute").get<bool>();
             auto title=header.at("track").is_null()?L"CH "+std::to_wstring(c+1):L"N"+std::to_wstring(header.at("noteColumn").get<unsigned>()+1);
-            if(columnMuted)title+=L" muted";
-			s.uiText(title,x,r.y+gridHeader-21,fxStart-4,columnMuted?gold:c==channel?0xd5c5ee:muted);
+			s.uiText(std::to_wstring(c+1),x,r.y+gridHeader-21,27,columnMuted?gold:c==channel?0xd5c5ee:muted);
             for(unsigned fx=0;fx<view->effectColumns.at(c);++fx){const float start=effectColumnStart(c,fx);const auto &layout=effectColumnLayout(c,fx);
                 s.text(L"F"+std::to_wstring(fx+1),x+start,r.y+gridHeader-21,20,muted);const auto &fields=gridCommandFields(view->effect(patternIndex,row,c,fx));
                 for(size_t i=0;i<fields.size();++i)s.uiText(wide(fields[i].at("name").get<std::string>()),x+start+layout.start(i),r.y+gridHeader-21,layout.widths[i],muted);

@@ -10,6 +10,7 @@
     bool pluginProgramDraft=false,pluginExtrasError=false;
     #include "PluginPresetIntegration.inc"
     std::map<std::string,std::string> pendingPluginTriggers; // Plugin ID -> created instrument ID awaiting assignment.
+    #include "PluginTriggerIntegration.inc"
     uint32_t selectedParameter=0,pluginDraftParameter=0;
     ScreamSeq::PluginParameterField pluginParameterField;
     bool settingPluginFields=false,pluginDraft=false,refreshingPlugins=false,pluginLibraryLoaded=false;
@@ -346,8 +347,8 @@
         ScreamSeq::NativeControls::text(controls.at(pluginLoadPreset),retainedPreset?L"Use current state":L"Load preset…");
         EnableWindow(controls.at(pluginSavePreset),!pluginPresetPending&&(selected||retainedPreset));
         EnableWindow(controls.at(pluginLoadPreset),!pluginPresetPending&&(retainedPreset?pluginPresetNeedsReload:selected));
-        place(pluginInstrument,x,y+195,r.w-424,220,show && instrument && pluginDetailPage==0 && r.h>=228);place(pluginNewInstrument,r.x+r.w-188,y+195,108,24,show && instrument && pluginDetailPage==0 && r.h>=228);place(pluginAssign,r.x+r.w-76,y+195,68,24,show && instrument && pluginDetailPage==0 && r.h>=228);
-        EnableWindow(controls.at(pluginNewInstrument),instrument);ScreamSeq::NativeControls::text(controls.at(pluginNewInstrument),pendingPluginTriggers.contains(selectedPlugin)?L"Retry assign":L"New trigger");
+        place(pluginInstrument,x,y+195,r.w-424,220,show && instrument && pluginDetailPage==0 && r.h>=228);place(pluginNewInstrument,r.x+r.w-188,y+195,108,24,show && (instrument||pluginTriggerCompletion.retained()) && pluginDetailPage==0 && r.h>=228);place(pluginAssign,r.x+r.w-76,y+195,68,24,show && instrument && pluginDetailPage==0 && r.h>=228);
+        EnableWindow(controls.at(pluginNewInstrument),!pluginTriggerPending&&(instrument||pluginTriggerCompletion.retained()));ScreamSeq::NativeControls::text(controls.at(pluginNewInstrument),pluginTriggerCompletion.retained()?(pluginTriggerReviewed?L"Accept result":L"Review trigger"):pendingPluginTriggers.contains(selectedPlugin)?L"Retry assign":L"New trigger");
         for(int id:{pluginBypass,pluginRemove,pluginAssign}) EnableWindow(controls.at(id),selected);
         EnableWindow(controls.at(pluginEditor),selected);
         ScreamSeq::NativeControls::text(controls.at(pluginEditor),plugin.value("format","")=="VST3"?L"Editor…":L"Params…");
@@ -413,6 +414,7 @@
         if(id==pluginBrowse){openPluginLibrary();return true;}
         if(id==pluginReconnect){if(selectedPluginSlot()<0)throw std::runtime_error("Select a VST3 plugin");openPluginPath({{"plugin",selectedPlugin}});return true;}
         if(id==pluginSavePreset||id==pluginLoadPreset){pluginPresetFile(id==pluginSavePreset);return true;}
+        if(id==pluginNewInstrument){createPluginTrigger();return true;}
         if(id==pluginAliases){openPluginInstruments();return true;}
         if(id==pluginsCommand) {effectEditorOpen=false;workspaceState.layout="Compose";workspaceState.active="notes";SetFocus(controls.at(pluginList));return true;}
         if(id==pluginPage){if(pluginDraft){ScreamSeq::NativeInputGate::present(controls.at(pluginPage),CB_SETCURSEL,pluginDetailPage,0);throw std::runtime_error("Apply the draft or press Escape before changing the detail page");}
@@ -448,23 +450,7 @@
                 edit("plugin.buses.set",{{"slot",slot},{port.at("direction")=="input"?"inputs":"outputs",ports}});pluginDetailsRevision.clear();}
             return true;
         }
-        if(id==pluginNewInstrument) {
-            const auto plugin=view->session.document.at("nativePlugins")[slot];
-            if(!plugin.value("isInstrument",false))throw std::runtime_error("Select an instrument plugin");
-            unsigned instrument=0;
-            if(auto pending=pendingPluginTriggers.find(selectedPlugin);pending!=pendingPluginTriggers.end())
-                for(const auto &i:view->session.document.at("instruments"))if(i.at("id")==pending->second)instrument=i.at("index").get<unsigned>();
-            if(!instrument){
-                const auto pluginName=plugin.at("name").get<std::string>();
-                const auto created=edit("instrument.create",{{"empty",true},{"name",pluginName.size()<=192?pluginName+" trigger":"Plugin trigger"}});
-                instrument=created.at("instrument").get<unsigned>();
-                for(const auto &i:view->session.document.at("instruments"))if(i.at("index")==instrument)pendingPluginTriggers[selectedPlugin]=i.at("id").get<std::string>();
-            }
-            // Retain the created stable identity if assignment fails. Retrying
-            // this action then assigns that trigger instead of appending another.
-            edit("instrument.plugin.set",{{"instrument",instrument},{"plugin",selectedPlugin},{"channel",1}});
-            pendingPluginTriggers.erase(selectedPlugin);pluginDetailsRevision.clear();
-        } else if(id==pluginApply) {
+        if(id==pluginApply) {
             pluginAutoQueued=false;
             if(parameterTakeState.value("retained",false)) {
                 if(pluginDraft)throw std::runtime_error("Correct the recorded field; Retry cannot change its original timestamp");

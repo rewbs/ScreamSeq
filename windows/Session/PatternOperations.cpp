@@ -134,6 +134,12 @@ Json PatternOperations::invoke(const std::string &method,const Json &input){
     if(isGate(command)){targets[binding.plugin].insert(binding.parameter);need(targets[binding.plugin].size()<=64,"Use at most 64 pattern-command parameters per plugin");continue;}
     need(command.kind!=PatternCommandKind::ParameterSlide||parameter->at("canSlide").get<bool>(),"Discrete parameters cannot slide");need(std::none_of(next.automation.begin(),next.automation.end(),[&](const auto &lane){return lane.enabled&&lane.plugin==binding.plugin&&lane.parameter==binding.parameter;}),"Disable this parameter's envelope before using pattern commands");need(!host_.absoluteAutomation||!host_.absoluteAutomation(slot,binding.parameter),"Remove absolute automation before using pattern commands");targets[binding.plugin].insert(binding.parameter);need(targets[binding.plugin].size()<=64,"Use at most 64 pattern-command parameters per plugin");
   }
-  const bool changed=next!=document_.native()||!edits.empty();const auto commandCount=performance.commands.size(),bindingCount=performance.bindings.size();if(host_.validateCandidate)host_.validateCandidate(next);if(changed&&!dry){if(stop_)stop_();document_.editNative(std::move(next),edits);}return {{"dryRun",dry},{"wouldChange",changed},{"commands",commandCount},{"bindings",bindingCount}};
+  const bool changed=next!=document_.native()||!edits.empty();const auto commandCount=performance.commands.size(),bindingCount=performance.bindings.size();if(host_.validateCandidate)host_.validateCandidate(next);if(changed&&!dry){
+    const auto gates=[](const auto &native){std::vector<PatternCommand> result;for(const auto &c:native.performance.commands)if(isGate(c))result.push_back(c);return result;};
+    std::function<void()> publish=stop_;
+    if(gates(document_.native())!=gates(next)&&host_.preparePrecisePublication)
+      publish=host_.preparePrecisePublication(next,edits);
+    document_.editNative(std::move(next),edits,publish);
+  }return {{"dryRun",dry},{"wouldChange",changed},{"commands",commandCount},{"bindings",bindingCount}};
 }
 }

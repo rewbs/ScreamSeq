@@ -15,6 +15,9 @@
         case paletteCommand:return {"ctrl+k"};case layoutsCommand:return {"ctrl+alt+w"};
         case liveKeysCommand:return {"ctrl+alt+l"};case dockToggle:return {"ctrl+j"};
         case contextPanelCommand:return {"ctrl+b"};
+        case noteColumnMuteCommand:return {"ctrl+shift+m"};
+        case noteColumnSoloCommand:return {"ctrl+shift+l"};
+        case playbackLoopCommand:return {"ctrl+alt+r"};
         case newDocumentCommand:return {"ctrl+n"};case openCommand:return {"ctrl+o"};case saveCommand:return {"ctrl+s"};case saveAsCommand:return {"ctrl+shift+s"};
         case undoCommand:return {"ctrl+z"};case redoCommand:return {"ctrl+y"};case redoAlternateCommand:return {"ctrl+shift+z"};
         case copyFocusedCommand:return {"ctrl+c"};case pasteFocusedCommand:return {"ctrl+v"};case cutFocusedCommand:return {"ctrl+x"};

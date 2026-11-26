@@ -89,6 +89,7 @@
 	void layoutControls() {
 		frameRequested=true;
 		if(controls.empty()) return;
+        workspaceState.contextPanelWidth=std::clamp(workspaceClientWidth()-1240.f,164.f,280.f);
         noteGraphCurveSelection();notePreciseNoteSelection();
         refreshChoosers();
 		auto sample=workspaceState.panel("samples").sample;
@@ -113,8 +114,13 @@
         // Global file/history/song commands remain in native menus and the
         // command palette. The left column now belongs to the current task.
         for(int id:{openCommand,saveCommand,saveAsCommand,documentLoadReportCommand,songPropertiesCommand,
-            undoCommand,redoCommand,arrangementCommand,songTimingCommand,playbackLoopCommand,sampleImportCommand,sampleBrowseCommand})
+            undoCommand,redoCommand,arrangementCommand,songTimingCommand,sampleImportCommand,sampleBrowseCommand})
             place(id,0,0,1,1,false);
+        place(playSelectionCommand,workspaceClientWidth()-244,12,122,26);
+        place(playbackLoopCommand,workspaceClientWidth()-116,12,106,26);
+        ScreamSeq::NativeControls::text(controls.at(playSelectionCommand),selecting?L"Play selection [Ctrl+Space]":L"Play pattern [Ctrl+Space]");
+        ScreamSeq::NativeControls::state(controls.at(playSelectionCommand))->compactCaption=selecting?L"Play selection":L"Play pattern";
+        EnableWindow(controls.at(playSelectionCommand),!presentationBusy()&&!recoveryRestoring);
         updateDocumentLoadReport();
         refreshPlaybackLoopControl();
         EnableWindow(controls.at(playbackLoopCommand),!presentationBusy()&&!recoveryRestoring);
@@ -192,6 +198,7 @@
         rememberCompletedWorkspaceLayout();
         layoutPatternNudgeEditor();
         refreshContextPanel(true);
+        layoutChannelButtons();
 	}
 	void installControls() {
 		auto add=[&](int id,const std::wstring &label) {
@@ -199,7 +206,7 @@
 			if(!h) throw std::runtime_error("Cannot create workspace control");controls.emplace(id,h);
 		};
 		for(auto [id,label]:std::initializer_list<std::pair<int,const wchar_t *>>{
-			{playCommand,L"Play"},{stopCommand,L"Stop"},{followCommand,L"Follow on [F]"},{playbackLoopCommand,L"Playback loop: on"},
+			{playCommand,L"Play"},{stopCommand,L"Stop"},{followCommand,L"Follow on [F]"},{playbackLoopCommand,L"Playback loop: on"},{playSelectionCommand,L"Play pattern"},
             {contextPanelCommand,L"Hide context panel"},
             {navigationPatternCommand,L"Pattern"},{navigationSamplesCommand,L"Samples"},{navigationInstrumentsCommand,L"Instruments"},
             {navigationPluginsCommand,L"Plugins"},{navigationMixerCommand,L"Mixer"},{mixingGraphPanelCommand,L"Mixing graph"},
@@ -225,6 +232,14 @@
             {sampleLoopToggleCommand,L"Loop off"},{sampleLoopModeCommand,L"Forward"},{sampleLoopSelectCommand,L"Use selection"},
             {sampleSustainToggleCommand,L"Sustain off"},{sampleSustainModeCommand,L"Forward"},{sampleSustainSetCommand,L"Use selection"}}) add(id,label);
         for(int id=contextActionFirst;id<=contextActionLast;++id)add(id,L"Context action");
+        for(int c=0;c<127;++c){add(channelMuteFirst+c,L"M");add(channelSoloFirst+c,L"S");}
+        add(activityOpenCommand,L"Open selected ↗");
+        controls[activityListCommand]=CreateWindowExW(WS_EX_CLIENTEDGE,L"LISTBOX",L"Row activity from song start",WS_CHILD|WS_TABSTOP|WS_VSCROLL|WS_HSCROLL|LBS_NOTIFY|LBS_NOINTEGRALHEIGHT,0,0,1,1,window,reinterpret_cast<HMENU>(INT_PTR(activityListCommand)),GetModuleHandleW(nullptr),nullptr);
+        SetWindowSubclass(controls.at(activityListCommand),[](HWND h,UINT m,WPARAM w,LPARAM l,UINT_PTR,DWORD_PTR)->LRESULT{
+            if(m==WM_KEYDOWN&&w==VK_RETURN){SendMessageW(GetParent(h),WM_COMMAND,activityOpenCommand,0);return 0;}
+            if(m==WM_GETDLGCODE&&w==VK_RETURN)return DLGC_WANTALLKEYS;
+            return DefSubclassProc(h,m,w,l);
+        },0x50414354,0);
         for(int id:{sampleStartField,sampleEndField}) {
             controls[id]=CreateWindowExW(WS_EX_CLIENTEDGE,L"EDIT",L"0",WS_CHILD|WS_TABSTOP|ES_NUMBER|ES_AUTOHSCROLL,0,0,1,1,window,reinterpret_cast<HMENU>(INT_PTR(id)),GetModuleHandleW(nullptr),nullptr);
             SendMessageW(controls.at(id),EM_SETLIMITTEXT,10,0);
@@ -247,11 +262,12 @@
         registerMainDrafts();
         if(inspection)SetPropW(window,ScreamSeq::NativeControls::inspectionProperty,reinterpret_cast<HANDLE>(1));
         for(auto [id,h]:controls)ScreamSeq::NativeControls::install(h,inspection);
+        for(unsigned c=0;c<127;++c)for(unsigned solo=0;solo<2;++solo){const auto h=controls.at((solo?channelSoloFirst:channelMuteFirst)+c);ScreamSeq::NativeControls::state(h)->compactCaption=solo?L"S":L"M";ScreamSeq::NativeControls::text(h,(solo?L"Solo channel ":L"Mute channel ")+std::to_wstring(c+1)+(solo?L" (current: Ctrl+Shift+L)":L" (current: Ctrl+Shift+M)"));}
         // Native Tab order follows the panel's vertical reading order, even
         // though its selectors and buttons are created by different helpers.
         HWND previous=HWND_TOP;
         for(int id:{contextPanelCommand,patternChooser,orderChooser,octaveChooser,stepChooser,soundChooser,sampleCommandBase,
-            contextActionFirst,contextActionFirst+1,contextActionFirst+2,contextActionFirst+3,contextActionFirst+4,contextActionLast}) {
+            activityOpenCommand,activityListCommand,contextActionFirst,contextActionFirst+1,contextActionFirst+2,contextActionFirst+3,contextActionFirst+4,contextActionLast}) {
             SetWindowPos(controls.at(id),previous,0,0,0,0,SWP_NOMOVE|SWP_NOSIZE|SWP_NOACTIVATE);
             previous=controls.at(id);
         }
@@ -260,6 +276,10 @@
 	}
 	void command(int id) {
 		try {
+            if(id==activityOpenCommand){openActivityLink();return;}
+            if(id>=channelMuteFirst&&id<channelMuteFirst+127){toggleNoteColumnMute(unsigned(id-channelMuteFirst));return;}
+            if(id>=channelSoloFirst&&id<channelSoloFirst+127){toggleNoteColumnSolo(unsigned(id-channelSoloFirst));return;}
+            if(id==noteColumnSoloCommand){toggleNoteColumnSolo();return;}
             if(id==contextPanelCommand){toggleContextPanel();return;}
             if(id>=contextActionFirst&&id<=contextActionLast){contextPanelAction(id);return;}
             if(id==exitCommand){PostMessageW(window,WM_CLOSE,0,0);return;}
@@ -416,8 +436,12 @@
             wchar_t klass[32]{};GetClassNameW(GetFocus(),klass,32);
             if(key==VK_RETURN&&GetFocus()==controls.at(pluginValueToggle)){SendMessageW(GetFocus(),BM_CLICK,0,0);return true;}
             if(key==VK_RETURN && _wcsicmp(klass,L"Button")==0) {command(GetDlgCtrlID(GetFocus()));return true;}
-            // Space presses the focused button; it is not the transport key here.
-            if(key==VK_SPACE && !ctrl && !alt && _wcsicmp(klass,L"Button")==0) return false;
+            // Channel controls stay focused for accessible activation with Enter,
+            // but the configured transport shortcut must still work after M/S.
+            const auto focusedID=GetDlgCtrlID(GetFocus());
+            const bool channelControl=(focusedID>=channelMuteFirst&&focusedID<channelMuteFirst+127)||(focusedID>=channelSoloFirst&&focusedID<channelSoloFirst+127);
+            if(channelControl&&workspaceShortcutKey(key,repeat))return true;
+            if(key==VK_SPACE && !ctrl && !alt && _wcsicmp(klass,L"Button")==0&&!channelControl) return false;
         }
         if(sampleEditorVisible()&&(GetFocus()==controls.at(sampleStartField) || GetFocus()==controls.at(sampleEndField))) {
             if(key==VK_RETURN) {command(sampleRangeCommand);return true;}

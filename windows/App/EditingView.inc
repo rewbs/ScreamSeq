@@ -139,13 +139,14 @@
         if(presentationBusy()) title+=L" [Document worker busy]";
         ScreamSeq::NativeControls::text(window,title);
     }
-    bool queuedMusicalEdit()const{return (preciseNoteWindow&&preciseNoteWindow->queuedMusicalEdit())||
+    bool queuedMusicalEdit()const{return (gateInspectorWindow&&gateInspectorWindow->queuedMusicalEdit())||(preciseNoteWindow&&preciseNoteWindow->queuedMusicalEdit())||
         (parameterAutomationWindow&&parameterAutomationWindow->queuedMusicalEdit())||
         (absoluteAutomationWindow&&absoluteAutomationWindow->queuedMusicalEdit())||
         (parameterActivityWindow&&parameterActivityWindow->queuedMusicalEdit());}
     bool canUndoSong()const{return view->session.document.value("canUndo",false)||queuedMusicalEdit();}
     bool canRedoSong()const{return view->session.document.value("canRedo",false)&&!queuedMusicalEdit();}
     Json edit(const std::string &method,Json params) {
+        if(gateInspectorWindow&&(method=="history.undo"||method=="history.redo"))gateInspectorWindow->flushForHistory();
         if(preciseNoteWindow&&(method=="history.undo"||method=="history.redo"))preciseNoteWindow->flushForHistory();
         if(parameterAutomationWindow&&(method=="history.undo"||method=="history.redo"))parameterAutomationWindow->flushForHistory();
         if(absoluteAutomationWindow&&(method=="history.undo"||method=="history.redo"))absoluteAutomationWindow->flushForHistory();
@@ -293,6 +294,7 @@
         ModalScope modal(modalDepth);return ScreamSeq::chooseModuleExport(window,format,view->path);
     }
     void finishAutomaticSongFields() {
+        if(gateInspectorWindow)gateInspectorWindow->flushForProjectSave();
         if(preciseNoteWindow)preciseNoteWindow->flushForProjectSave();
         if(parameterAutomationWindow)parameterAutomationWindow->flushForProjectSave();
         if(absoluteAutomationWindow)absoluteAutomationWindow->flushForProjectSave();

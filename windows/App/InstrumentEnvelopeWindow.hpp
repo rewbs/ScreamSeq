@@ -394,6 +394,7 @@ public:
   }
   void pluginNavigation(std::function<void(bool)> navigate){pluginNavigation_=std::move(navigate);}
   void openAt(){const bool retain=visible()||retainedDraft();show();if(!retain)load(true);SetFocus(controls_.at(instrument));}
+  void openSourceAt(const std::string &identity,const std::string &envelope={}){require(!retainedDraft(),"Finish the existing instrument draft first");load(true,identity,envelope=="pan"?1:envelope=="pitch"?2:0);show();}
   void initializeHidden(){
     require(!(GetWindowLongPtrW(window_,GWL_STYLE)&WS_VISIBLE)&&!docked()&&captured_.document.empty()&&generation_==0&&!retainedDraft(),"Initialize only a fresh hidden instrument editor");
     load(true);

@@ -24,7 +24,8 @@ public:
 	float rightWidth=340, lowerHeight=210;
 	bool lowerVisible=true;
     bool contextPanelVisible=true;
-    float contentLeft() const { return contextPanelVisible?170.f:6.f; }
+    float contextPanelWidth=164;
+    float contentLeft() const { return contextPanelVisible?contextPanelWidth+6.f:6.f; }
 
 	static size_t index(const std::string &id) {
 		if(id=="notes") return 0;

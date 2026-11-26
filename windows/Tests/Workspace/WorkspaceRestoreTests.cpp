@@ -1166,6 +1166,8 @@ static void retainedTakesProtectLeavingDocument() {
 #include "KeyboardSettingsApplicationTests.inc"
 #include "AutomaticEditsApplicationTests.inc"
 #include "ScratchWriteAdmissionTests.inc"
+#include "GateApplicationTests.inc"
+#include "PatternActivityApplicationTests.inc"
 #include "PatternAccessibilityApplicationTests.inc"
 #include "PluginSearchApplicationTests.inc"
 #include "ParameterControlDeliveryTests.inc"
@@ -1317,6 +1319,12 @@ int wmain(int argc,wchar_t **argv) {
                     timedRestoreCase("scratch write admission",applicationScratchWriteAdmission);
                     timedRestoreCase("scratch external refresh",applicationScratchExternalRefresh);
                     return;
+                }
+                if(length<std::size(group)&&std::wstring_view(group)==L"gate-inspector") {
+                    timedRestoreCase("gate Apply admission and pattern display",applicationGateWriteAdmission);return;
+                }
+                if(length<std::size(group)&&std::wstring_view(group)==L"pattern-activity") {
+                    timedRestoreCase("row activity and channel controls",applicationPatternActivityAndChannelControls);return;
                 }
                 if(length<std::size(group)&&std::wstring_view(group)==L"parameter-preview") {
                     timedRestoreCase("parameter refresh focus and retry",applicationParameterRefreshFocus);
